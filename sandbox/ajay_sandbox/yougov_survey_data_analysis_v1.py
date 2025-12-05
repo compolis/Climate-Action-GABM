@@ -320,7 +320,180 @@ plt.show()
 
 
 
+"""
+runcell(7, '/Users/ajaykumar/Documents/GitHub/Climate-Action-GABM/sandbox/ajay_sandbox/yougov_survey_data_analysis_v1.py')
+Removing 'tprofile_gross_household' (p-value: 0.6858) -> Not significant
+Removing 'tprofile_GOR' (p-value: 0.3744) -> Not significant
+Optimization Complete: All remaining features are significant.
 
+========================================
+FINAL MODEL SUMMARY
+========================================
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:           target_label   R-squared:                       0.234
+Model:                            OLS   Adj. R-squared:                  0.230
+Method:                 Least Squares   F-statistic:                     52.81
+Date:                Fri, 05 Dec 2025   Prob (F-statistic):           6.24e-84
+Time:                        22:01:33   Log-Likelihood:                -2452.5
+No. Observations:                1565   AIC:                             4925.
+Df Residuals:                    1555   BIC:                             4979.
+Df Model:                           9                                         
+Covariance Type:            nonrobust                                         
+===========================================================================================
+                              coef    std err          t      P>|t|      [0.025      0.975]
+-------------------------------------------------------------------------------------------
+const                       1.1094      0.220      5.032      0.000       0.677       1.542
+age                         0.0064      0.002      3.114      0.002       0.002       0.010
+male_dummy                  0.1871      0.060      3.144      0.002       0.070       0.304
+profile_education_level    -0.0293      0.007     -4.244      0.000      -0.043      -0.016
+ethnicity_R                 0.0630      0.030      2.108      0.035       0.004       0.122
+parent_dummy                0.2395      0.065      3.659      0.000       0.111       0.368
+Vote2019R                  -0.0585      0.013     -4.475      0.000      -0.084      -0.033
+pastvote_EURef              0.2840      0.040      7.057      0.000       0.205       0.363
+new_socgrade                0.2904      0.066      4.385      0.000       0.160       0.420
+Political_Left_Right        0.1903      0.015     13.110      0.000       0.162       0.219
+==============================================================================
+Omnibus:                       26.498   Durbin-Watson:                   2.062
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):               27.579
+Skew:                           0.321   Prob(JB):                     1.03e-06
+Kurtosis:                       2.894   Cond. No.                         400.
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+
+runcell(8, '/Users/ajaykumar/Documents/GitHub/Climate-Action-GABM/sandbox/ajay_sandbox/yougov_survey_data_analysis_v1.py')
+
+runcell(8, '/Users/ajaykumar/Documents/GitHub/Climate-Action-GABM/sandbox/ajay_sandbox/yougov_survey_data_analysis_v1.py')
+
+runcell(7, '/Users/ajaykumar/Documents/GitHub/Climate-Action-GABM/sandbox/ajay_sandbox/yougov_survey_data_analysis_v1.py')
+Removing 'Openness' (p-value: 0.9521) -> Not significant
+Removing 'tprofile_gross_household' (p-value: 0.8509) -> Not significant
+Removing 'Altr_values' (p-value: 0.8263) -> Not significant
+Removing 'Biosph_values' (p-value: 0.8263) -> Not significant
+Removing 'ethnicity_R' (p-value: 0.7215) -> Not significant
+Removing 'Tradition' (p-value: 0.5332) -> Not significant
+Removing 'profile_education_level' (p-value: 0.4795) -> Not significant
+Removing 'Power_Values' (p-value: 0.4334) -> Not significant
+Removing 'tprofile_GOR' (p-value: 0.2852) -> Not significant
+Removing 'EDO' (p-value: 0.0529) -> Not significant
+Removing 'Submission' (p-value: 0.0502) -> Not significant
+Removing 'RWA' (p-value: 0.1890) -> Not significant
+Optimization Complete: All remaining features are significant.
+
+========================================
+FINAL MODEL SUMMARY
+========================================
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:           target_label   R-squared:                       0.589
+Model:                            OLS   Adj. R-squared:                  0.584
+Method:                 Least Squares   F-statistic:                     116.6
+Date:                Fri, 05 Dec 2025   Prob (F-statistic):          1.22e-281
+Time:                        22:15:45   Log-Likelihood:                -1966.3
+No. Observations:                1565   AIC:                             3973.
+Df Residuals:                    1545   BIC:                             4080.
+Df Model:                          19                                         
+Covariance Type:            nonrobust                                         
+========================================================================================
+                           coef    std err          t      P>|t|      [0.025      0.975]
+----------------------------------------------------------------------------------------
+const                    2.0584      0.259      7.955      0.000       1.551       2.566
+age                      0.0051      0.002      3.073      0.002       0.002       0.008
+male_dummy              -0.1223      0.046     -2.632      0.009      -0.213      -0.031
+parent_dummy             0.1160      0.049      2.381      0.017       0.020       0.212
+Vote2019R               -0.0248      0.010     -2.543      0.011      -0.044      -0.006
+pastvote_EURef           0.1091      0.030      3.636      0.000       0.050       0.168
+new_socgrade             0.1582      0.049      3.255      0.001       0.063       0.253
+Political_Left_Right     0.0296      0.012      2.480      0.013       0.006       0.053
+Selfenh_Values           0.2040      0.076      2.683      0.007       0.055       0.353
+Selftransc_Val          -0.4884      0.079     -6.152      0.000      -0.644      -0.333
+ConformTrad              0.2856      0.043      6.636      0.000       0.201       0.370
+Author_Val              -0.0825      0.031     -2.690      0.007      -0.143      -0.022
+Domin_Val               -0.2426      0.073     -3.341      0.001      -0.385      -0.100
+SDO                      0.1717      0.031      5.531      0.000       0.111       0.233
+Aggression              -0.0580      0.021     -2.728      0.006      -0.100      -0.016
+EcoFasc1                 0.1916      0.020      9.689      0.000       0.153       0.230
+AntiFossilFuelNorms     -0.3239      0.028    -11.488      0.000      -0.379      -0.269
+SufficiencyNorms        -0.0671      0.027     -2.483      0.013      -0.120      -0.014
+Anomie                   0.0646      0.023      2.855      0.004       0.020       0.109
+PersClimateAction       -0.1484      0.018     -8.446      0.000      -0.183      -0.114
+==============================================================================
+Omnibus:                       17.788   Durbin-Watson:                   2.024
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):               19.642
+Skew:                           0.208   Prob(JB):                     5.43e-05
+Kurtosis:                       3.358   Cond. No.                         629.
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+/Users/ajaykumar/Documents/GitHub/Climate-Action-GABM/sandbox/ajay_sandbox/yougov_survey_data_analysis_v1.py:294: SettingWithCopyWarning: 
+A value is trying to be set on a copy of a slice from a DataFrame.
+Try using .loc[row_indexer,col_indexer] = value instead
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+  df_fil['target_label']=df_surveys['AntiClimatePolSupp']
+
+runcell(7, '/Users/ajaykumar/Documents/GitHub/Climate-Action-GABM/sandbox/ajay_sandbox/yougov_survey_data_analysis_v1.py')
+Removing 'parent_dummy' (p-value: 0.9973) -> Not significant
+Removing 'Altr_values' (p-value: 0.9739) -> Not significant
+Removing 'Selftransc_Val' (p-value: 0.9739) -> Not significant
+Removing 'ConformTrad' (p-value: 0.7673) -> Not significant
+Removing 'Submission' (p-value: 0.7589) -> Not significant
+Removing 'tprofile_gross_household' (p-value: 0.6716) -> Not significant
+Removing 'new_socgrade' (p-value: 0.6636) -> Not significant
+Removing 'Power_Values' (p-value: 0.5952) -> Not significant
+Removing 'Anomie' (p-value: 0.4123) -> Not significant
+Removing 'Author_Val' (p-value: 0.2993) -> Not significant
+Removing 'profile_education_level' (p-value: 0.2727) -> Not significant
+Removing 'EcoFasc1' (p-value: 0.2581) -> Not significant
+Removing 'SufficiencyNorms' (p-value: 0.0537) -> Not significant
+Optimization Complete: All remaining features are significant.
+
+========================================
+FINAL MODEL SUMMARY
+========================================
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:           target_label   R-squared:                       0.538
+Model:                            OLS   Adj. R-squared:                  0.533
+Method:                 Least Squares   F-statistic:                     100.1
+Date:                Fri, 05 Dec 2025   Prob (F-statistic):          1.19e-243
+Time:                        22:19:17   Log-Likelihood:                -2010.8
+No. Observations:                1565   AIC:                             4060.
+Df Residuals:                    1546   BIC:                             4161.
+Df Model:                          18                                         
+Covariance Type:            nonrobust                                         
+========================================================================================
+                           coef    std err          t      P>|t|      [0.025      0.975]
+----------------------------------------------------------------------------------------
+const                    5.1404      0.253     20.283      0.000       4.643       5.637
+age                     -0.0083      0.002     -5.413      0.000      -0.011      -0.005
+male_dummy               0.1003      0.048      2.099      0.036       0.007       0.194
+tprofile_GOR            -0.0160      0.008     -2.053      0.040      -0.031      -0.001
+ethnicity_R              0.0733      0.023      3.201      0.001       0.028       0.118
+Vote2019R                0.0260      0.010      2.595      0.010       0.006       0.046
+pastvote_EURef          -0.0705      0.031     -2.298      0.022      -0.131      -0.010
+Political_Left_Right    -0.0482      0.012     -3.994      0.000      -0.072      -0.025
+Selfenh_Values           0.1422      0.043      3.302      0.001       0.058       0.227
+Biosph_values            0.1797      0.028      6.517      0.000       0.126       0.234
+Openness                -0.0744      0.031     -2.367      0.018      -0.136      -0.013
+Domin_Val               -0.0699      0.035     -2.005      0.045      -0.138      -0.002
+EDO                     -0.0517      0.023     -2.295      0.022      -0.096      -0.008
+SDO                     -0.2914      0.033     -8.850      0.000      -0.356      -0.227
+Tradition               -0.2463      0.036     -6.886      0.000      -0.316      -0.176
+Aggression              -0.1758      0.033     -5.263      0.000      -0.241      -0.110
+RWA                      0.3500      0.077      4.574      0.000       0.200       0.500
+AntiFossilFuelNorms      0.2663      0.027      9.920      0.000       0.214       0.319
+PersClimateAction        0.1901      0.018     10.651      0.000       0.155       0.225
+==============================================================================
+Omnibus:                       25.698   Durbin-Watson:                   1.965
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):               28.228
+Skew:                          -0.269   Prob(JB):                     7.42e-07
+Kurtosis:                       3.378   Cond. No.                         604.
+==============================================================================
+"""
 
 
 
