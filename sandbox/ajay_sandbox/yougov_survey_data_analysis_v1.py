@@ -74,7 +74,7 @@ import numpy as np
 #df = pd.DataFrame(data, columns=['Var1', 'Var2', 'Var3', 'Var4', 'Var5'])
 
 # 2. Calculate the correlation matrix
-corr_matrix = df_fil.corr()
+corr_matrix = df_fil.corr(method='spearman')
 
 # 3. Plot the heatmap
 plt.figure(figsize=(10, 8))  # Set the figure size
@@ -196,7 +196,7 @@ df_fil['target_label'] = [int(x) for x in df_surveys['AntiClimatePolSupp']]
 
 df_fil = df_fil.dropna(subset=df_fil.columns.values)
 
-#run_tsne_visualization(df_fil,feature_cols)
+run_tsne_visualization(df_fil,feature_cols)
 
 #%%
 
