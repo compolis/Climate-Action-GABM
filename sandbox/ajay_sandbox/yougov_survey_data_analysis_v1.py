@@ -16,7 +16,7 @@ import pandas as pd
 df_surveys = pd.read_csv('../../data/yougov_survey_data/YouGovProcessedData.csv') 
 
 print('length: ', len(df_surveys))
-
+df_surveys = df_surveys.dropna(subset=df_surveys.columns.values)
 
 #%%
 
@@ -62,6 +62,22 @@ df_fil= df_surveys[col_list]
 
 #%%
 
+col_list=['ProClimatePolSupp','AntiClimatePolSupp','age','male_dummy',
+  'tprofile_GOR',
+  "profile_education_level",
+  'tprofile_gross_household',
+  'ethnicity_R',
+  'parent_dummy',
+  'Vote2019R',
+  'pastvote_EURef',
+  'new_socgrade',
+  'Political_Left_Right','Selfenh_Values','Power_Values','Altr_values','Biosph_values','Selftransc_Val',\
+      'EDO','SDO','RWA','EcoFasc1','AntiFossilFuelNorms','PersClimateAction','page5posttreatment6_1','page5posttreatment6_2','page5posttreatment6_3','page5posttreatment6_4','page5posttreatment6_5','page5posttreatment6_6',\
+          'page5posttreatment6_7','page5posttreatment6_8','page5posttreatment6_9','page5posttreatment6_10','page5posttreatment6_11','page5posttreatment6_12']
+    
+df_fil= df_surveys[col_list]
+#%%
+
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -74,8 +90,8 @@ import numpy as np
 #df = pd.DataFrame(data, columns=['Var1', 'Var2', 'Var3', 'Var4', 'Var5'])
 
 # 2. Calculate the correlation matrix
-corr_matrix = df_fil.corr(method='spearman')
-
+corr_matrix = df_fil.corr(method='kendall')
+sns.set(font_scale=0.5) 
 # 3. Plot the heatmap
 plt.figure(figsize=(10, 8))  # Set the figure size
 sns.heatmap(corr_matrix, 
@@ -199,6 +215,12 @@ df_fil = df_fil.dropna(subset=df_fil.columns.values)
 run_tsne_visualization(df_fil,feature_cols)
 
 #%%
+
+"""
+How to interpret them:
+    
+https://www.geeksforgeeks.org/machine-learning/interpreting-the-results-of-linear-regression-using-ols-summary/
+"""
 
 import pandas as pd
 import numpy as np
@@ -494,6 +516,249 @@ Skew:                          -0.269   Prob(JB):                     7.42e-07
 Kurtosis:                       3.378   Cond. No.                         604.
 ==============================================================================
 """
+
+#%%
+
+"""
+Stat for politics and Climate support
+
+"""
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+plt.figure()
+plt.hist(df_fil['Political_Left_Right'])
+plt.xlabel('Left (1) to Right (8)')
+plt.ylabel('Number of participants')
+plt.show()
+
+"""
+No of right: 429
+No of left: 583
+No of center: 553
+
+"""
+#%%
+df_fil
+df_fil = df_fil.dropna(subset=df_fil.columns.values)
+
+plt.figure()
+plt.hist(df_fil['ProClimatePolSupp'])
+plt.xlabel('Anti (1) to Pro (7) Climate')
+plt.ylabel('Number of participants')
+plt.show()
+
+"""
+Anti-climate : 360
+Pro-climate: 1017
+Neutral: 98
+"""
+
+#%%
+plt.figure()
+plt.hist(df_fil['AntiClimatePolSupp'])
+plt.xlabel('Pro (1) to Anti (7) Climate')
+plt.ylabel('Number of participants')
+plt.show()
+
+
+"""
+Anti-climate: 401
+Pro-climate: 976
+Neutral: 98
+"""
+#%%
+
+plt.figure()
+plt.hist(df_fil['PersClimateAction'])
+plt.xlabel('No intention for Climate Action(0) to High intention(5)')
+plt.ylabel('Number of participants')
+plt.show()
+
+#%% Count matrix Political alignment with pro climate support 
+
+df_fil = df_surveys.dropna(subset=df_surveys.columns.values)
+col_list=['Political_Left_Right','PersClimateAction','AntiClimatePolSupp','ProClimatePolSupp' ]
+df_fil= df_fil[col_list]
+df_fil.reset_index(inplace=True)
+
+
+politics=[]
+ca_support=[]
+ca_support_r=[]
+for index,row in df_fil.iterrows():
+    
+    if row['Political_Left_Right']<4:
+        politics.append('left')
+    elif row['Political_Left_Right']>5:
+        politics.append('right')
+    elif row['Political_Left_Right']==4:
+        politics.append('center_left')
+    elif row['Political_Left_Right']==5:
+        politics.append('center_right')        
+    
+    if row['ProClimatePolSupp']<4:
+        ca_support.append('anti')
+    elif row['ProClimatePolSupp']>4:
+        ca_support.append('pro')
+    else:
+        ca_support.append('neutral')
+
+
+    if row['AntiClimatePolSupp']<4:
+        ca_support_r.append('pro')
+    elif row['AntiClimatePolSupp']>4:
+        ca_support_r.append('anti')
+    else:
+        ca_support_r.append('neutral')
+
+df_fil['political_spectrum']=politics
+df_fil['climate_action_pro']=ca_support
+df_fil['climate_action_anti']=ca_support_r
+
+print(pd.crosstab(df_fil['political_spectrum'], df_fil['climate_action_pro']))
+print(pd.crosstab(df_fil['political_spectrum'], df_fil['climate_action_anti']))
+# =============================================================================
+# 
+# =============================================================================
+"""
+
+climate_action      anti  neutral  pro
+political_spectrum                    
+center               163       44  319
+left                  53       15  484
+right                144       39  214
+
+
+
+climate_action_pro  anti  neutral  pro
+political_spectrum                    
+center_left           88       28  194
+center_right          75       16  125
+left                  53       15  484
+right                144       39  214
+climate_action_anti  anti  neutral  pro
+political_spectrum                     
+center_left           112       27  171
+center_right           77       16  123
+left                   54       16  482
+right                 158       39  200
+"""
+#%% Count mismatches between Pro and Anti climate questions
+
+
+# count=0
+# for index,row in df_fil.iterrows():
+    
+#     if (row['climate_action_pro']=='pro' and row['climate_action_anti']=='anti'):
+        
+#         count+=1
+        
+#     elif (row['climate_action_pro']=='anti' and row['climate_action_anti']=='pro'):
+#         count+=1
+"248 mismatches" 
+count=0
+for index,row in df_fil.iterrows():
+    
+    if row['climate_action_pro']!=row['climate_action_anti']:
+        
+        count+=1
+
+"388 mismatches"
+#%%
+
+"""
+Find pro and anti support % for each climate policy question
+"""
+
+
+df_fil = df_surveys.dropna(subset=df_surveys.columns.values)
+col_list=['page5posttreatment6_1','page5posttreatment6_2','page5posttreatment6_3','page5posttreatment6_4','page5posttreatment6_5','page5posttreatment6_6',\
+          'page5posttreatment6_7','page5posttreatment6_8','page5posttreatment6_9','page5posttreatment6_10','page5posttreatment6_11','page5posttreatment6_12']
+df_fil= df_fil[col_list]
+df_fil.reset_index()
+
+
+
+#%% Based on Pro questions
+for col in ['page5posttreatment6_1', 'page5posttreatment6_4', 'page5posttreatment6_5','page5posttreatment6_7','page5posttreatment6_9','page5posttreatment6_11']:
+    c=df_fil[col]
+    print(col,round(sum(x>4 for x in c)/len(c),2),round(sum(x<4 for x in c)/len(c),2))
+
+"""
+Que Pro Anti
+page5posttreatment6_1 0.81 0.06 Accelerate the roll-out of renewable energy production, (e.g. more offshore and onshore wind parks)
+page5posttreatment6_4 0.46 0.27 Ban new oil/gas/coal licenses
+page5posttreatment6_5 0.41 0.41 Ban the sale of new petrol cars by no later than 2030
+page5posttreatment6_7 0.77 0.1 Mandate that all new housing developments should have non-fossil fuel heating systems, roof-top solar panels, high-level of insulation
+page5posttreatment6_9 0.49 0.22 Impose a carbon tax on fossil fuel sale and distribute the tax revenues to the public (i.e. carbon fee and dividend)
+page5posttreatment6_11 0.39 0.36 Compensate people in other countries who are impacted by climate change
+
+"""
+#%% Based on Anti questions
+for col in ['page5posttreatment6_2', 'page5posttreatment6_3', 'page5posttreatment6_6','page5posttreatment6_8','page5posttreatment6_10','page5posttreatment6_12']:
+    c=df_fil[col]
+    print(col,round(sum(x<4 for x in c)/len(c),2),round(sum(x>4 for x in c)/len(c),2))
+
+"""
+Que Pro Anti
+page5posttreatment6_2 0.67 0.11 Ban onshore wind parks
+page5posttreatment6_3 0.41 0.34 Invest in and expand UK- based oil and gas production
+page5posttreatment6_6 0.45 0.34 Continue the sale of petrol cars indefinitely
+page5posttreatment6_8 0.71 0.12 Remove environmental regulations on new housing developments
+page5posttreatment6_10 0.44 0.28 Abolish carbon tax on petrol and diesel
+page5posttreatment6_12 0.51 0.28 End foreign aid to help other countries adapt to climate change
+"""
+
+"""
+
+50% voted for left (labour, social dem, green)
+38% voted for right (conservatives, Brexit/Reform )
+
+
+29% voted for right (conservatives, Brexit/Reform )
+38.9% lvoted for left (labour, liberal dem (centrist/center left), green)
+
+
+sum(x==1 for x in df_fil['Vote2019R'])
+Out[58]: 425
+
+sum(x==2 for x in df_fil['Vote2019R'])
+Out[59]: 379
+
+sum(x==3 for x in df_fil['Vote2019R'])
+Out[60]: 142
+
+sum(x==4 for x in df_fil['Vote2019R'])
+Out[61]: 15
+
+sum(x==5 for x in df_fil['Vote2019R'])
+Out[62]: 54
+
+sum(x==6 for x in df_fil['Vote2019R'])
+Out[63]: 46
+
+sum(x==7 for x in df_fil['Vote2019R'])
+Out[64]: 414
+"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
