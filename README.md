@@ -36,11 +36,26 @@ Changes in individual agents beliefs/desires/stances can cascade through their n
 
 The vision for a first model is of agents playing a coordination (social-tipping) game with persuasive communication, where each agent chooses one of two options (climate mitigation action, no climate mitigation action). One committed minority group representing climate action advocates (such as green political parties, campaign groups, climate movements, etc.) will always vote for a climate mitigation action. Another committed minority group representing climate inaction advocates (such as climate-denial/delay political parties and grassroots groups) will always vote for no climate mitigation action. A larger majority group will be persuadable either way.
 
+
 The model is based on survey data. This is used to construct the majority agents.
 
 
 ## License
 See [LICENSE](LICENSE).
+
+
+## Code of Conduct and Reporting
+Please see our [Code of Conduct](CODE_OF_CONDUCT.md) for guidelines on expected behavior and reporting issues.
+
+For security or conduct concerns, you can also use the `Contact maintainers` link on the GitHub repository, or see the [SECURITY.md](SECURITY.md) file in the documentation for details on confidential reporting.
+
+
+## User Guide
+Please use the [User Guide](USER_GUIDE.md).
+
+
+## Developer Guide
+Please use the [Developer Guide](DEV_GUIDE.md).
 
 
 ## Roadmap
