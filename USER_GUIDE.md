@@ -72,19 +72,31 @@ From the project root:
 python3 -m cag
 ```
 
+When you run:
+
+```bash
+python3 -m cag
 ```
-Describe what should happen...
-```
+
+the main program for Climate-Action-GABM is executed. This will:
+
+- Initialize the simulation environment, including any subclasses such as `Political_Environment`.
+- Create agent populations, including `Person` agents with attributes like year of birth and gender.
+- Set up any required groups, relationships, or initial conditions for the agents.
+- Begin the simulation loop, where agents interact, update their states, and the environment may change over time.
+- Output results, logs, or summaries to the console and/or files in the `data/output/` directory. This may include:
+  - Simulation progress and status messages
+  - Key statistics or metrics from the run
+  - Any errors or warnings encountered
+- Save logs and data for further analysis or reproducibility.
+
+The specific output and behavior may depend on your configuration, model parameters, and any customizations you have made. For more details, check the logs and output files generated in the `data/output/` directory after running the command.
 
 
 ## Troubleshooting
 If you experience issues when installing, configuring, or running GABM, check here for guidance or updates. As the project evolves, troubleshooting tips and frequently asked questions will be added here.
 
 If you encounter errors, check your Python version and that all dependencies are installed. If all versions match the documentation, please peruse [reported issues](https://github.com/compolis/Climate-Action-GABM/issues), comment on a relevent open issue or [open an issue](https://github.com/compolis/Climate-Action-GABM/issues/new/choose) to request support.
-
-
-## Running Models
-It is intended that you will be able to configure and run models. This section is to explain how to do this. This documentation will be updated in due course...
 
 
 ## Managing Logs and Caches

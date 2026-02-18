@@ -181,3 +181,11 @@ testpypi-release: build
 # Bump version everywhere (patch by default; use 'make bump-version part=minor' or 'part=major' for other bumps)
 bump-version:
 	bump2version --allow-dirty --list $${part:-patch}
+
+# Run cag using local source (development mode)
+run-local:
+	PYTHONPATH=src python3 -m cag
+
+# Run cag using installed package (production mode)
+run-installed:
+	python3 -m cag
