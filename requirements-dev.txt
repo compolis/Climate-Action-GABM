@@ -2,7 +2,7 @@
 # Install with: pip install -r requirements-dev.txt
 
 # GABM
-gabm==0.1.4
+gabm==0.2.2
 
 # Test dependencies
 pytest>=9.0.2,<10
@@ -15,11 +15,11 @@ docutils>=0.22,<0.23
 
 # For building distributions
 build>=1.4.0,<2
-setuptools>=61.0,<70
+setuptools>=82.0.0
 wheel>=0.42.0,<1
 
 # For updating version references in files
 bump2version>=1.0.1,<2
 
 # For uploading to PyPI
-twine>=5.0.0,<6
+twine>=6.2.0,<7
