@@ -13,9 +13,7 @@ This document summarises the development of GABM, including key decisions, miles
 
 
 ## GitHub Copilot
-[GitHub Copilot](https://github.com/features/copilot) has beenused to help automate release and cleanup tasks, develop document, test and formulate code.
-
-GitHub Copilot has only limited session memory and no memory between sessions. Project documentation provides context so GitHub Copilot can better tailor responses, but you may need to guide GitHub Copilot to ensure this is done.
+[GitHub Copilot](https://github.com/features/copilot) has been used to help automate release and cleanup tasks, develop document, test and formulate code.
 
 
 ## Contributors
@@ -23,5 +21,9 @@ See [CONTRIBUTORS].
 
 
 ## Development Timeline
-- [2026-02-13] Andy joined the team as a developer.
+- [2026-02-18] Dependency update to [GABM==0.2.2](https://pypi.org/project/gabm/0.2.2/). Basic ABM runs.
+- [2026-02-16] Planned release of Climate-Action-GABM==0.1.0.
+- [2026-02-10] Documentation and Makefile added based on those developed for [GABM](https://github.com/compolis/GABM).
+- [2026-02-03] Andy added as developer/maintainer. BSD License agreed and put in place.
+- [2026-02-02] Climate-Action-GABM Repository transered to [compolis](https://github.com/compolis/)
 - ...

@@ -8,5 +8,5 @@
 # Install with: pip install -r requirements.txt
 
 # GABM
-gabm==0.1.4
+gabm==0.2.2
 ```
