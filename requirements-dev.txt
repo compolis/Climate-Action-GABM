@@ -2,7 +2,7 @@
 # Install with: pip install -r requirements-dev.txt
 
 # GABM
-gabm==0.2.5
+gabm==0.2.8
 
 # Test dependencies
 pytest>=9.0.2,<10
@@ -26,3 +26,4 @@ twine>=6.2.0,<7
 
 # For climate-action specific development
 pandas>=3.0.1,<4.0
+networkx>=3.6.1,<4.0

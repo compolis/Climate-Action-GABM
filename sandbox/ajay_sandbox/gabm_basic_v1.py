@@ -18,6 +18,8 @@ Primary dependencies:
 - google-genai
 - matplotlib (for plotting)
 
+(change mode name for genai if needed, e.g. "gemini-2.0-flash" or "gemini-1.5-pro")
+
 Notes:
 - API keys are loaded from `data/api_key.csv`.
 - Survey question definitions are imported from `survey_dict`.
@@ -32,7 +34,8 @@ from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
-from google import genai
+import google.genai as genai
+
 from google.genai import types
 
 import networkx as nx
@@ -431,6 +434,16 @@ def ask_agent_survey_question(
                 max_output_tokens=5,
                 system_instruction=system_instruction  # <--- MOVED HERE
             )
+            
+            # Create a GenAIService instance and send the prompt to Gemini to generate a response
+            #import gabm.io.llm.genai as GenAIService
+            #genai_service = GenAIService()
+
+            # result = genai_service.send(api_key=genai_client.api_key, message=prompt)
+            # print('raw result from genai service: ', result)
+
+
+
             response = genai_client.models.generate_content(
                 model=model_name if model_name else "gemini-2.0-flash",
                 contents=prompt,
@@ -533,7 +546,12 @@ def draft_influencer_persuasive_message(
             max_output_tokens=140,
             system_instruction=system_instruction,
         )
-
+        # from gabm.io.llm.genai import GenAIService
+        # api_keys = get_api_keys_df()
+        # genai_key = api_keys.loc[api_keys["api"] == "genai", "key"].iloc[0]
+        # genai_service = GenAIService()
+        # result = genai_service.send(api_key=genai_key, message=prompt)
+        # print('raw result from genai service: ', result)
         response = genai_client.models.generate_content(
             model=model_name if model_name else "gemini-2.0-flash",
             contents=prompt,
@@ -650,6 +668,11 @@ def plot_question_results(question_results, question_id, figsize=(14, 6)):
 
 
 def run_simulation():
+
+    # Create a GenAIService instance
+    from gabm.io.llm.genai import GenAIService
+    genai_service = GenAIService()
+    
     file_path = DATA_DIR / "yougov_survey_data" / "YouGovProcessedData.csv"
     survey_data = load_survey_data(file_path)
     survey_data = survey_data.head(10)
@@ -672,7 +695,7 @@ def run_simulation():
 
         question_results = {}
 
-        for n_rounds in range(1, 7):
+        for n_rounds in range(1, 2):
             print(f"\n--- ROUND {n_rounds} ---")
             question_results[n_rounds] = {}
 
@@ -688,7 +711,6 @@ def run_simulation():
                     model_name=None
                 )
                 print(f"Message: {influencer_message[:80]}...")
-
                 influencer_agent_answers = {}
                 for people_node, persona_description in all_persona_texts.items():
                     agent_answer = ask_agent_survey_question(
@@ -709,17 +731,20 @@ def run_simulation():
                 for ans in influencer_agent_answers.values():
                     answer_counts[ans] = answer_counts.get(ans, 0) + 1
                 print(f"Answers from all agents: {answer_counts}")
-
         print(f"\n{'='*70}")
         print(f"Generating visualization for {question_id}...")
         print(f"{'='*70}")
         fig = plot_question_results(question_results, question_id)
-        fig.savefig(f"question_{question_id}_results.png", dpi=150, bbox_inches='tight')
-        print(f"Saved plot to: question_{question_id}_results.png")
+        fig.savefig(f"data/output/question_{question_id}_results.png", dpi=150, bbox_inches='tight')
+        print(f"Saved plot to: data/output/question_{question_id}_results.png")
 
         break
 
-
+# from gabm.io.llm.openai import OpenAIService
+# api_keys = get_api_keys_df()
+# openai_key = api_keys.loc[api_keys["api"] == "openai", "key"].iloc[0]
+# openai_service = OpenAIService()
+# result = openai_service.send(api_key=openai_key, message="Hello, this is a test message to check if the OpenAIService is working correctly.")
 if __name__ == "__main__":
     run_simulation()
         
