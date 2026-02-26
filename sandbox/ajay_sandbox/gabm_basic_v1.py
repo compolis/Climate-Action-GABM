@@ -141,7 +141,7 @@ def create_persona_text_for_people_agent(survey_data):
     # ------------------------------------------------------------------
     # Load THE PROFILE DICTIONARY TO MAP CODED VALUES TO HUMAN-READABLE TEXT
     try:
-        from gabm.survey_dict import PROFILE_DICT
+        from survey_dict import PROFILE_DICT
     except ImportError:
         from survey_dict import PROFILE_DICT
 
@@ -660,7 +660,7 @@ def run_simulation():
     memory_store = AgentMemoryStore(max_turns=8)
 
     try:
-        from gabm.survey_dict import SURVEY_QUESTIONS
+        from survey_dict import SURVEY_QUESTIONS
     except ImportError:
         from survey_dict import SURVEY_QUESTIONS
 
