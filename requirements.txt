@@ -3,3 +3,6 @@
 
 # GABM
 gabm==0.2.5
+
+# For climate-action specific development
+pandas==3.0.1
