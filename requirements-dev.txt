@@ -2,7 +2,7 @@
 # Install with: pip install -r requirements-dev.txt
 
 # GABM
-gabm==0.2.8
+gabm==0.2.12
 
 # Test dependencies
 pytest>=9.0.2,<10
