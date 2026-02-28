@@ -2,4 +2,11 @@
 # Install with: pip install -r requirements.txt
 
 # GABM
+<<<<<<< Updated upstream
 gabm==0.2.5
+=======
+gabm==0.2.12
+
+# For climate-action specific development
+pandas==3.0.1
+>>>>>>> Stashed changes
