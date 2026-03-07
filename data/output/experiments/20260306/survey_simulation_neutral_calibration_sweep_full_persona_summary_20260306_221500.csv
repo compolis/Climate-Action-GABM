@@ -1,0 +1,4 @@
+calibration_level,n_rows,mean_exact_match_score
+soft,171,0.6491228070175439
+baseline,179,0.6480446927374302
+strong,177,0.5649717514124294

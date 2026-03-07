@@ -1,0 +1,5 @@
+persona_mode,n_rows,mean_exact_match_score
+full_persona,180,0.5555555555555556
+values_only,180,0.55
+compressed_full,180,0.5333333333333333
+demographics_politics_only,180,0.45555555555555555

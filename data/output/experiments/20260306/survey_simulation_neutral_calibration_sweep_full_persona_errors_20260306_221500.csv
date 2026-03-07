@@ -1,0 +1,14 @@
+run_timestamp,calibration_level,question_id,respondent_id,error_message,total_errors_so_far,consecutive_errors_so_far
+20260306_221500,baseline,Q1,1820,Error: Gemini request failed after safeguards: Gemini returned empty response text.,1,1
+20260306_221500,soft,Q1,248,Error: Gemini request failed after safeguards: Gemini returned empty response text.,2,1
+20260306_221500,soft,Q1,1485,Error: Gemini request failed after safeguards: Gemini returned empty response text.,3,2
+20260306_221500,soft,Q2,851,Error: Gemini request failed after safeguards: Gemini returned empty response text.,4,1
+20260306_221500,soft,Q2,46,Error: Gemini request failed after safeguards: Gemini returned empty response text.,5,1
+20260306_221500,soft,Q2,1006,Error: Gemini request failed after safeguards: Gemini returned empty response text.,6,1
+20260306_221500,soft,Q3,851,Error: Gemini request failed after safeguards: Gemini returned empty response text.,7,1
+20260306_221500,soft,Q4,1006,Error: Gemini request failed after safeguards: Gemini returned empty response text.,8,1
+20260306_221500,soft,Q5,248,Error: Gemini request failed after safeguards: Gemini returned empty response text.,9,1
+20260306_221500,soft,Q6,389,Error: Gemini request failed after safeguards: Gemini returned empty response text.,10,1
+20260306_221500,strong,Q2,409,Error: Gemini request failed after safeguards: Gemini returned empty response text.,11,1
+20260306_221500,strong,Q3,1469,Error: Gemini request failed after safeguards: Gemini returned empty response text.,12,1
+20260306_221500,strong,Q5,409,Error: Gemini request failed after safeguards: Gemini returned empty response text.,13,1

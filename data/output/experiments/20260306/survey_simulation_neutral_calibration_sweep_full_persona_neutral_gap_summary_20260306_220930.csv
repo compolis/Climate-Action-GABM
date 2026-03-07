@@ -1,0 +1,4 @@
+calibration_level,mean_expected_neutral_share,mean_predicted_neutral_share,mean_neutral_share_delta
+baseline,0.6,0.0,-0.6
+soft,0.6,0.0,-0.6
+strong,0.15,0.35000000000000003,0.2

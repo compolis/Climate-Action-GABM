@@ -112,6 +112,25 @@ def _is_retryable_gemini_error(exc: Exception) -> bool:
     return any(marker in message for marker in retryable_markers)
 
 
+def _extract_text_from_gemini_response(response) -> str:
+    """Extract text safely from Gemini response, including candidate-part fallback."""
+    direct_text = (getattr(response, "text", "") or "").strip()
+    if direct_text:
+        return direct_text
+
+    candidates = getattr(response, "candidates", None) or []
+    parts_text = []
+    for cand in candidates:
+        content = getattr(cand, "content", None)
+        parts = getattr(content, "parts", None) or []
+        for part in parts:
+            text = (getattr(part, "text", "") or "").strip()
+            if text:
+                parts_text.append(text)
+
+    return "\n".join(parts_text).strip()
+
+
 def gemini_generate_content_with_retry(prompt, model_name, config):
     """Generate Gemini content with throttling and retry/backoff safeguards."""
     genai_client = get_gemini_client()
@@ -126,7 +145,7 @@ def gemini_generate_content_with_retry(prompt, model_name, config):
                 contents=prompt,
                 config=config,
             )
-            output_text = (response.text or "").strip()
+            output_text = _extract_text_from_gemini_response(response)
             if not output_text:
                 raise RuntimeError("Gemini returned empty response text.")
             return output_text
@@ -1110,13 +1129,51 @@ def calculate_ordinal_score(agent_choice, expected_choice, options_keys):
     
     return score
 
+
+def collapse_answer_to_stance(answer):
+    """
+    Collapse A-G survey answers into 3 stance buckets.
+
+    - A, B, C -> Oppose
+    - D       -> Neutral
+    - E, F, G -> Support
+    """
+    if not isinstance(answer, str):
+        return None
+
+    normalized = answer.strip().upper()
+    if normalized in {"A", "B", "C"}:
+        return "Oppose"
+    if normalized == "D":
+        return "Neutral"
+    if normalized in {"E", "F", "G"}:
+        return "Support"
+    return None
+
+
+def calculate_exact_match_score_by_stance(agent_choice, expected_choice):
+    """
+    Exact-match scoring after collapsing answers to stance buckets.
+
+    Returns:
+        1.0 if collapsed stances are identical, else 0.0.
+    """
+    agent_stance = collapse_answer_to_stance(agent_choice)
+    expected_stance = collapse_answer_to_stance(expected_choice)
+
+    if agent_stance is None or expected_stance is None:
+        return 0.0
+
+    return 1.0 if agent_stance == expected_stance else 0.0
+
 def survey_simulation_test():
     """
     Run survey simulation and save tidy respondent-question level outputs to CSV.
 
     Output files:
-    - data/output/survey_simulation_results_<timestamp>.csv
-    - data/output/survey_simulation_question_summary_<timestamp>.csv
+    - data/output/experiments/20260301/survey_simulation_results_<timestamp>.csv
+    - data/output/experiments/20260301/survey_simulation_question_summary_<timestamp>.csv
+    - data/output/experiments/20260301/survey_simulation_agent_answer_boxplot_<timestamp>.png
     """
     try:
         genai_client = get_gemini_client()
@@ -1145,11 +1202,11 @@ def survey_simulation_test():
         survey_data = survey_data.sample(n=sample_n, replace=False, random_state=1)
     all_persona_texts = create_persona_text_for_people_agent(survey_data)
 
-    for respondent_id, persona_text in all_persona_texts.items():
-        print(f"Respondent ID: {respondent_id}")
-        print("Persona Description:")
-        print(persona_text)
-        print("\n" + "="*80 + "\n")
+    # for respondent_id, persona_text in all_persona_texts.items():
+    #     print(f"Respondent ID: {respondent_id}")
+    #     print("Persona Description:")
+    #     print(persona_text)
+    #     print("\n" + "="*80 + "\n")
 
     try:
         from survey_dict import SURVEY_QUESTIONS
@@ -1203,11 +1260,11 @@ def survey_simulation_test():
                 }
             )
 
-            print(f"Question: {q['text']}")
-            print(f"Agent Answer: {answer}")
-            print(f"Expected Answer: {expected}")
-            print(f"Ordinal Accuracy Score: {score:.2f}")
-            print("-"*40)
+            # print(f"Question: {q['text']}")
+            # print(f"Agent Answer: {answer}")
+            # print(f"Expected Answer: {expected}")
+            # print(f"Exact Match Score (stance-collapsed): {score:.2f}")
+            # print("-"*40)
 
         average_score = sum(scores) / len(scores) if scores else 0
         per_question_summary.append(
@@ -1221,7 +1278,7 @@ def survey_simulation_test():
         )
         print(f"Average Ordinal Accuracy Score across all agents: {average_score:.2f}")
 
-    output_dir = DATA_DIR / "output"
+    output_dir = DATA_DIR / "output" / "experiments" / "20260301"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results_df = pd.DataFrame(all_results)
@@ -1270,6 +1327,755 @@ def survey_simulation_test():
         print("- Boxplot figure: skipped (no valid answer scores)")
 
     return results_df, summary_df
+
+
+def _build_profile_dict_from_row(row):
+    """Build a mapped profile dict (coded -> readable) for one survey row."""
+    p_list = [
+        "age", "male_dummy", "tprofile_GOR", "profile_education_level",
+        "tprofile_gross_household", "ethnicity_R", "parent_dummy", "Vote2019R",
+        "pastvote_EURef", "Political_Left_Right", "Selftransc_Val", "Selfenh_Values",
+        "Openness", "ConformTrad", "SDO", "EDO", "RWA",
+    ]
+
+    try:
+        from survey_dict import PROFILE_DICT
+    except ImportError:
+        from sandbox.ajay_sandbox.survey_dict import PROFILE_DICT
+
+    profile = {}
+    for key in p_list:
+        if key in [
+            "age", "Selftransc_Val", "Selfenh_Values", "Openness",
+            "ConformTrad", "SDO", "EDO", "RWA",
+        ]:
+            profile[key] = row[key]
+        else:
+            profile[key] = PROFILE_DICT[key][str(round(row[key]))]
+    return profile
+
+
+def create_persona_variants_for_people_agent(survey_data):
+    """
+    Create deterministic persona variants from the same mapped survey fields.
+
+    Variants:
+    - full_persona: existing rich narrative (all attributes)
+    - demographics_politics_only: demographics + politics only
+    - values_only: value/worldview only
+    - compressed_full: all attributes preserved in concise structured text
+    """
+    all_variants = {
+        "full_persona": {},
+        "demographics_politics_only": {},
+        "values_only": {},
+        "compressed_full": {},
+    }
+
+    for _, row in survey_data.iterrows():
+        respondent_id = int(row["ID"])
+        p = _build_profile_dict_from_row(row)
+
+        demographics_politics = (
+            f"Demographically, I am a {p['age']}-year-old {p['male_dummy']} living in the {p['tprofile_GOR']}, United Kingdom. "
+            f"My ethnic background is {p['ethnicity_R']}, and I hold a {p['profile_education_level']}. "
+            f"Financially, my gross household income falls into the {p['tprofile_gross_household']} bracket. "
+            f"Regarding my family status, I {p['parent_dummy']} a parent. "
+            f"Politically, I position myself on the {p['Political_Left_Right']} of the spectrum. "
+            f"In the 2019 General Election, I cast my vote for the {p['Vote2019R']}. "
+            f"Looking back at the EU Referendum, {p['pastvote_EURef']}."
+        )
+
+        values_only = (
+            "When it comes to my core values and worldview: "
+            f"{get_narrative(p['Selftransc_Val'], 'Selftransc_Val')} "
+            f"{get_narrative(p['Selfenh_Values'], 'Selfenh_Values')} "
+            f"{get_narrative(p['Openness'], 'Openness')} "
+            f"{get_narrative(p['ConformTrad'], 'ConformTrad')} "
+            f"{get_narrative(p['SDO'], 'SDO')} "
+            f"{get_narrative(p['EDO'], 'EDO')} "
+            f"{get_narrative(p['RWA'], 'RWA')}"
+        )
+
+        compressed_full = (
+            "PROFILE (compressed): "
+            f"age={p['age']}; sex={p['male_dummy']}; region={p['tprofile_GOR']}; "
+            f"ethnicity={p['ethnicity_R']}; education={p['profile_education_level']}; "
+            f"income={p['tprofile_gross_household']}; parent={p['parent_dummy']}; "
+            f"left_right={p['Political_Left_Right']}; vote2019={p['Vote2019R']}; eu_ref={p['pastvote_EURef']}; "
+            f"Selftransc_Val={p['Selftransc_Val']}; Selfenh_Values={p['Selfenh_Values']}; Openness={p['Openness']}; "
+            f"ConformTrad={p['ConformTrad']}; SDO={p['SDO']}; EDO={p['EDO']}; RWA={p['RWA']}."
+        )
+
+        all_variants["full_persona"][respondent_id] = format_persona_from_row(p)
+        all_variants["demographics_politics_only"][respondent_id] = demographics_politics
+        all_variants["values_only"][respondent_id] = values_only
+        all_variants["compressed_full"][respondent_id] = compressed_full
+
+    return all_variants
+
+
+def ask_agent_survey_question_acc_neutral_calibrated(
+    persona_description,
+    question_data,
+    provider="gemini",
+    model_name=None,
+    temperature=0.0,
+):
+    """
+    Ask one survey question with a neutral-calibrated prompt (question text unchanged).
+
+    Notes:
+    - Keeps survey question/options exactly as-is.
+    - Encourages selecting D when persona is genuinely mixed/uncertain.
+    - Designed for deterministic evaluation when temperature=0.0.
+    """
+    prompt = f"""
+    You are participating in a demographic survey.
+
+    YOUR PERSONA:
+    {persona_description}
+
+    INSTRUCTIONS:
+    1. Read the survey question and options exactly as shown.
+    2. Select the option (A-G) that best matches your persona.
+    3. If your persona is genuinely mixed, uncertain, or balanced between support and opposition, choose D (Neutral).
+    4. Do not force support or opposition when the persona does not clearly lean.
+    5. Output ONLY the single letter A, B, C, D, E, F, or G.
+
+    QUESTION: {question_data['text']}
+
+    OPTIONS:
+    A) {question_data['options'].get('A', '')}
+    B) {question_data['options'].get('B', '')}
+    C) {question_data['options'].get('C', '')}
+    D) {question_data['options'].get('D', '')}
+    E) {question_data['options'].get('E', '')}
+    F) {question_data['options'].get('F', '')}
+    G) {question_data['options'].get('G', '')}
+
+    YOUR CHOICE (Letter Only):
+    """
+
+    if provider.lower() != "gemini":
+        return "Error: Unknown Provider"
+
+    system_instruction = (
+        "You are a survey respondent. Follow persona faithfully and use Neutral (D) when stance is mixed."
+    )
+
+    try:
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=5,
+            system_instruction=system_instruction,
+        )
+        raw_content = gemini_generate_content_with_retry(
+            prompt=prompt,
+            model_name=model_name if model_name else "gemini-2.5-flash",
+            config=config,
+        )
+
+        answer = raw_content.strip().upper()
+        if len(answer) > 1 and answer[0] in ["A", "B", "C", "D", "E", "F", "G"]:
+            answer = answer[0]
+        return answer
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def run_neutral_calibrated_persona_ablation_experiment(
+    respondent_sample_n=100,
+    random_state=1,
+    provider="gemini",
+    model_name=None,
+    temperature=0.0,
+    persona_modes=None,
+    output_dir=None,
+    save_outputs=True,
+):
+    """
+    Run controlled ablation over persona variants with neutral-calibrated prompting.
+
+    Keeps survey question text unchanged while varying persona representation and
+    LLM prompting/decoding settings.
+
+    Outputs:
+    - detail CSV (one row per variant-question-respondent)
+    - summary CSV (mean exact-match score by variant)
+    - stance-share comparison CSV (expected vs predicted by variant/question)
+    """
+    file_path = DATA_DIR / "yougov_survey_data" / "YouGovProcessedData_train.csv"
+    survey_data = load_survey_data(file_path)
+    if survey_data is None or survey_data.empty:
+        raise ValueError("No survey data available for neutral-calibrated ablation.")
+
+    if respondent_sample_n is not None:
+        sample_n = min(int(respondent_sample_n), len(survey_data))
+        survey_data = survey_data.sample(n=sample_n, replace=False, random_state=random_state)
+
+    persona_variant_maps = create_persona_variants_for_people_agent(survey_data)
+    if persona_modes is None:
+        persona_modes = [
+            "full_persona",
+            "demographics_politics_only",
+            "values_only",
+            "compressed_full",
+        ]
+
+    unknown_modes = [mode for mode in persona_modes if mode not in persona_variant_maps]
+    if unknown_modes:
+        raise ValueError(f"Unknown persona modes: {unknown_modes}")
+
+    try:
+        from survey_dict import SURVEY_QUESTIONS
+    except ImportError:
+        from sandbox.ajay_sandbox.survey_dict import SURVEY_QUESTIONS
+
+    options_dict = {
+        "1": "A", "2": "B", "3": "C", "4": "D", "5": "E", "6": "F", "7": "G"
+    }
+
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    detail_rows = []
+
+    for mode in persona_modes:
+        persona_map = persona_variant_maps[mode]
+        print(f"\nRunning mode: {mode}")
+
+        for q in SURVEY_QUESTIONS:
+            question_id = q.get("id", q.get("col_name", "unknown_question"))
+            question_text = q.get("text", "")
+
+            for _, row in survey_data.iterrows():
+                respondent_id = int(row["ID"])
+                expected = options_dict[str(int(row[q["col_name"]]))]
+
+                answer = ask_agent_survey_question_acc_neutral_calibrated(
+                    persona_description=persona_map[respondent_id],
+                    question_data=q,
+                    provider=provider,
+                    model_name=model_name,
+                    temperature=temperature,
+                )
+
+                if isinstance(answer, str) and answer.startswith("Error:"):
+                    raise RuntimeError(
+                        f"Ablation stopped due to API error for mode={mode}, respondent={respondent_id}, "
+                        f"question={question_id}: {answer}"
+                    )
+
+                score = calculate_exact_match_score_by_stance(answer, expected)
+                detail_rows.append(
+                    {
+                        "run_timestamp": run_timestamp,
+                        "experiment_name": "neutral_calibrated_persona_ablation",
+                        "persona_mode": mode,
+                        "question_id": question_id,
+                        "question_text": question_text,
+                        "question_column": q.get("col_name", ""),
+                        "respondent_id": respondent_id,
+                        "agent_answer": answer,
+                        "expected_answer": expected,
+                        "exact_match_score": float(score),
+                        "provider": provider,
+                        "model_name": model_name if model_name else "gemini-2.5-flash",
+                        "temperature": float(temperature),
+                    }
+                )
+
+    detail_df = pd.DataFrame(detail_rows)
+    if detail_df.empty:
+        raise RuntimeError("Ablation run produced no rows.")
+
+    summary_df = (
+        detail_df.groupby("persona_mode", as_index=False)
+        .agg(
+            n_rows=("exact_match_score", "size"),
+            mean_exact_match_score=("exact_match_score", "mean"),
+        )
+        .sort_values("mean_exact_match_score", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    stance_map = {
+        "A": "Oppose", "B": "Oppose", "C": "Oppose",
+        "D": "Neutral",
+        "E": "Support", "F": "Support", "G": "Support",
+    }
+    stance_df = detail_df.copy()
+    stance_df["expected_stance"] = stance_df["expected_answer"].map(stance_map)
+    stance_df["predicted_stance"] = stance_df["agent_answer"].map(stance_map)
+
+    expected_share = (
+        stance_df.groupby(["persona_mode", "question_id", "expected_stance"]).size()
+        .rename("expected_count")
+        .reset_index()
+        .rename(columns={"expected_stance": "stance"})
+    )
+    predicted_share = (
+        stance_df.groupby(["persona_mode", "question_id", "predicted_stance"]).size()
+        .rename("predicted_count")
+        .reset_index()
+        .rename(columns={"predicted_stance": "stance"})
+    )
+    stance_comparison_df = expected_share.merge(
+        predicted_share,
+        on=["persona_mode", "question_id", "stance"],
+        how="outer",
+    ).fillna(0)
+
+    q_totals = (
+        stance_df.groupby(["persona_mode", "question_id"]).size().rename("n_rows").reset_index()
+    )
+    stance_comparison_df = stance_comparison_df.merge(
+        q_totals, on=["persona_mode", "question_id"], how="left"
+    )
+    stance_comparison_df["expected_share"] = stance_comparison_df["expected_count"] / stance_comparison_df["n_rows"]
+    stance_comparison_df["predicted_share"] = stance_comparison_df["predicted_count"] / stance_comparison_df["n_rows"]
+    stance_comparison_df["share_delta_pred_minus_expected"] = (
+        stance_comparison_df["predicted_share"] - stance_comparison_df["expected_share"]
+    )
+
+    base_output_dir = (
+        DATA_DIR / "output" / "experiments" / "20260306"
+        if output_dir is None
+        else Path(output_dir)
+    )
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    detail_csv_path = None
+    summary_csv_path = None
+    stance_comparison_csv_path = None
+    neutral_gap_plot_path = None
+
+    if save_outputs:
+        detail_csv_path = base_output_dir / f"survey_simulation_neutral_calibrated_persona_ablation_detail_{run_timestamp}.csv"
+        summary_csv_path = base_output_dir / f"survey_simulation_neutral_calibrated_persona_ablation_summary_{run_timestamp}.csv"
+        stance_comparison_csv_path = base_output_dir / f"survey_simulation_neutral_calibrated_persona_ablation_stance_comparison_{run_timestamp}.csv"
+
+        detail_df.to_csv(detail_csv_path, index=False)
+        summary_df.to_csv(summary_csv_path, index=False)
+        stance_comparison_df.to_csv(stance_comparison_csv_path, index=False)
+
+        neutral_gap_df = stance_comparison_df[
+            stance_comparison_df["stance"] == "Neutral"
+        ].copy()
+        neutral_gap_df = (
+            neutral_gap_df.groupby("persona_mode", as_index=False)
+            .agg(mean_neutral_share_delta=("share_delta_pred_minus_expected", "mean"))
+            .sort_values("mean_neutral_share_delta", ascending=False)
+        )
+
+        if not neutral_gap_df.empty:
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.bar(
+                neutral_gap_df["persona_mode"].astype(str),
+                neutral_gap_df["mean_neutral_share_delta"].astype(float),
+            )
+            ax.axhline(0.0, color="black", linestyle="--", linewidth=1)
+            ax.set_xlabel("Persona Mode")
+            ax.set_ylabel("Mean Predicted-Expected Neutral Share")
+            ax.set_title("Neutral Share Gap by Persona Mode (Neutral-Calibrated Prompt)")
+            ax.grid(True, axis="y", alpha=0.3)
+            plt.xticks(rotation=15, ha="right")
+            plt.tight_layout()
+            neutral_gap_plot_path = base_output_dir / f"survey_simulation_neutral_calibrated_persona_ablation_neutral_gap_{run_timestamp}.png"
+            fig.savefig(neutral_gap_plot_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+
+        print(f"Saved ablation detail CSV: {detail_csv_path}")
+        print(f"Saved ablation summary CSV: {summary_csv_path}")
+        print(f"Saved ablation stance-comparison CSV: {stance_comparison_csv_path}")
+        if neutral_gap_plot_path is not None:
+            print(f"Saved ablation neutral-gap PNG: {neutral_gap_plot_path}")
+
+    print("\nAblation summary (mean exact-match score by persona mode):")
+    print(summary_df.to_string(index=False))
+
+    return {
+        "detail_df": detail_df,
+        "summary_df": summary_df,
+        "stance_comparison_df": stance_comparison_df,
+        "detail_csv_path": detail_csv_path,
+        "summary_csv_path": summary_csv_path,
+        "stance_comparison_csv_path": stance_comparison_csv_path,
+        "neutral_gap_plot_path": neutral_gap_plot_path,
+    }
+
+
+def ask_agent_survey_question_acc_calibration_level(
+    persona_description,
+    question_data,
+    calibration_level="baseline",
+    provider="gemini",
+    model_name=None,
+    temperature=0.0,
+):
+    """
+    Ask one survey question using a selectable neutral-calibration level.
+
+    calibration_level:
+    - baseline: no extra neutral guidance
+    - soft: choose D only when genuinely mixed
+    - strong: stronger instruction to select D when mixed/uncertain
+    """
+    if provider.lower() != "gemini":
+        return "Error: Unknown Provider"
+
+    if calibration_level == "baseline":
+        extra_instructions = (
+            "3. Select the option (A-G) that ALIGNS BEST with your persona's worldview.\n"
+            "4. Output ONLY the letter of your choice. Do not explain."
+        )
+        system_instruction = "You are a survey respondent. You strictly follow persona instructions."
+    elif calibration_level == "soft":
+        extra_instructions = (
+            "3. Select the option (A-G) that best matches your persona.\n"
+            "4. If your persona is genuinely mixed between support and opposition, you may choose D (Neutral).\n"
+            "5. If your persona has a clear lean, do not choose D.\n"
+            "6. Output ONLY the letter of your choice. Do not explain."
+        )
+        system_instruction = (
+            "You are a survey respondent. Follow persona faithfully and use D only for truly mixed positions."
+        )
+    elif calibration_level == "strong":
+        extra_instructions = (
+            "3. Select the option (A-G) that best matches your persona.\n"
+            "4. If your persona is mixed, uncertain, or balanced, choose D (Neutral).\n"
+            "5. Do not force support or opposition when the persona does not clearly lean.\n"
+            "6. Output ONLY the letter of your choice. Do not explain."
+        )
+        system_instruction = (
+            "You are a survey respondent. Follow persona faithfully and use Neutral (D) when stance is mixed."
+        )
+    else:
+        return "Error: Unknown calibration level"
+
+    prompt = f"""
+    You are participating in a demographic survey.
+
+    YOUR PERSONA:
+    {persona_description}
+
+    INSTRUCTIONS:
+    1. Read the question below.
+    2. Keep the survey question and options exactly as written.
+    {extra_instructions}
+
+    QUESTION: {question_data['text']}
+
+    OPTIONS:
+    A) {question_data['options'].get('A', '')}
+    B) {question_data['options'].get('B', '')}
+    C) {question_data['options'].get('C', '')}
+    D) {question_data['options'].get('D', '')}
+    E) {question_data['options'].get('E', '')}
+    F) {question_data['options'].get('F', '')}
+    G) {question_data['options'].get('G', '')}
+
+    YOUR CHOICE (Letter Only):
+    """
+
+    try:
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=5,
+            system_instruction=system_instruction,
+        )
+        raw_content = gemini_generate_content_with_retry(
+            prompt=prompt,
+            model_name=model_name if model_name else "gemini-2.5-flash",
+            config=config,
+        )
+
+        answer = raw_content.strip().upper()
+        if len(answer) > 1 and answer[0] in ["A", "B", "C", "D", "E", "F", "G"]:
+            answer = answer[0]
+        return answer
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def run_neutral_calibration_sweep_full_persona(
+    respondent_sample_n=30,
+    random_state=1,
+    calibration_levels=None,
+    provider="gemini",
+    model_name=None,
+    temperature=0.0,
+    output_dir=None,
+    save_outputs=True,
+    continue_on_error=True,
+    max_total_errors=40,
+    max_consecutive_errors=12,
+):
+    """
+    Sweep neutral-calibration levels while keeping persona mode fixed to full_persona.
+
+    Designed to tune neutral calibration without re-running persona-mode ablation.
+    """
+    if calibration_levels is None:
+        calibration_levels = ["baseline", "soft", "strong"]
+
+    file_path = DATA_DIR / "yougov_survey_data" / "YouGovProcessedData_train.csv"
+    survey_data = load_survey_data(file_path)
+    if survey_data is None or survey_data.empty:
+        raise ValueError("No survey data available for calibration sweep.")
+
+    if respondent_sample_n is not None:
+        sample_n = min(int(respondent_sample_n), len(survey_data))
+        survey_data = survey_data.sample(n=sample_n, replace=False, random_state=random_state)
+
+    full_persona_map = create_persona_variants_for_people_agent(survey_data)["full_persona"]
+
+    try:
+        from survey_dict import SURVEY_QUESTIONS
+    except ImportError:
+        from sandbox.ajay_sandbox.survey_dict import SURVEY_QUESTIONS
+
+    options_dict = {
+        "1": "A", "2": "B", "3": "C", "4": "D", "5": "E", "6": "F", "7": "G"
+    }
+
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    detail_rows = []
+    error_rows = []
+    total_errors = 0
+    consecutive_errors = 0
+    abort_run = False
+
+    for level in calibration_levels:
+        print(f"\nRunning calibration level: {level}")
+        for q in SURVEY_QUESTIONS:
+            question_id = q.get("id", q.get("col_name", "unknown_question"))
+            question_text = q.get("text", "")
+
+            for _, row in survey_data.iterrows():
+                respondent_id = int(row["ID"])
+                expected = options_dict[str(int(row[q["col_name"]]))]
+
+                answer = ask_agent_survey_question_acc_calibration_level(
+                    persona_description=full_persona_map[respondent_id],
+                    question_data=q,
+                    calibration_level=level,
+                    provider=provider,
+                    model_name=model_name,
+                    temperature=temperature,
+                )
+
+                if isinstance(answer, str) and answer.startswith("Error:"):
+                    total_errors += 1
+                    consecutive_errors += 1
+                    error_rows.append(
+                        {
+                            "run_timestamp": run_timestamp,
+                            "calibration_level": level,
+                            "question_id": question_id,
+                            "respondent_id": respondent_id,
+                            "error_message": answer,
+                            "total_errors_so_far": total_errors,
+                            "consecutive_errors_so_far": consecutive_errors,
+                        }
+                    )
+
+                    should_abort = (
+                        (not continue_on_error)
+                        or (total_errors >= max_total_errors)
+                        or (consecutive_errors >= max_consecutive_errors)
+                    )
+                    if should_abort:
+                        abort_run = True
+                        print(
+                            "Aborting calibration sweep due to error threshold: "
+                            f"total_errors={total_errors}/{max_total_errors}, "
+                            f"consecutive_errors={consecutive_errors}/{max_consecutive_errors}"
+                        )
+                        break
+                    continue
+
+                consecutive_errors = 0
+
+                score = calculate_exact_match_score_by_stance(answer, expected)
+                detail_rows.append(
+                    {
+                        "run_timestamp": run_timestamp,
+                        "experiment_name": "neutral_calibration_sweep_full_persona",
+                        "calibration_level": level,
+                        "persona_mode": "full_persona",
+                        "question_id": question_id,
+                        "question_text": question_text,
+                        "question_column": q.get("col_name", ""),
+                        "respondent_id": respondent_id,
+                        "agent_answer": answer,
+                        "expected_answer": expected,
+                        "exact_match_score": float(score),
+                        "provider": provider,
+                        "model_name": model_name if model_name else "gemini-2.5-flash",
+                        "temperature": float(temperature),
+                    }
+                )
+
+            if abort_run:
+                break
+
+        if abort_run:
+            break
+
+    detail_df = pd.DataFrame(detail_rows)
+    error_df = pd.DataFrame(error_rows)
+    if detail_df.empty:
+        raise RuntimeError(
+            "Calibration sweep produced no successful rows. "
+            f"Captured errors: {len(error_df)}"
+        )
+
+    summary_df = (
+        detail_df.groupby("calibration_level", as_index=False)
+        .agg(
+            n_rows=("exact_match_score", "size"),
+            mean_exact_match_score=("exact_match_score", "mean"),
+        )
+        .sort_values("mean_exact_match_score", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    stance_map = {
+        "A": "Oppose", "B": "Oppose", "C": "Oppose",
+        "D": "Neutral",
+        "E": "Support", "F": "Support", "G": "Support",
+    }
+    stance_df = detail_df.copy()
+    stance_df["expected_stance"] = stance_df["expected_answer"].map(stance_map)
+    stance_df["predicted_stance"] = stance_df["agent_answer"].map(stance_map)
+
+    expected_counts = (
+        stance_df.groupby(["calibration_level", "question_id", "expected_stance"]).size()
+        .rename("expected_count")
+        .reset_index()
+        .rename(columns={"expected_stance": "stance"})
+    )
+    predicted_counts = (
+        stance_df.groupby(["calibration_level", "question_id", "predicted_stance"]).size()
+        .rename("predicted_count")
+        .reset_index()
+        .rename(columns={"predicted_stance": "stance"})
+    )
+    stance_comparison_df = expected_counts.merge(
+        predicted_counts,
+        on=["calibration_level", "question_id", "stance"],
+        how="outer",
+    ).fillna(0)
+
+    totals = (
+        stance_df.groupby(["calibration_level", "question_id"]).size().rename("n_rows").reset_index()
+    )
+    stance_comparison_df = stance_comparison_df.merge(
+        totals,
+        on=["calibration_level", "question_id"],
+        how="left",
+    )
+    stance_comparison_df["expected_share"] = stance_comparison_df["expected_count"] / stance_comparison_df["n_rows"]
+    stance_comparison_df["predicted_share"] = stance_comparison_df["predicted_count"] / stance_comparison_df["n_rows"]
+    stance_comparison_df["share_delta_pred_minus_expected"] = (
+        stance_comparison_df["predicted_share"] - stance_comparison_df["expected_share"]
+    )
+
+    neutral_gap_summary_df = (
+        stance_comparison_df[stance_comparison_df["stance"] == "Neutral"]
+        .groupby("calibration_level", as_index=False)
+        .agg(
+            mean_expected_neutral_share=("expected_share", "mean"),
+            mean_predicted_neutral_share=("predicted_share", "mean"),
+            mean_neutral_share_delta=("share_delta_pred_minus_expected", "mean"),
+        )
+        .sort_values("mean_neutral_share_delta")
+    )
+
+    support_gap_summary_df = (
+        stance_comparison_df[stance_comparison_df["stance"] == "Support"]
+        .groupby("calibration_level", as_index=False)
+        .agg(
+            mean_expected_support_share=("expected_share", "mean"),
+            mean_predicted_support_share=("predicted_share", "mean"),
+            mean_support_share_delta=("share_delta_pred_minus_expected", "mean"),
+        )
+        .sort_values("mean_support_share_delta", ascending=False)
+    )
+
+    base_output_dir = (
+        DATA_DIR / "output" / "experiments" / "20260306"
+        if output_dir is None
+        else Path(output_dir)
+    )
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    detail_csv_path = None
+    summary_csv_path = None
+    stance_comparison_csv_path = None
+    neutral_gap_summary_csv_path = None
+    support_gap_summary_csv_path = None
+    calibration_neutral_gap_plot_path = None
+    error_csv_path = None
+
+    if save_outputs:
+        detail_csv_path = base_output_dir / f"survey_simulation_neutral_calibration_sweep_full_persona_detail_{run_timestamp}.csv"
+        summary_csv_path = base_output_dir / f"survey_simulation_neutral_calibration_sweep_full_persona_summary_{run_timestamp}.csv"
+        stance_comparison_csv_path = base_output_dir / f"survey_simulation_neutral_calibration_sweep_full_persona_stance_comparison_{run_timestamp}.csv"
+        neutral_gap_summary_csv_path = base_output_dir / f"survey_simulation_neutral_calibration_sweep_full_persona_neutral_gap_summary_{run_timestamp}.csv"
+        support_gap_summary_csv_path = base_output_dir / f"survey_simulation_neutral_calibration_sweep_full_persona_support_gap_summary_{run_timestamp}.csv"
+        error_csv_path = base_output_dir / f"survey_simulation_neutral_calibration_sweep_full_persona_errors_{run_timestamp}.csv"
+
+        detail_df.to_csv(detail_csv_path, index=False)
+        summary_df.to_csv(summary_csv_path, index=False)
+        stance_comparison_df.to_csv(stance_comparison_csv_path, index=False)
+        neutral_gap_summary_df.to_csv(neutral_gap_summary_csv_path, index=False)
+        support_gap_summary_df.to_csv(support_gap_summary_csv_path, index=False)
+        error_df.to_csv(error_csv_path, index=False)
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.bar(
+            neutral_gap_summary_df["calibration_level"].astype(str),
+            neutral_gap_summary_df["mean_neutral_share_delta"].astype(float),
+        )
+        ax.axhline(0.0, color="black", linestyle="--", linewidth=1)
+        ax.set_xlabel("Calibration Level")
+        ax.set_ylabel("Mean Predicted-Expected Neutral Share")
+        ax.set_title("Neutral Share Gap by Calibration Level (Full Persona)")
+        ax.grid(True, axis="y", alpha=0.3)
+        plt.tight_layout()
+        calibration_neutral_gap_plot_path = base_output_dir / f"survey_simulation_neutral_calibration_sweep_full_persona_neutral_gap_{run_timestamp}.png"
+        fig.savefig(calibration_neutral_gap_plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Saved sweep detail CSV: {detail_csv_path}")
+        print(f"Saved sweep summary CSV: {summary_csv_path}")
+        print(f"Saved sweep stance-comparison CSV: {stance_comparison_csv_path}")
+        print(f"Saved sweep neutral-gap summary CSV: {neutral_gap_summary_csv_path}")
+        print(f"Saved sweep support-gap summary CSV: {support_gap_summary_csv_path}")
+        print(f"Saved sweep errors CSV: {error_csv_path}")
+        print(f"Saved sweep neutral-gap PNG: {calibration_neutral_gap_plot_path}")
+
+    print("\nCalibration sweep summary (mean exact-match score):")
+    print(summary_df.to_string(index=False))
+    print("\nCalibration sweep neutral-gap summary:")
+    print(neutral_gap_summary_df.to_string(index=False))
+
+    return {
+        "detail_df": detail_df,
+        "error_df": error_df,
+        "summary_df": summary_df,
+        "stance_comparison_df": stance_comparison_df,
+        "neutral_gap_summary_df": neutral_gap_summary_df,
+        "support_gap_summary_df": support_gap_summary_df,
+        "detail_csv_path": detail_csv_path,
+        "error_csv_path": error_csv_path,
+        "summary_csv_path": summary_csv_path,
+        "stance_comparison_csv_path": stance_comparison_csv_path,
+        "neutral_gap_summary_csv_path": neutral_gap_summary_csv_path,
+        "support_gap_summary_csv_path": support_gap_summary_csv_path,
+        "calibration_neutral_gap_plot_path": calibration_neutral_gap_plot_path,
+    }
 
 
 def plot_ordinal_boxplot_from_saved_results(
@@ -1358,6 +2164,586 @@ def plot_ordinal_boxplot_from_saved_results(
     print(f"Saved boxplot PNG: {output_png_path}")
 
     return results_df, output_png_path
+
+
+def analyze_exact_match_errors_from_saved_results(
+    results_csv_path=None,
+    output_dir=None,
+    save_outputs=True,
+):
+    """
+    Full diagnosis of exact-match errors for stance-collapsed scoring.
+
+    This function loads saved exact-match simulation results and reports:
+    - global, question-level, and expected-stance error rates,
+    - directional stance-flow errors (e.g., Oppose->Neutral, Neutral->Support),
+    - whether Neutral is disproportionately involved in errors,
+    - proximity diagnostics for expected C/E (near D) and expected D->C/E confusions.
+
+    It also saves diagnostic CSVs and plots for downstream review.
+
+    Parameters:
+        results_csv_path (str | Path | None):
+            Path to a saved survey_simulation_exact_match_results_*.csv.
+            If None, latest file from output_dir is used.
+        output_dir (str | Path | None):
+            Base output directory. Defaults to data/output/experiments/20260306.
+        save_outputs (bool):
+            Whether to save diagnostics as CSV/PNG files.
+
+    Returns:
+        dict: Summary stats, diagnostic DataFrames, and optional artifact paths.
+    """
+    base_output_dir = (
+        DATA_DIR / "output" / "experiments" / "20260306"
+        if output_dir is None
+        else Path(output_dir)
+    )
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    if results_csv_path is None:
+        candidates = sorted(base_output_dir.glob("survey_simulation_exact_match_results_*.csv"))
+        if not candidates:
+            raise FileNotFoundError(
+                f"No survey_simulation_exact_match_results_*.csv found in: {base_output_dir}"
+            )
+        results_csv_path = candidates[-1]
+    else:
+        results_csv_path = Path(results_csv_path)
+
+    if not results_csv_path.exists():
+        raise FileNotFoundError(f"Results CSV not found: {results_csv_path}")
+
+    df = pd.read_csv(results_csv_path)
+    required_cols = {"question_id", "agent_answer", "expected_answer"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Results CSV missing required columns: {sorted(missing_cols)}")
+
+    valid_answers = {"A", "B", "C", "D", "E", "F", "G"}
+    df["agent_answer"] = df["agent_answer"].astype(str).str.strip().str.upper()
+    df["expected_answer"] = df["expected_answer"].astype(str).str.strip().str.upper()
+
+    df = df[
+        df["agent_answer"].isin(valid_answers)
+        & df["expected_answer"].isin(valid_answers)
+    ].copy()
+
+    if df.empty:
+        raise ValueError("No valid A-G answer rows found in results CSV.")
+
+    stance_map = {
+        "A": "Oppose",
+        "B": "Oppose",
+        "C": "Oppose",
+        "D": "Neutral",
+        "E": "Support",
+        "F": "Support",
+        "G": "Support",
+    }
+    df["agent_stance"] = df["agent_answer"].map(stance_map)
+    df["expected_stance"] = df["expected_answer"].map(stance_map)
+    df["recomputed_exact_match"] = (
+        df["agent_stance"] == df["expected_stance"]
+    ).astype(float)
+    df["is_error"] = 1.0 - df["recomputed_exact_match"]
+
+    logic_mismatch_count = None
+    if "exact_match_score" in df.columns:
+        score_numeric = pd.to_numeric(df["exact_match_score"], errors="coerce").fillna(0.0)
+        logic_mismatch_count = int((score_numeric.round(0) != df["recomputed_exact_match"]).sum())
+
+    total_rows = int(len(df))
+    total_errors = int(df["is_error"].sum())
+    overall_error_rate = float(total_errors / total_rows) if total_rows else np.nan
+
+    by_question_df = (
+        df.groupby("question_id", as_index=False)
+        .agg(
+            n_rows=("is_error", "size"),
+            n_errors=("is_error", "sum"),
+        )
+        .sort_values("n_errors", ascending=False)
+    )
+    by_question_df["error_rate"] = by_question_df["n_errors"] / by_question_df["n_rows"]
+
+    by_expected_stance_df = (
+        df.groupby("expected_stance", as_index=False)
+        .agg(
+            n_rows=("is_error", "size"),
+            n_errors=("is_error", "sum"),
+        )
+        .sort_values("n_errors", ascending=False)
+    )
+    by_expected_stance_df["error_rate"] = (
+        by_expected_stance_df["n_errors"] / by_expected_stance_df["n_rows"]
+    )
+
+    # Per-question neutral fragility: compare D->non-D error rate against non-D baseline.
+    neutral_fragility_rows = []
+    for question_id, group in df.groupby("question_id"):
+        d_group = group[group["expected_answer"] == "D"]
+        nond_group = group[group["expected_answer"] != "D"]
+
+        n_expected_d = int(len(d_group))
+        n_expected_nond = int(len(nond_group))
+
+        d_to_nond_errors = int((d_group["is_error"] == 1.0).sum())
+        nond_errors = int((nond_group["is_error"] == 1.0).sum())
+
+        d_to_nond_error_rate = (
+            float(d_to_nond_errors / n_expected_d) if n_expected_d else np.nan
+        )
+        nond_error_rate = (
+            float(nond_errors / n_expected_nond) if n_expected_nond else np.nan
+        )
+
+        if pd.notna(d_to_nond_error_rate) and pd.notna(nond_error_rate) and nond_error_rate > 0:
+            neutral_fragility_ratio = float(d_to_nond_error_rate / nond_error_rate)
+        else:
+            neutral_fragility_ratio = np.nan
+
+        neutral_fragility_rows.append(
+            {
+                "question_id": question_id,
+                "n_expected_D": n_expected_d,
+                "n_expected_nonD": n_expected_nond,
+                "n_D_to_nonD_errors": d_to_nond_errors,
+                "n_nonD_errors": nond_errors,
+                "D_to_nonD_error_rate": d_to_nond_error_rate,
+                "nonD_error_rate": nond_error_rate,
+                "neutral_fragility_ratio": neutral_fragility_ratio,
+                "neutral_fragility_rate_diff": (
+                    d_to_nond_error_rate - nond_error_rate
+                    if pd.notna(d_to_nond_error_rate) and pd.notna(nond_error_rate)
+                    else np.nan
+                ),
+            }
+        )
+
+    neutral_fragility_by_question_df = pd.DataFrame(neutral_fragility_rows).sort_values(
+        "neutral_fragility_ratio", ascending=False, na_position="last"
+    )
+
+    # Error-only frame for directional diagnostics.
+    errors_df = df[df["is_error"] == 1.0].copy()
+
+    # Directional error flows by stance (expected -> predicted stance).
+    error_flow_df = (
+        errors_df.groupby(["expected_stance", "agent_stance"], as_index=False)
+        .size()
+        .rename(columns={"size": "count"})
+        .sort_values("count", ascending=False)
+    )
+    if total_errors > 0:
+        error_flow_df["share_of_all_errors"] = error_flow_df["count"] / total_errors
+    else:
+        error_flow_df["share_of_all_errors"] = np.nan
+
+    # Expected-stance x predicted-stance matrix over all rows and error rates per expected stance.
+    stance_confusion_all_df = (
+        df.pivot_table(
+            index="expected_stance",
+            columns="agent_stance",
+            values="question_id",
+            aggfunc="count",
+            fill_value=0,
+        )
+        .reset_index()
+    )
+
+    # Neutral-specific breakdowns.
+    neutral_df = df[df["expected_stance"] == "Neutral"].copy()
+    neutral_total = int(len(neutral_df))
+    neutral_errors_df = neutral_df[neutral_df["is_error"] == 1.0].copy()
+    neutral_error_count = int(len(neutral_errors_df))
+    neutral_error_rate = float(neutral_error_count / neutral_total) if neutral_total else np.nan
+
+    neutral_answer_mix_df = (
+        neutral_errors_df.groupby("agent_answer", as_index=False)
+        .size()
+        .rename(columns={"size": "count"})
+        .sort_values("count", ascending=False)
+    )
+
+    neutral_error_by_question_df = (
+        neutral_errors_df.groupby("question_id", as_index=False)
+        .size()
+        .rename(columns={"size": "n_errors_expected_D"})
+        .sort_values("n_errors_expected_D", ascending=False)
+    )
+
+    # Non-neutral expected rows predicted as neutral (opposite direction).
+    nonneutral_df = df[df["expected_stance"] != "Neutral"].copy()
+    nonneutral_total = int(len(nonneutral_df))
+    nonneutral_to_neutral_df = nonneutral_df[nonneutral_df["agent_stance"] == "Neutral"].copy()
+    nonneutral_to_neutral_count = int(len(nonneutral_to_neutral_df))
+    nonneutral_to_neutral_rate = (
+        float(nonneutral_to_neutral_count / nonneutral_total)
+        if nonneutral_total
+        else np.nan
+    )
+
+    # Neutral involvement decomposition across all errors.
+    expected_neutral_pred_nonneutral_count = int(
+        len(errors_df[errors_df["expected_stance"] == "Neutral"])
+    )
+    expected_nonneutral_pred_neutral_count = int(
+        len(errors_df[errors_df["agent_stance"] == "Neutral"])
+    )
+    neutral_involved_errors = (
+        expected_neutral_pred_nonneutral_count
+        + expected_nonneutral_pred_neutral_count
+    )
+    neutral_involved_error_share = (
+        float(neutral_involved_errors / total_errors) if total_errors else np.nan
+    )
+
+    neutral_error_components_df = pd.DataFrame(
+        [
+            {
+                "component": "expected_neutral_pred_nonneutral",
+                "count": expected_neutral_pred_nonneutral_count,
+                "share_of_all_errors": (
+                    expected_neutral_pred_nonneutral_count / total_errors
+                    if total_errors
+                    else np.nan
+                ),
+            },
+            {
+                "component": "expected_nonneutral_pred_neutral",
+                "count": expected_nonneutral_pred_neutral_count,
+                "share_of_all_errors": (
+                    expected_nonneutral_pred_neutral_count / total_errors
+                    if total_errors
+                    else np.nan
+                ),
+            },
+            {
+                "component": "all_neutral_involved_errors",
+                "count": neutral_involved_errors,
+                "share_of_all_errors": neutral_involved_error_share,
+            },
+        ]
+    )
+
+    # Fine-grained letter-level proximity diagnostics around D using C/E.
+    letter_error_flow_df = (
+        errors_df.groupby(["expected_answer", "agent_answer"], as_index=False)
+        .size()
+        .rename(columns={"size": "count"})
+        .sort_values("count", ascending=False)
+    )
+
+    def _near_neutral_metrics(expected_letter):
+        subset = df[df["expected_answer"] == expected_letter]
+        total = int(len(subset))
+        if total == 0:
+            return {
+                "expected_answer": expected_letter,
+                "n_rows": 0,
+                "n_errors": 0,
+                "error_rate": np.nan,
+                "n_predicted_D": 0,
+                "predicted_D_rate_within_expected": np.nan,
+                "share_of_errors_predicted_D": np.nan,
+            }
+
+        errors_subset = subset[subset["is_error"] == 1.0]
+        n_errors = int(len(errors_subset))
+        to_d = int((subset["agent_answer"] == "D").sum())
+        to_d_errors = int(((errors_subset["agent_answer"] == "D")).sum())
+        return {
+            "expected_answer": expected_letter,
+            "n_rows": total,
+            "n_errors": n_errors,
+            "error_rate": float(n_errors / total),
+            "n_predicted_D": to_d,
+            "predicted_D_rate_within_expected": float(to_d / total),
+            "share_of_errors_predicted_D": (
+                float(to_d_errors / n_errors) if n_errors else np.nan
+            ),
+        }
+
+    c_e_neutral_proximity_df = pd.DataFrame(
+        [_near_neutral_metrics("C"), _near_neutral_metrics("E")]
+    )
+
+    # Additional D<->(C/E) directional counts.
+    d_to_c_or_e_count = int(
+        len(
+            errors_df[
+                (errors_df["expected_answer"] == "D")
+                & (errors_df["agent_answer"].isin(["C", "E"]))
+            ]
+        )
+    )
+    c_or_e_to_d_count = int(
+        len(
+            errors_df[
+                (errors_df["expected_answer"].isin(["C", "E"]))
+                & (errors_df["agent_answer"] == "D")
+            ]
+        )
+    )
+
+    print("\nExact-match error diagnostics")
+    print(f"- Loaded: {results_csv_path}")
+    print(f"- Total rows: {total_rows}")
+    print(f"- Total errors: {total_errors} ({overall_error_rate:.4f})")
+    if logic_mismatch_count is not None:
+        print(f"- Score logic mismatch rows (saved vs recomputed): {logic_mismatch_count}")
+
+    print("\nTop questions by error count:")
+    print(by_question_df[["question_id", "n_errors", "error_rate"]].head(10).to_string(index=False))
+
+    print("\nExpected-stance error rates:")
+    print(by_expected_stance_df[["expected_stance", "n_errors", "error_rate"]].to_string(index=False))
+
+    print("\nPer-question neutral fragility (D->non-D vs non-D baseline):")
+    if not neutral_fragility_by_question_df.empty:
+        print(
+            neutral_fragility_by_question_df[
+                [
+                    "question_id",
+                    "D_to_nonD_error_rate",
+                    "nonD_error_rate",
+                    "neutral_fragility_ratio",
+                    "neutral_fragility_rate_diff",
+                ]
+            ]
+            .head(10)
+            .to_string(index=False)
+        )
+
+    print("\nTop error flows (expected stance -> predicted stance):")
+    if not error_flow_df.empty:
+        print(
+            error_flow_df[
+                ["expected_stance", "agent_stance", "count", "share_of_all_errors"]
+            ]
+            .head(10)
+            .to_string(index=False)
+        )
+
+    print("\nExpected D (Neutral) diagnostics:")
+    print(f"- Rows with expected D: {neutral_total}")
+    print(f"- Errors when expected D: {neutral_error_count} ({neutral_error_rate:.4f})")
+    if not neutral_answer_mix_df.empty:
+        print("- Agent answers during expected-D errors:")
+        print(neutral_answer_mix_df.head(10).to_string(index=False))
+
+    print("\nNeutral-involved error decomposition:")
+    print(
+        neutral_error_components_df[
+            ["component", "count", "share_of_all_errors"]
+        ].to_string(index=False)
+    )
+
+    print("\nNon-neutral expected predicted as Neutral:")
+    print(
+        f"- Count: {nonneutral_to_neutral_count} | "
+        f"Rate within non-neutral expected rows: {nonneutral_to_neutral_rate:.4f}"
+    )
+
+    print("\nC/E proximity-to-Neutral diagnostics:")
+    print(c_e_neutral_proximity_df.to_string(index=False))
+    print(
+        f"- expected D -> predicted C/E errors: {d_to_c_or_e_count}\n"
+        f"- expected C/E -> predicted D errors: {c_or_e_to_d_count}"
+    )
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    by_question_csv_path = None
+    by_stance_csv_path = None
+    neutral_mix_csv_path = None
+    neutral_by_question_csv_path = None
+    error_flow_csv_path = None
+    stance_confusion_all_csv_path = None
+    neutral_components_csv_path = None
+    c_e_proximity_csv_path = None
+    letter_error_flow_csv_path = None
+    neutral_fragility_by_question_csv_path = None
+    error_rate_by_question_png_path = None
+    neutral_error_answer_mix_png_path = None
+    stance_error_flow_png_path = None
+    neutral_component_png_path = None
+    neutral_fragility_ratio_png_path = None
+
+    if save_outputs:
+        by_question_csv_path = base_output_dir / f"survey_simulation_exact_match_error_by_question_{timestamp}.csv"
+        by_stance_csv_path = base_output_dir / f"survey_simulation_exact_match_error_by_expected_stance_{timestamp}.csv"
+        neutral_mix_csv_path = base_output_dir / f"survey_simulation_exact_match_expected_D_error_answer_mix_{timestamp}.csv"
+        neutral_by_question_csv_path = base_output_dir / f"survey_simulation_exact_match_expected_D_error_by_question_{timestamp}.csv"
+        error_flow_csv_path = base_output_dir / f"survey_simulation_exact_match_error_flow_by_stance_{timestamp}.csv"
+        stance_confusion_all_csv_path = base_output_dir / f"survey_simulation_exact_match_stance_confusion_all_{timestamp}.csv"
+        neutral_components_csv_path = base_output_dir / f"survey_simulation_exact_match_neutral_error_components_{timestamp}.csv"
+        c_e_proximity_csv_path = base_output_dir / f"survey_simulation_exact_match_CE_neutral_proximity_{timestamp}.csv"
+        letter_error_flow_csv_path = base_output_dir / f"survey_simulation_exact_match_letter_error_flow_{timestamp}.csv"
+        neutral_fragility_by_question_csv_path = base_output_dir / f"survey_simulation_exact_match_neutral_fragility_by_question_{timestamp}.csv"
+
+        by_question_df.to_csv(by_question_csv_path, index=False)
+        by_expected_stance_df.to_csv(by_stance_csv_path, index=False)
+        neutral_answer_mix_df.to_csv(neutral_mix_csv_path, index=False)
+        neutral_error_by_question_df.to_csv(neutral_by_question_csv_path, index=False)
+        error_flow_df.to_csv(error_flow_csv_path, index=False)
+        stance_confusion_all_df.to_csv(stance_confusion_all_csv_path, index=False)
+        neutral_error_components_df.to_csv(neutral_components_csv_path, index=False)
+        c_e_neutral_proximity_df.to_csv(c_e_proximity_csv_path, index=False)
+        letter_error_flow_df.to_csv(letter_error_flow_csv_path, index=False)
+        neutral_fragility_by_question_df.to_csv(neutral_fragility_by_question_csv_path, index=False)
+
+        # Plot 1: per-question error rate
+        plot_df = by_question_df.sort_values("error_rate", ascending=False).copy()
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.bar(plot_df["question_id"].astype(str), plot_df["error_rate"].astype(float))
+        ax.set_xlabel("Question")
+        ax.set_ylabel("Error Rate")
+        ax.set_title("Exact-Match Error Rate by Question")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", alpha=0.3)
+        plt.tight_layout()
+        error_rate_by_question_png_path = base_output_dir / f"survey_simulation_exact_match_error_rate_by_question_{timestamp}.png"
+        fig.savefig(error_rate_by_question_png_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        # Plot 2: answer mix for expected D errors
+        if not neutral_answer_mix_df.empty:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(
+                neutral_answer_mix_df["agent_answer"].astype(str),
+                neutral_answer_mix_df["count"].astype(float),
+            )
+            ax.set_xlabel("Agent Answer")
+            ax.set_ylabel("Count")
+            ax.set_title("Expected D (Neutral) Errors: Agent Answer Mix")
+            ax.grid(True, axis="y", alpha=0.3)
+            plt.tight_layout()
+            neutral_error_answer_mix_png_path = (
+                base_output_dir
+                / f"survey_simulation_exact_match_expected_D_error_answer_mix_{timestamp}.png"
+            )
+            fig.savefig(neutral_error_answer_mix_png_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+
+        # Plot 3: top stance-flow errors
+        if not error_flow_df.empty:
+            top_flow = error_flow_df.head(8).copy()
+            top_flow["flow"] = top_flow["expected_stance"] + "->" + top_flow["agent_stance"]
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.bar(top_flow["flow"], top_flow["count"].astype(float))
+            ax.set_xlabel("Error Flow")
+            ax.set_ylabel("Count")
+            ax.set_title("Top Exact-Match Error Flows (Expected->Predicted Stance)")
+            ax.grid(True, axis="y", alpha=0.3)
+            plt.xticks(rotation=25, ha="right")
+            plt.tight_layout()
+            stance_error_flow_png_path = base_output_dir / f"survey_simulation_exact_match_error_flow_by_stance_{timestamp}.png"
+            fig.savefig(stance_error_flow_png_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+
+        # Plot 4: neutral component contributions
+        fig, ax = plt.subplots(figsize=(8, 4))
+        plot_components = neutral_error_components_df[
+            neutral_error_components_df["component"] != "all_neutral_involved_errors"
+        ].copy()
+        ax.bar(plot_components["component"], plot_components["count"].astype(float))
+        ax.set_xlabel("Component")
+        ax.set_ylabel("Count")
+        ax.set_title("Neutral-Related Error Components")
+        ax.grid(True, axis="y", alpha=0.3)
+        plt.xticks(rotation=20, ha="right")
+        plt.tight_layout()
+        neutral_component_png_path = base_output_dir / f"survey_simulation_exact_match_neutral_components_{timestamp}.png"
+        fig.savefig(neutral_component_png_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        # Plot 5: neutral fragility ratio by question
+        plot_fragility = neutral_fragility_by_question_df.copy()
+        plot_fragility = plot_fragility[plot_fragility["neutral_fragility_ratio"].notna()]
+        if not plot_fragility.empty:
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.bar(
+                plot_fragility["question_id"].astype(str),
+                plot_fragility["neutral_fragility_ratio"].astype(float),
+            )
+            ax.axhline(1.0, color="gray", linestyle="--", linewidth=1)
+            ax.set_xlabel("Question")
+            ax.set_ylabel("Neutral Fragility Ratio")
+            ax.set_title("Per-Question Neutral Fragility Ratio (D->non-D / non-D baseline)")
+            ax.grid(True, axis="y", alpha=0.3)
+            plt.tight_layout()
+            neutral_fragility_ratio_png_path = base_output_dir / f"survey_simulation_exact_match_neutral_fragility_ratio_by_question_{timestamp}.png"
+            fig.savefig(neutral_fragility_ratio_png_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+
+        print(f"Saved error-by-question CSV: {by_question_csv_path}")
+        print(f"Saved error-by-expected-stance CSV: {by_stance_csv_path}")
+        print(f"Saved expected-D answer-mix CSV: {neutral_mix_csv_path}")
+        print(f"Saved expected-D by-question CSV: {neutral_by_question_csv_path}")
+        print(f"Saved stance-flow error CSV: {error_flow_csv_path}")
+        print(f"Saved stance confusion CSV: {stance_confusion_all_csv_path}")
+        print(f"Saved neutral-components CSV: {neutral_components_csv_path}")
+        print(f"Saved C/E proximity CSV: {c_e_proximity_csv_path}")
+        print(f"Saved letter-flow error CSV: {letter_error_flow_csv_path}")
+        print(f"Saved neutral-fragility-by-question CSV: {neutral_fragility_by_question_csv_path}")
+        print(f"Saved error-rate-by-question PNG: {error_rate_by_question_png_path}")
+        if neutral_error_answer_mix_png_path is not None:
+            print(f"Saved expected-D answer-mix PNG: {neutral_error_answer_mix_png_path}")
+        if stance_error_flow_png_path is not None:
+            print(f"Saved stance-flow PNG: {stance_error_flow_png_path}")
+        if neutral_component_png_path is not None:
+            print(f"Saved neutral-components PNG: {neutral_component_png_path}")
+        if neutral_fragility_ratio_png_path is not None:
+            print(f"Saved neutral-fragility-ratio PNG: {neutral_fragility_ratio_png_path}")
+
+    summary = {
+        "results_csv": str(results_csv_path),
+        "total_rows": total_rows,
+        "total_errors": total_errors,
+        "overall_error_rate": overall_error_rate,
+        "expected_D_rows": neutral_total,
+        "expected_D_errors": neutral_error_count,
+        "expected_D_error_rate": neutral_error_rate,
+        "expected_nonneutral_pred_neutral_count": expected_nonneutral_pred_neutral_count,
+        "expected_neutral_pred_nonneutral_count": expected_neutral_pred_nonneutral_count,
+        "neutral_involved_errors": neutral_involved_errors,
+        "neutral_involved_error_share": neutral_involved_error_share,
+        "expected_D_to_C_or_E_errors": d_to_c_or_e_count,
+        "expected_C_or_E_to_D_errors": c_or_e_to_d_count,
+        "score_logic_mismatch_rows": logic_mismatch_count,
+    }
+
+    return {
+        "summary": summary,
+        "df": df,
+        "errors_df": errors_df,
+        "by_question_df": by_question_df,
+        "by_expected_stance_df": by_expected_stance_df,
+        "error_flow_df": error_flow_df,
+        "stance_confusion_all_df": stance_confusion_all_df,
+        "neutral_answer_mix_df": neutral_answer_mix_df,
+        "neutral_error_by_question_df": neutral_error_by_question_df,
+        "neutral_error_components_df": neutral_error_components_df,
+        "c_e_neutral_proximity_df": c_e_neutral_proximity_df,
+        "letter_error_flow_df": letter_error_flow_df,
+        "neutral_fragility_by_question_df": neutral_fragility_by_question_df,
+        "by_question_csv_path": by_question_csv_path,
+        "by_stance_csv_path": by_stance_csv_path,
+        "neutral_mix_csv_path": neutral_mix_csv_path,
+        "neutral_by_question_csv_path": neutral_by_question_csv_path,
+        "error_flow_csv_path": error_flow_csv_path,
+        "stance_confusion_all_csv_path": stance_confusion_all_csv_path,
+        "neutral_components_csv_path": neutral_components_csv_path,
+        "c_e_proximity_csv_path": c_e_proximity_csv_path,
+        "letter_error_flow_csv_path": letter_error_flow_csv_path,
+        "neutral_fragility_by_question_csv_path": neutral_fragility_by_question_csv_path,
+        "error_rate_by_question_png_path": error_rate_by_question_png_path,
+        "neutral_error_answer_mix_png_path": neutral_error_answer_mix_png_path,
+        "stance_error_flow_png_path": stance_error_flow_png_path,
+        "neutral_component_png_path": neutral_component_png_path,
+        "neutral_fragility_ratio_png_path": neutral_fragility_ratio_png_path,
+    }
 
 
 def evaluate_non_random_signal_from_saved_results(
@@ -1580,6 +2966,1064 @@ def evaluate_non_random_signal_from_saved_results(
         outputs["null_dist_png_path"] = null_dist_png_path
 
     return outputs
+
+
+def analyze_expected_vs_predicted_stance_by_question(
+    results_csv_path=None,
+    output_dir=None,
+    save_outputs=True,
+):
+    """
+    Compare expected (survey) vs predicted (LLM) stance distribution per question.
+
+    Expected stance is derived from `expected_answer` and predicted stance from
+    `agent_answer`, collapsed as:
+    - A/B/C -> Oppose
+    - D     -> Neutral
+    - E/F/G -> Support
+
+    Parameters:
+        results_csv_path (str | Path | None):
+            Path to a saved survey_simulation_exact_match_results_*.csv.
+            If None, latest file from output_dir is used.
+        output_dir (str | Path | None):
+            Base output directory. Defaults to data/output/experiments/20260306.
+        save_outputs (bool):
+            Whether to save CSV/PNG diagnostics.
+
+    Returns:
+        dict: Summary and DataFrames for expected vs predicted stance mix.
+    """
+    base_output_dir = (
+        DATA_DIR / "output" / "experiments" / "20260306"
+        if output_dir is None
+        else Path(output_dir)
+    )
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    if results_csv_path is None:
+        candidates = sorted(base_output_dir.glob("survey_simulation_exact_match_results_*.csv"))
+        if not candidates:
+            raise FileNotFoundError(
+                f"No survey_simulation_exact_match_results_*.csv found in: {base_output_dir}"
+            )
+        results_csv_path = candidates[-1]
+    else:
+        results_csv_path = Path(results_csv_path)
+
+    if not results_csv_path.exists():
+        raise FileNotFoundError(f"Results CSV not found: {results_csv_path}")
+
+    df = pd.read_csv(results_csv_path)
+    required_cols = {"question_id", "agent_answer", "expected_answer"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Results CSV missing required columns: {sorted(missing_cols)}")
+
+    valid_answers = {"A", "B", "C", "D", "E", "F", "G"}
+    df["agent_answer"] = df["agent_answer"].astype(str).str.strip().str.upper()
+    df["expected_answer"] = df["expected_answer"].astype(str).str.strip().str.upper()
+    df = df[
+        df["agent_answer"].isin(valid_answers)
+        & df["expected_answer"].isin(valid_answers)
+    ].copy()
+
+    if df.empty:
+        raise ValueError("No valid A-G answer rows found in results CSV.")
+
+    stance_map = {
+        "A": "Oppose",
+        "B": "Oppose",
+        "C": "Oppose",
+        "D": "Neutral",
+        "E": "Support",
+        "F": "Support",
+        "G": "Support",
+    }
+    stance_order = ["Oppose", "Neutral", "Support"]
+
+    df["expected_stance"] = df["expected_answer"].map(stance_map)
+    df["predicted_stance"] = df["agent_answer"].map(stance_map)
+
+    expected_counts = (
+        df.groupby(["question_id", "expected_stance"])
+        .size()
+        .rename("expected_count")
+        .reset_index()
+        .rename(columns={"expected_stance": "stance"})
+    )
+
+    predicted_counts = (
+        df.groupby(["question_id", "predicted_stance"])
+        .size()
+        .rename("predicted_count")
+        .reset_index()
+        .rename(columns={"predicted_stance": "stance"})
+    )
+
+    comparison_df = expected_counts.merge(
+        predicted_counts,
+        on=["question_id", "stance"],
+        how="outer",
+    ).fillna(0)
+
+    comparison_df["expected_count"] = comparison_df["expected_count"].astype(int)
+    comparison_df["predicted_count"] = comparison_df["predicted_count"].astype(int)
+
+    question_totals = (
+        df.groupby("question_id").size().rename("n_rows").reset_index()
+    )
+    comparison_df = comparison_df.merge(question_totals, on="question_id", how="left")
+    comparison_df["expected_share"] = comparison_df["expected_count"] / comparison_df["n_rows"]
+    comparison_df["predicted_share"] = comparison_df["predicted_count"] / comparison_df["n_rows"]
+    comparison_df["share_delta_pred_minus_expected"] = (
+        comparison_df["predicted_share"] - comparison_df["expected_share"]
+    )
+
+    question_order = list(dict.fromkeys(df["question_id"].astype(str).tolist()))
+    comparison_df["question_id"] = comparison_df["question_id"].astype(str)
+    comparison_df["stance"] = pd.Categorical(
+        comparison_df["stance"],
+        categories=stance_order,
+        ordered=True,
+    )
+    comparison_df = comparison_df.sort_values(["question_id", "stance"]).reset_index(drop=True)
+
+    pivot_expected_share_df = (
+        comparison_df.pivot_table(
+            index="question_id",
+            columns="stance",
+            values="expected_share",
+            aggfunc="first",
+            fill_value=0.0,
+        )
+        .reindex(index=question_order, fill_value=0.0)
+        .reset_index()
+    )
+
+    pivot_predicted_share_df = (
+        comparison_df.pivot_table(
+            index="question_id",
+            columns="stance",
+            values="predicted_share",
+            aggfunc="first",
+            fill_value=0.0,
+        )
+        .reindex(index=question_order, fill_value=0.0)
+        .reset_index()
+    )
+
+    pivot_delta_share_df = (
+        comparison_df.pivot_table(
+            index="question_id",
+            columns="stance",
+            values="share_delta_pred_minus_expected",
+            aggfunc="first",
+            fill_value=0.0,
+        )
+        .reindex(index=question_order, fill_value=0.0)
+        .reset_index()
+    )
+
+    print("\nExpected vs Predicted stance mix by question")
+    print(f"- Loaded: {results_csv_path}")
+    print(f"- Rows used: {len(df)}")
+    print("\nTop absolute share gaps (predicted - expected):")
+    abs_gap = comparison_df.copy()
+    abs_gap["abs_share_gap"] = abs_gap["share_delta_pred_minus_expected"].abs()
+    print(
+        abs_gap.sort_values("abs_share_gap", ascending=False)[
+            ["question_id", "stance", "expected_share", "predicted_share", "share_delta_pred_minus_expected"]
+        ]
+        .head(12)
+        .to_string(index=False)
+    )
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    comparison_csv_path = None
+    expected_share_csv_path = None
+    predicted_share_csv_path = None
+    delta_share_csv_path = None
+    stance_share_plot_path = None
+    stance_delta_plot_path = None
+
+    if save_outputs:
+        comparison_csv_path = base_output_dir / f"survey_simulation_expected_vs_predicted_stance_comparison_{timestamp}.csv"
+        expected_share_csv_path = base_output_dir / f"survey_simulation_expected_stance_share_by_question_{timestamp}.csv"
+        predicted_share_csv_path = base_output_dir / f"survey_simulation_predicted_stance_share_by_question_{timestamp}.csv"
+        delta_share_csv_path = base_output_dir / f"survey_simulation_stance_share_delta_by_question_{timestamp}.csv"
+
+        comparison_df.to_csv(comparison_csv_path, index=False)
+        pivot_expected_share_df.to_csv(expected_share_csv_path, index=False)
+        pivot_predicted_share_df.to_csv(predicted_share_csv_path, index=False)
+        pivot_delta_share_df.to_csv(delta_share_csv_path, index=False)
+
+        # Plot 1: expected vs predicted Neutral share by question (quick neutral-focused view)
+        neutral_cmp = comparison_df[comparison_df["stance"] == "Neutral"].copy()
+        neutral_cmp = neutral_cmp.set_index("question_id").reindex(question_order).reset_index()
+
+        x = np.arange(len(neutral_cmp))
+        width = 0.35
+        fig, ax = plt.subplots(figsize=(11, 5))
+        ax.bar(x - width / 2, neutral_cmp["expected_share"], width=width, label="Expected Neutral share")
+        ax.bar(x + width / 2, neutral_cmp["predicted_share"], width=width, label="Predicted Neutral share")
+        ax.set_xticks(x)
+        ax.set_xticklabels(neutral_cmp["question_id"].astype(str).tolist())
+        ax.set_ylim(0.0, 1.0)
+        ax.set_xlabel("Question")
+        ax.set_ylabel("Share")
+        ax.set_title("Expected vs Predicted Neutral Share by Question")
+        ax.legend()
+        ax.grid(True, axis="y", alpha=0.3)
+        plt.tight_layout()
+        stance_share_plot_path = base_output_dir / f"survey_simulation_expected_vs_predicted_neutral_share_{timestamp}.png"
+        fig.savefig(stance_share_plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        # Plot 2: share deltas by stance and question
+        fig, ax = plt.subplots(figsize=(11, 6))
+        delta_plot = comparison_df.copy()
+        delta_plot["stance"] = delta_plot["stance"].astype(str)
+        for stance_name, color, offset in [
+            ("Oppose", "tab:red", -0.22),
+            ("Neutral", "tab:gray", 0.0),
+            ("Support", "tab:green", 0.22),
+        ]:
+            subset = delta_plot[delta_plot["stance"] == stance_name].set_index("question_id")
+            subset = subset.reindex(question_order).reset_index()
+            ax.bar(
+                np.arange(len(question_order)) + offset,
+                subset["share_delta_pred_minus_expected"].astype(float),
+                width=0.22,
+                label=stance_name,
+                color=color,
+                alpha=0.85,
+            )
+        ax.axhline(0.0, color="black", linestyle="--", linewidth=1)
+        ax.set_xticks(np.arange(len(question_order)))
+        ax.set_xticklabels(question_order)
+        ax.set_xlabel("Question")
+        ax.set_ylabel("Predicted Share - Expected Share")
+        ax.set_title("Stance Share Delta by Question")
+        ax.legend()
+        ax.grid(True, axis="y", alpha=0.3)
+        plt.tight_layout()
+        stance_delta_plot_path = base_output_dir / f"survey_simulation_stance_share_delta_by_question_{timestamp}.png"
+        fig.savefig(stance_delta_plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Saved comparison CSV: {comparison_csv_path}")
+        print(f"Saved expected-share CSV: {expected_share_csv_path}")
+        print(f"Saved predicted-share CSV: {predicted_share_csv_path}")
+        print(f"Saved delta-share CSV: {delta_share_csv_path}")
+        print(f"Saved neutral-share comparison PNG: {stance_share_plot_path}")
+        print(f"Saved stance-delta PNG: {stance_delta_plot_path}")
+
+    summary = {
+        "results_csv": str(results_csv_path),
+        "n_rows": int(len(df)),
+        "n_questions": int(df["question_id"].nunique()),
+    }
+
+    return {
+        "summary": summary,
+        "comparison_df": comparison_df,
+        "expected_share_df": pivot_expected_share_df,
+        "predicted_share_df": pivot_predicted_share_df,
+        "delta_share_df": pivot_delta_share_df,
+        "comparison_csv_path": comparison_csv_path,
+        "expected_share_csv_path": expected_share_csv_path,
+        "predicted_share_csv_path": predicted_share_csv_path,
+        "delta_share_csv_path": delta_share_csv_path,
+        "stance_share_plot_path": stance_share_plot_path,
+        "stance_delta_plot_path": stance_delta_plot_path,
+    }
+
+
+def report_survey_stance_percentages_by_question(
+    survey_csv_path=None,
+    output_dir=None,
+    save_outputs=True,
+):
+    """
+    Load survey data and report stance percentages per question.
+
+    Uses survey's coded answer scale and maps:
+    - 1,2,3 -> Oppose
+    - 4     -> Neutral
+    - 5,6,7 -> Support
+
+    Parameters:
+        survey_csv_path (str | Path | None):
+            Path to survey CSV. If None, defaults to
+            data/yougov_survey_data/YouGovProcessedData_train.csv
+        output_dir (str | Path | None):
+            Directory for output CSV. Defaults to
+            data/output/experiments/20260306
+        save_outputs (bool):
+            Whether to save the summary CSV.
+
+    Returns:
+        dict: Summary DataFrame and optional CSV path.
+    """
+    if survey_csv_path is None:
+        survey_csv_path = DATA_DIR / "yougov_survey_data" / "YouGovProcessedData_train.csv"
+    else:
+        survey_csv_path = Path(survey_csv_path)
+
+    survey_data = load_survey_data(survey_csv_path)
+    if survey_data is None or survey_data.empty:
+        raise ValueError("No survey data available for stance-percentage report.")
+
+    try:
+        from survey_dict import SURVEY_QUESTIONS
+    except ImportError:
+        from sandbox.ajay_sandbox.survey_dict import SURVEY_QUESTIONS
+
+    def code_to_stance(value):
+        try:
+            ivalue = int(value)
+        except Exception:
+            return None
+        if ivalue in [1, 2, 3]:
+            return "Oppose"
+        if ivalue == 4:
+            return "Neutral"
+        if ivalue in [5, 6, 7]:
+            return "Support"
+        return None
+
+    rows = []
+    for q in SURVEY_QUESTIONS:
+        question_id = q.get("id", q.get("col_name", "unknown_question"))
+        question_text = q.get("text", "")
+        col_name = q.get("col_name", "")
+
+        if col_name not in survey_data.columns:
+            rows.append(
+                {
+                    "question_id": question_id,
+                    "question_column": col_name,
+                    "question_text": question_text,
+                    "n_total": 0,
+                    "n_valid": 0,
+                    "n_oppose": 0,
+                    "n_neutral": 0,
+                    "n_support": 0,
+                    "pct_oppose": np.nan,
+                    "pct_neutral": np.nan,
+                    "pct_support": np.nan,
+                }
+            )
+            continue
+
+        stances = survey_data[col_name].apply(code_to_stance)
+        valid = stances[stances.notna()]
+        n_total = int(len(survey_data))
+        n_valid = int(len(valid))
+        n_oppose = int((valid == "Oppose").sum())
+        n_neutral = int((valid == "Neutral").sum())
+        n_support = int((valid == "Support").sum())
+
+        pct_oppose = float(n_oppose / n_valid) if n_valid else np.nan
+        pct_neutral = float(n_neutral / n_valid) if n_valid else np.nan
+        pct_support = float(n_support / n_valid) if n_valid else np.nan
+
+        rows.append(
+            {
+                "question_id": question_id,
+                "question_column": col_name,
+                "question_text": question_text,
+                "n_total": n_total,
+                "n_valid": n_valid,
+                "n_oppose": n_oppose,
+                "n_neutral": n_neutral,
+                "n_support": n_support,
+                "pct_oppose": pct_oppose,
+                "pct_neutral": pct_neutral,
+                "pct_support": pct_support,
+            }
+        )
+
+    stance_pct_df = pd.DataFrame(rows)
+
+    print("\nSurvey stance percentages by question")
+    print(f"- Source survey CSV: {survey_csv_path}")
+    print(
+        stance_pct_df[
+            ["question_id", "pct_oppose", "pct_neutral", "pct_support", "n_valid"]
+        ].to_string(index=False)
+    )
+
+    output_csv_path = None
+    if save_outputs:
+        base_output_dir = (
+            DATA_DIR / "output" / "experiments" / "20260306"
+            if output_dir is None
+            else Path(output_dir)
+        )
+        base_output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_csv_path = base_output_dir / f"survey_data_stance_percentages_by_question_{timestamp}.csv"
+        stance_pct_df.to_csv(output_csv_path, index=False)
+        print(f"Saved survey stance-percentage CSV: {output_csv_path}")
+
+    return {
+        "stance_pct_df": stance_pct_df,
+        "output_csv_path": output_csv_path,
+        "survey_csv_path": str(survey_csv_path),
+    }
+
+
+def analyze_per_agent_support_index_from_saved_results(
+    results_csv_path=None,
+    output_dir=None,
+    save_outputs=True,
+):
+    """
+    Build per-agent support index from saved simulation results.
+
+    Support index mapping:
+    - A=-3, B=-2, C=-1, D=0, E=1, F=2, G=3
+
+    For each respondent, this computes:
+    - mean predicted support index across questions
+    - mean expected support index across questions
+
+    Also reports agreement metrics and saves a comparison plot.
+    """
+    if results_csv_path is None:
+        results_csv_path = DATA_DIR / "output" / "experiments" / "20260301" / "survey_simulation_results_20260301_210726.csv"
+    else:
+        results_csv_path = Path(results_csv_path)
+
+    if not results_csv_path.exists():
+        raise FileNotFoundError(f"Results CSV not found: {results_csv_path}")
+
+    df = pd.read_csv(results_csv_path)
+    required_cols = {"respondent_id", "question_id", "agent_answer", "expected_answer"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Results CSV missing required columns: {sorted(missing_cols)}")
+
+    df["agent_answer"] = df["agent_answer"].astype(str).str.strip().str.upper()
+    df["expected_answer"] = df["expected_answer"].astype(str).str.strip().str.upper()
+
+    df["predicted_support_score"] = df["agent_answer"].apply(answer_to_score)
+    df["expected_support_score"] = df["expected_answer"].apply(answer_to_score)
+
+    valid_df = df[
+        df["predicted_support_score"].notna() & df["expected_support_score"].notna()
+    ].copy()
+    if valid_df.empty:
+        raise ValueError("No valid scored rows found in results CSV.")
+
+    per_agent_df = (
+        valid_df.groupby("respondent_id", as_index=False)
+        .agg(
+            n_questions=("question_id", "nunique"),
+            predicted_support_index=("predicted_support_score", "mean"),
+            expected_support_index=("expected_support_score", "mean"),
+        )
+    )
+    per_agent_df["index_delta_pred_minus_expected"] = (
+        per_agent_df["predicted_support_index"] - per_agent_df["expected_support_index"]
+    )
+
+    deltas = per_agent_df["index_delta_pred_minus_expected"].astype(float)
+    mae = float(np.mean(np.abs(deltas)))
+    rmse = float(np.sqrt(np.mean(np.square(deltas))))
+    bias = float(np.mean(deltas))
+
+    if len(per_agent_df) >= 2:
+        corr = float(
+            np.corrcoef(
+                per_agent_df["predicted_support_index"].astype(float),
+                per_agent_df["expected_support_index"].astype(float),
+            )[0, 1]
+        )
+    else:
+        corr = np.nan
+
+    within_05 = float(np.mean(np.abs(deltas) <= 0.5))
+    within_10 = float(np.mean(np.abs(deltas) <= 1.0))
+
+    print("\nPer-agent support index analysis")
+    print(f"- Source results CSV: {results_csv_path}")
+    print(f"- Respondents analyzed: {len(per_agent_df)}")
+    print(f"- Mean absolute error (index): {mae:.4f}")
+    print(f"- RMSE (index): {rmse:.4f}")
+    print(f"- Mean bias (pred - exp): {bias:.4f}")
+    if pd.notna(corr):
+        print(f"- Correlation(pred, exp): {corr:.4f}")
+    print(f"- Within ±0.5 index points: {within_05:.4f}")
+    print(f"- Within ±1.0 index points: {within_10:.4f}")
+
+    base_output_dir = (
+        DATA_DIR / "output" / "experiments" / "20260301"
+        if output_dir is None
+        else Path(output_dir)
+    )
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    per_agent_csv_path = None
+    summary_csv_path = None
+    plot_path = None
+
+    if save_outputs:
+        per_agent_csv_path = base_output_dir / f"survey_simulation_per_agent_support_index_{timestamp}.csv"
+        summary_csv_path = base_output_dir / f"survey_simulation_per_agent_support_index_summary_{timestamp}.csv"
+        plot_path = base_output_dir / f"survey_simulation_per_agent_support_index_plot_{timestamp}.png"
+
+        per_agent_df.to_csv(per_agent_csv_path, index=False)
+        pd.DataFrame([
+            {
+                "results_csv": str(results_csv_path),
+                "n_respondents": int(len(per_agent_df)),
+                "mae_index": mae,
+                "rmse_index": rmse,
+                "mean_bias_pred_minus_exp": bias,
+                "correlation_pred_exp": corr,
+                "within_0p5": within_05,
+                "within_1p0": within_10,
+            }
+        ]).to_csv(summary_csv_path, index=False)
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+        # Plot 1: scatter predicted vs expected index per respondent
+        axes[0].scatter(
+            per_agent_df["expected_support_index"],
+            per_agent_df["predicted_support_index"],
+            alpha=0.6,
+            s=20,
+        )
+        axes[0].plot([-3, 3], [-3, 3], linestyle="--", linewidth=1)
+        axes[0].set_xlim([-3, 3])
+        axes[0].set_ylim([-3, 3])
+        axes[0].set_xlabel("Expected per-agent support index")
+        axes[0].set_ylabel("Predicted per-agent support index")
+        axes[0].set_title("Predicted vs Expected Support Index")
+        axes[0].grid(True, alpha=0.3)
+
+        # Plot 2: distribution of index delta
+        axes[1].hist(per_agent_df["index_delta_pred_minus_expected"], bins=20, alpha=0.8)
+        axes[1].axvline(0.0, linestyle="--", linewidth=1)
+        axes[1].set_xlabel("Predicted - Expected support index")
+        axes[1].set_ylabel("Respondent count")
+        axes[1].set_title("Per-agent Index Error Distribution")
+        axes[1].grid(True, axis="y", alpha=0.3)
+
+        plt.tight_layout()
+        fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Saved per-agent support index CSV: {per_agent_csv_path}")
+        print(f"Saved support index summary CSV: {summary_csv_path}")
+        print(f"Saved support index plot PNG: {plot_path}")
+
+    return {
+        "per_agent_df": per_agent_df,
+        "metrics": {
+            "mae_index": mae,
+            "rmse_index": rmse,
+            "mean_bias_pred_minus_exp": bias,
+            "correlation_pred_exp": corr,
+            "within_0p5": within_05,
+            "within_1p0": within_10,
+            "n_respondents": int(len(per_agent_df)),
+        },
+        "per_agent_csv_path": per_agent_csv_path,
+        "summary_csv_path": summary_csv_path,
+        "plot_path": plot_path,
+    }
+
+
+def analyze_results_by_question_framing(
+    results_csv_path=None,
+    question_type_map=None,
+    output_dir=None,
+    save_outputs=True,
+):
+    """
+    Analyze saved simulation results stratified by question framing type.
+
+    Default framing rubric (editable):
+    - consensus_positive: Q1, Q4
+    - tradeoff_polarized: Q2, Q3, Q5, Q6
+
+    Produces:
+    - per-question metrics with framing label
+    - per-framing aggregate metrics
+    - two-panel plot:
+      1) per-question support-score bias (predicted - expected)
+      2) aggregate by framing type
+    """
+    if results_csv_path is None:
+        results_csv_path = DATA_DIR / "output" / "experiments" / "20260301" / "survey_simulation_results_20260301_210726.csv"
+    else:
+        results_csv_path = Path(results_csv_path)
+
+    if not results_csv_path.exists():
+        raise FileNotFoundError(f"Results CSV not found: {results_csv_path}")
+
+    if question_type_map is None:
+        question_type_map = {
+            "Q1": "consensus_positive",
+            "Q4": "consensus_positive",
+            "Q2": "tradeoff_polarized",
+            "Q3": "tradeoff_polarized",
+            "Q5": "tradeoff_polarized",
+            "Q6": "tradeoff_polarized",
+        }
+
+    df = pd.read_csv(results_csv_path)
+    required_cols = {
+        "question_id", "respondent_id", "agent_answer", "expected_answer", "ordinal_accuracy_score"
+    }
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Results CSV missing required columns: {sorted(missing_cols)}")
+
+    df["agent_answer"] = df["agent_answer"].astype(str).str.strip().str.upper()
+    df["expected_answer"] = df["expected_answer"].astype(str).str.strip().str.upper()
+    df["pred_score"] = df["agent_answer"].apply(answer_to_score)
+    df["exp_score"] = df["expected_answer"].apply(answer_to_score)
+    df = df[df["pred_score"].notna() & df["exp_score"].notna()].copy()
+    if df.empty:
+        raise ValueError("No valid scored rows found in results CSV.")
+
+    df["question_type"] = df["question_id"].map(question_type_map).fillna("unlabeled")
+    df["score_bias_pred_minus_exp"] = df["pred_score"] - df["exp_score"]
+
+    per_question_df = (
+        df.groupby(["question_id", "question_type"], as_index=False)
+        .agg(
+            n_rows=("respondent_id", "size"),
+            n_respondents=("respondent_id", "nunique"),
+            mean_pred_support_score=("pred_score", "mean"),
+            mean_exp_support_score=("exp_score", "mean"),
+            mean_score_bias=("score_bias_pred_minus_exp", "mean"),
+            mean_abs_error=("score_bias_pred_minus_exp", lambda x: float(np.mean(np.abs(x)))),
+            mean_ordinal_accuracy=("ordinal_accuracy_score", "mean"),
+        )
+        .sort_values("question_id")
+        .reset_index(drop=True)
+    )
+
+    per_type_df = (
+        df.groupby("question_type", as_index=False)
+        .agg(
+            n_rows=("respondent_id", "size"),
+            n_respondents=("respondent_id", "nunique"),
+            mean_pred_support_score=("pred_score", "mean"),
+            mean_exp_support_score=("exp_score", "mean"),
+            mean_score_bias=("score_bias_pred_minus_exp", "mean"),
+            mean_abs_error=("score_bias_pred_minus_exp", lambda x: float(np.mean(np.abs(x)))),
+            mean_ordinal_accuracy=("ordinal_accuracy_score", "mean"),
+        )
+        .sort_values("question_type")
+        .reset_index(drop=True)
+    )
+
+    print("\nFraming-stratified analysis")
+    print(f"- Source results CSV: {results_csv_path}")
+    print("\nPer-question:")
+    print(
+        per_question_df[
+            [
+                "question_id", "question_type", "mean_pred_support_score",
+                "mean_exp_support_score", "mean_score_bias", "mean_ordinal_accuracy"
+            ]
+        ].to_string(index=False)
+    )
+    print("\nPer-framing aggregate:")
+    print(
+        per_type_df[
+            [
+                "question_type", "mean_pred_support_score", "mean_exp_support_score",
+                "mean_score_bias", "mean_abs_error", "mean_ordinal_accuracy"
+            ]
+        ].to_string(index=False)
+    )
+
+    base_output_dir = (
+        DATA_DIR / "output" / "experiments" / "20260301"
+        if output_dir is None
+        else Path(output_dir)
+    )
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    per_question_csv_path = None
+    per_type_csv_path = None
+    plot_path = None
+
+    if save_outputs:
+        per_question_csv_path = base_output_dir / f"survey_simulation_framing_per_question_{timestamp}.csv"
+        per_type_csv_path = base_output_dir / f"survey_simulation_framing_per_type_{timestamp}.csv"
+        plot_path = base_output_dir / f"survey_simulation_framing_two_panel_{timestamp}.png"
+
+        per_question_df.to_csv(per_question_csv_path, index=False)
+        per_type_df.to_csv(per_type_csv_path, index=False)
+
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+        # Panel 1: per-question bias
+        q_plot = per_question_df.sort_values("question_id")
+        axes[0].bar(
+            q_plot["question_id"].astype(str),
+            q_plot["mean_score_bias"].astype(float),
+        )
+        axes[0].axhline(0.0, color="black", linestyle="--", linewidth=1)
+        axes[0].set_xlabel("Question")
+        axes[0].set_ylabel("Mean Predicted - Expected Support Score")
+        axes[0].set_title("Per-Question Support-Score Bias")
+        axes[0].grid(True, axis="y", alpha=0.3)
+
+        # Panel 2: by framing type
+        t_plot = per_type_df.sort_values("question_type")
+        axes[1].bar(
+            t_plot["question_type"].astype(str),
+            t_plot["mean_score_bias"].astype(float),
+        )
+        axes[1].axhline(0.0, color="black", linestyle="--", linewidth=1)
+        axes[1].set_xlabel("Question Type")
+        axes[1].set_ylabel("Mean Predicted - Expected Support Score")
+        axes[1].set_title("Average Bias by Framing Type")
+        axes[1].grid(True, axis="y", alpha=0.3)
+        axes[1].tick_params(axis="x", rotation=20)
+
+        plt.tight_layout()
+        fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Saved framing per-question CSV: {per_question_csv_path}")
+        print(f"Saved framing per-type CSV: {per_type_csv_path}")
+        print(f"Saved framing two-panel PNG: {plot_path}")
+
+    return {
+        "per_question_df": per_question_df,
+        "per_type_df": per_type_df,
+        "per_question_csv_path": per_question_csv_path,
+        "per_type_csv_path": per_type_csv_path,
+        "plot_path": plot_path,
+        "question_type_map": question_type_map,
+    }
+
+
+def calibrate_support_scores_by_question_framing(
+    results_csv_path=None,
+    question_type_map=None,
+    output_dir=None,
+    calibration_method="linear",
+    save_outputs=True,
+):
+    """
+    Post-hoc calibrate predicted support scores by question framing type.
+
+    Calibration is applied on support-index scores derived from A-G:
+    A=-3, B=-2, C=-1, D=0, E=1, F=2, G=3.
+
+    Parameters:
+        results_csv_path (str | Path | None):
+            Path to survey_simulation_results_*.csv. If None, defaults to
+            data/output/experiments/20260301/survey_simulation_results_20260301_210726.csv.
+        question_type_map (dict | None):
+            Mapping like {"Q1": "consensus_positive", ...}. If None, uses
+            default rubric from framing analysis.
+        output_dir (str | Path | None):
+            Where to write outputs. Defaults to data/output/experiments/20260301.
+        calibration_method (str):
+            "linear" (y = a*x + b) or "mean_shift" (y = x + b), fitted per framing type.
+        save_outputs (bool):
+            Whether to save CSV/PNG artifacts.
+
+    Returns:
+        dict: calibrated row-level data, fit params, and before/after metrics.
+    """
+    if results_csv_path is None:
+        results_csv_path = DATA_DIR / "output" / "experiments" / "20260301" / "survey_simulation_results_20260301_210726.csv"
+    else:
+        results_csv_path = Path(results_csv_path)
+
+    if not results_csv_path.exists():
+        raise FileNotFoundError(f"Results CSV not found: {results_csv_path}")
+
+    if question_type_map is None:
+        question_type_map = {
+            "Q1": "consensus_positive",
+            "Q4": "consensus_positive",
+            "Q2": "tradeoff_polarized",
+            "Q3": "tradeoff_polarized",
+            "Q5": "tradeoff_polarized",
+            "Q6": "tradeoff_polarized",
+        }
+
+    calibration_method = str(calibration_method).strip().lower()
+    if calibration_method not in {"linear", "mean_shift"}:
+        raise ValueError("calibration_method must be one of: ['linear', 'mean_shift']")
+
+    df = pd.read_csv(results_csv_path)
+    required_cols = {"question_id", "respondent_id", "agent_answer", "expected_answer"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Results CSV missing required columns: {sorted(missing_cols)}")
+
+    df["agent_answer"] = df["agent_answer"].astype(str).str.strip().str.upper()
+    df["expected_answer"] = df["expected_answer"].astype(str).str.strip().str.upper()
+    df["pred_score"] = df["agent_answer"].apply(answer_to_score)
+    df["exp_score"] = df["expected_answer"].apply(answer_to_score)
+    df = df[df["pred_score"].notna() & df["exp_score"].notna()].copy()
+    if df.empty:
+        raise ValueError("No valid scored rows found in results CSV.")
+
+    df["question_type"] = df["question_id"].map(question_type_map).fillna("unlabeled")
+
+    fit_rows = []
+    calibrated_parts = []
+    for question_type, group in df.groupby("question_type"):
+        x = group["pred_score"].astype(float).to_numpy()
+        y = group["exp_score"].astype(float).to_numpy()
+
+        if calibration_method == "mean_shift":
+            slope = 1.0
+            intercept = float(np.mean(y) - np.mean(x))
+            fit_mode = "mean_shift"
+        else:
+            unique_x = np.unique(x)
+            if len(unique_x) < 2:
+                slope = 1.0
+                intercept = float(np.mean(y) - np.mean(x))
+                fit_mode = "linear_fallback_mean_shift"
+            else:
+                slope, intercept = np.polyfit(x, y, deg=1)
+                slope = float(slope)
+                intercept = float(intercept)
+                fit_mode = "linear"
+
+        part = group.copy()
+        part["calibrated_pred_score_raw"] = slope * part["pred_score"].astype(float) + intercept
+        part["calibrated_pred_score"] = part["calibrated_pred_score_raw"].clip(-3, 3)
+
+        fit_rows.append(
+            {
+                "question_type": question_type,
+                "n_rows": int(len(group)),
+                "fit_mode": fit_mode,
+                "slope": slope,
+                "intercept": intercept,
+                "mean_pred_before": float(np.mean(x)),
+                "mean_exp": float(np.mean(y)),
+                "mean_pred_after": float(np.mean(part["calibrated_pred_score"].astype(float))),
+            }
+        )
+        calibrated_parts.append(part)
+
+    calibrated_df = pd.concat(calibrated_parts, ignore_index=True)
+
+    letter_map = {-3: "A", -2: "B", -1: "C", 0: "D", 1: "E", 2: "F", 3: "G"}
+    rounded = np.rint(calibrated_df["calibrated_pred_score"].astype(float)).astype(int)
+    rounded = np.clip(rounded, -3, 3)
+    calibrated_df["calibrated_agent_answer"] = [letter_map[v] for v in rounded]
+
+    calibrated_df["error_before"] = calibrated_df["pred_score"].astype(float) - calibrated_df["exp_score"].astype(float)
+    calibrated_df["error_after"] = calibrated_df["calibrated_pred_score"].astype(float) - calibrated_df["exp_score"].astype(float)
+    calibrated_df["abs_error_before"] = calibrated_df["error_before"].abs()
+    calibrated_df["abs_error_after"] = calibrated_df["error_after"].abs()
+    calibrated_df["sq_error_before"] = calibrated_df["error_before"] ** 2
+    calibrated_df["sq_error_after"] = calibrated_df["error_after"] ** 2
+    calibrated_df["ordinal_accuracy_after"] = calibrated_df.apply(
+        lambda row: calculate_ordinal_score(
+            row["calibrated_agent_answer"],
+            row["expected_answer"],
+            ["A", "B", "C", "D", "E", "F", "G"],
+        ),
+        axis=1,
+    )
+
+    fit_params_df = pd.DataFrame(fit_rows).sort_values("question_type").reset_index(drop=True)
+
+    def _summarize(group_df):
+        before_corr = (
+            float(group_df["pred_score"].corr(group_df["exp_score"]))
+            if len(group_df) >= 2
+            else np.nan
+        )
+        after_corr = (
+            float(group_df["calibrated_pred_score"].corr(group_df["exp_score"]))
+            if len(group_df) >= 2
+            else np.nan
+        )
+        return pd.Series(
+            {
+                "n_rows": int(len(group_df)),
+                "n_respondents": int(group_df["respondent_id"].nunique()),
+                "bias_before": float(np.mean(group_df["error_before"])),
+                "bias_after": float(np.mean(group_df["error_after"])),
+                "mae_before": float(np.mean(group_df["abs_error_before"])),
+                "mae_after": float(np.mean(group_df["abs_error_after"])),
+                "rmse_before": float(np.sqrt(np.mean(group_df["sq_error_before"]))),
+                "rmse_after": float(np.sqrt(np.mean(group_df["sq_error_after"]))),
+                "mean_pred_before": float(np.mean(group_df["pred_score"])),
+                "mean_pred_after": float(np.mean(group_df["calibrated_pred_score"])),
+                "mean_exp": float(np.mean(group_df["exp_score"])),
+                "corr_before": before_corr,
+                "corr_after": after_corr,
+                "mean_ordinal_after": float(np.mean(group_df["ordinal_accuracy_after"])),
+            }
+        )
+
+    per_type_metrics_df = (
+        calibrated_df.groupby("question_type", as_index=False)
+        .apply(_summarize, include_groups=False)
+        .reset_index(drop=True)
+    )
+    per_type_metrics_df["abs_bias_before"] = per_type_metrics_df["bias_before"].abs()
+    per_type_metrics_df["abs_bias_after"] = per_type_metrics_df["bias_after"].abs()
+    per_type_metrics_df["mae_delta_after_minus_before"] = (
+        per_type_metrics_df["mae_after"] - per_type_metrics_df["mae_before"]
+    )
+    per_type_metrics_df["abs_bias_delta_after_minus_before"] = (
+        per_type_metrics_df["abs_bias_after"] - per_type_metrics_df["abs_bias_before"]
+    )
+
+    overall_before_corr = (
+        float(calibrated_df["pred_score"].corr(calibrated_df["exp_score"]))
+        if len(calibrated_df) >= 2
+        else np.nan
+    )
+    overall_after_corr = (
+        float(calibrated_df["calibrated_pred_score"].corr(calibrated_df["exp_score"]))
+        if len(calibrated_df) >= 2
+        else np.nan
+    )
+    overall_metrics_df = pd.DataFrame(
+        [
+            {
+                "scope": "overall",
+                "n_rows": int(len(calibrated_df)),
+                "n_respondents": int(calibrated_df["respondent_id"].nunique()),
+                "bias_before": float(np.mean(calibrated_df["error_before"])),
+                "bias_after": float(np.mean(calibrated_df["error_after"])),
+                "mae_before": float(np.mean(calibrated_df["abs_error_before"])),
+                "mae_after": float(np.mean(calibrated_df["abs_error_after"])),
+                "rmse_before": float(np.sqrt(np.mean(calibrated_df["sq_error_before"]))),
+                "rmse_after": float(np.sqrt(np.mean(calibrated_df["sq_error_after"]))),
+                "mean_pred_before": float(np.mean(calibrated_df["pred_score"])),
+                "mean_pred_after": float(np.mean(calibrated_df["calibrated_pred_score"])),
+                "mean_exp": float(np.mean(calibrated_df["exp_score"])),
+                "corr_before": overall_before_corr,
+                "corr_after": overall_after_corr,
+                "mean_ordinal_after": float(np.mean(calibrated_df["ordinal_accuracy_after"])),
+            }
+        ]
+    )
+    overall_metrics_df["abs_bias_before"] = overall_metrics_df["bias_before"].abs()
+    overall_metrics_df["abs_bias_after"] = overall_metrics_df["bias_after"].abs()
+    overall_metrics_df["mae_delta_after_minus_before"] = (
+        overall_metrics_df["mae_after"] - overall_metrics_df["mae_before"]
+    )
+    overall_metrics_df["abs_bias_delta_after_minus_before"] = (
+        overall_metrics_df["abs_bias_after"] - overall_metrics_df["abs_bias_before"]
+    )
+
+    print("\nPost-hoc calibration by framing type")
+    print(f"- Source results CSV: {results_csv_path}")
+    print(f"- Calibration method: {calibration_method}")
+    print("\nFitted parameters:")
+    print(fit_params_df.to_string(index=False))
+    print("\nPer-framing before/after metrics:")
+    print(
+        per_type_metrics_df[
+            [
+                "question_type",
+                "bias_before",
+                "bias_after",
+                "mae_before",
+                "mae_after",
+                "rmse_before",
+                "rmse_after",
+            ]
+        ].to_string(index=False)
+    )
+    print("\nOverall before/after metrics:")
+    print(overall_metrics_df.to_string(index=False))
+
+    base_output_dir = (
+        DATA_DIR / "output" / "experiments" / "20260301"
+        if output_dir is None
+        else Path(output_dir)
+    )
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fit_params_csv_path = None
+    per_type_metrics_csv_path = None
+    overall_metrics_csv_path = None
+    calibrated_rows_csv_path = None
+    plot_path = None
+
+    if save_outputs:
+        fit_params_csv_path = base_output_dir / f"survey_simulation_framing_calibration_fit_params_{timestamp}.csv"
+        per_type_metrics_csv_path = base_output_dir / f"survey_simulation_framing_calibration_metrics_by_type_{timestamp}.csv"
+        overall_metrics_csv_path = base_output_dir / f"survey_simulation_framing_calibration_metrics_overall_{timestamp}.csv"
+        calibrated_rows_csv_path = base_output_dir / f"survey_simulation_framing_calibrated_rows_{timestamp}.csv"
+        plot_path = base_output_dir / f"survey_simulation_framing_calibration_before_after_{timestamp}.png"
+
+        fit_params_df.to_csv(fit_params_csv_path, index=False)
+        per_type_metrics_df.to_csv(per_type_metrics_csv_path, index=False)
+        overall_metrics_df.to_csv(overall_metrics_csv_path, index=False)
+        calibrated_df.to_csv(calibrated_rows_csv_path, index=False)
+
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+        t_plot = per_type_metrics_df.sort_values("question_type")
+        x = np.arange(len(t_plot))
+        width = 0.36
+
+        axes[0].bar(x - width / 2, t_plot["abs_bias_before"], width=width, label="Before")
+        axes[0].bar(x + width / 2, t_plot["abs_bias_after"], width=width, label="After")
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(t_plot["question_type"].astype(str), rotation=20)
+        axes[0].set_ylabel("Absolute Bias")
+        axes[0].set_title("Absolute Bias by Framing Type")
+        axes[0].grid(True, axis="y", alpha=0.3)
+        axes[0].legend()
+
+        axes[1].bar(x - width / 2, t_plot["mae_before"], width=width, label="Before")
+        axes[1].bar(x + width / 2, t_plot["mae_after"], width=width, label="After")
+        axes[1].set_xticks(x)
+        axes[1].set_xticklabels(t_plot["question_type"].astype(str), rotation=20)
+        axes[1].set_ylabel("MAE")
+        axes[1].set_title("MAE by Framing Type")
+        axes[1].grid(True, axis="y", alpha=0.3)
+        axes[1].legend()
+
+        plt.tight_layout()
+        fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+        print(f"Saved calibration fit params CSV: {fit_params_csv_path}")
+        print(f"Saved calibration per-type metrics CSV: {per_type_metrics_csv_path}")
+        print(f"Saved calibration overall metrics CSV: {overall_metrics_csv_path}")
+        print(f"Saved calibration row-level CSV: {calibrated_rows_csv_path}")
+        print(f"Saved calibration before/after PNG: {plot_path}")
+
+    return {
+        "calibrated_df": calibrated_df,
+        "fit_params_df": fit_params_df,
+        "per_type_metrics_df": per_type_metrics_df,
+        "overall_metrics_df": overall_metrics_df,
+        "fit_params_csv_path": fit_params_csv_path,
+        "per_type_metrics_csv_path": per_type_metrics_csv_path,
+        "overall_metrics_csv_path": overall_metrics_csv_path,
+        "calibrated_rows_csv_path": calibrated_rows_csv_path,
+        "plot_path": plot_path,
+        "question_type_map": question_type_map,
+        "calibration_method": calibration_method,
+    }
 
 
 def run_persona_ablation_stage2(
@@ -2878,6 +5322,8 @@ def analyze_stage2_diagnostics_from_saved_results(
 # result = openai_service.send(api_key=openai_key, message="Hello, this is a test message to check if the OpenAIService is working correctly.")
 if __name__ == "__main__":
     # survey_simulation_test()
+    # run_neutral_calibrated_persona_ablation_experiment(respondent_sample_n=30, temperature=0.0)
+    run_neutral_calibration_sweep_full_persona(respondent_sample_n=30, random_state=1, calibration_levels=['baseline','soft','strong'], temperature=0.0, save_outputs=True)
     # plot_ordinal_boxplot_from_saved_results(
     # results_csv_path="data/output/survey_simulation_results_20260301_210726.csv",
     # output_png_path=None,
@@ -2901,7 +5347,7 @@ if __name__ == "__main__":
     
     
     # # Test midpoint-bias hypothesis
-    dist = pd.read_csv("data/output/survey_simulation_stage2_answer_distribution_20260301_234411.csv")
-    mid = dist[dist["agent_answer"].isin(["D"])].groupby("condition")["proportion"].sum()
-    near_mid = dist[dist["agent_answer"].isin(["C","D","E"])].groupby("condition")["proportion"].sum()
-    print("D share:", mid); print("CDE share:", near_mid)
+    # dist = pd.read_csv("data/output/survey_simulation_stage2_answer_distribution_20260301_234411.csv")
+    # mid = dist[dist["agent_answer"].isin(["D"])].groupby("condition")["proportion"].sum()
+    # near_mid = dist[dist["agent_answer"].isin(["C","D","E"])].groupby("condition")["proportion"].sum()
+    # print("D share:", mid); print("CDE share:", near_mid)
