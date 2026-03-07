@@ -1,0 +1,4 @@
+expected_stance,n_rows,n_errors,error_rate
+Neutral,113,109.0,0.9646017699115044
+Oppose,125,70.0,0.56
+Support,362,40.0,0.11049723756906077

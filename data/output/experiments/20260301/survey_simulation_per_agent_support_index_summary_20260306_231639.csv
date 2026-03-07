@@ -1,0 +1,2 @@
+results_csv,n_respondents,mae_index,rmse_index,mean_bias_pred_minus_exp,correlation_pred_exp,within_0p5,within_1p0
+data/output/experiments/20260301/survey_simulation_results_20260301_210726.csv,100,1.3866666666666665,1.735095258351989,0.7533333333333333,0.5308941725132392,0.3,0.47

@@ -1,0 +1,7 @@
+expected_stance,agent_stance,count,share_of_all_errors
+Neutral,Support,83,0.3789954337899543
+Oppose,Support,63,0.2876712328767123
+Support,Oppose,29,0.1324200913242009
+Neutral,Oppose,26,0.1187214611872146
+Support,Neutral,11,0.0502283105022831
+Oppose,Neutral,7,0.0319634703196347
