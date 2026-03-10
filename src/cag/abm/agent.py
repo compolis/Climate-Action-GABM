@@ -26,3 +26,26 @@ from cag.abm.attributes.ethnicity import SurveyEthnicityMap
 from cag.abm.attributes.income import SurveyIncomeMap
 from cag.abm.attributes.politics import SurveyPoliticsMap
 from cag.abm.attributes.region import UKRegionMap
+
+class SurveyedCitizen(Citizen):
+    """
+    A Surveyed Citizen agent class for Climate-Action-GABM, inheriting from the GABM Citizen class.
+    """
+    super().__init__(
+        agent_id: int,
+        environment: Nation,
+        year_of_birth: int,
+        gender_id: GenderID,
+        region_id: RegionID,
+    def __init__(
+        self,
+        agent_id: int,
+        environment: Nation,
+        year_of_birth: int,
+        gender_id: GenderID,
+        region_id: RegionID,
+        education_id: EducationID,
+        ethnicity_id: EthnicityID,
+        income_id: IncomeID,
+        politics_id: PoliticsID
+    ):
