@@ -19,10 +19,16 @@ from pathlib import Path
 import random
 # Visualization
 import matplotlib.pyplot as plt
-# Local imports
-from gabm.abm.agent import Citizen
+# GABM imports
 from gabm.abm.attributes.gender import GenderID, Gender, GenderMap
 from gabm.abm.environment import Nation
+# Local imports
+from gabm.abm.agent import Citizen
+from cag.abm.attributes.ethnicity import SurveyEthnicityMap
+from gabm.abm.attributes.income import SurveyIncomeMap
+from gabm.abm.attributes.political_spectrum import PoliticalSpectrumMap
+from gabm.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue,
+from gabm.abm.attributes.region import UKRegionMap
 
 def main():
     logging.info("\n--- Climate-Action-GABM ---\n")
@@ -33,11 +39,12 @@ def main():
     # Create environment
     uk = Nation(year=2026)
 
-    # Create gender_map
+    # Create attribute maps
     gender_map = GenderMap()
-
-    # Create opinions
-    opinions = {"climate_change": 0.5}
+    uk_region_map = UKRegionMap()
+    survey_ethnicity_map = SurveyEthnicityMap()
+    survey_income_map = SurveyIncomeMap()
+    political_spectrum_map = PoliticalSpectrumMap()
 
     # Create a person agent
     person = Citizen(
@@ -46,7 +53,9 @@ def main():
         year_of_birth=2008,
         gender_map=gender_map,
         gender=GenderID.MALE,
-        opinions={"climate_change": 0.5}
+        ethnicity=EthnicityID.WHITE,
+        income=IncomeID.BETWEEN_40000_AND_44999,
+        politics=PoliticsID.CENTRE
     )
 
     logging.info(f"Created agent: {person}")
