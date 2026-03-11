@@ -10,7 +10,7 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 import logging
 # Local imports
 from gabm.abm.attributes.region import RegionID, Region
-from gabm.abm.attributes.attribute import GABMAttributeMap
+from gabm.abm.attribute import GABMAttributeMap
 
 RegionID.UNKNOWN = RegionID(0)
 RegionID.NORTH_EAST = RegionID(1)

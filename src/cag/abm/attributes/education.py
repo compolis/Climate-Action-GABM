@@ -10,53 +10,54 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 import logging
 # Local imports
 from gabm.abm.attributes.education import EducationID, Education
-from gabm.abm.attributes.attribute import GABMAttributeMap
+from gabm.abm.attribute import GABMAttributeMap
 
-class UKEducationMap(GABMAttributeMap):
+EducationID.UNKNOWN = EducationID(0)
+EducationID.NO_FORMAL_QUALIFICATIONS = EducationID(1)
+EducationID.YOUTH_TRAINING_CERTIFICATE = EducationID(2)
+EducationID.RECOGNISED_TRADE_APPRENTICESHIP = EducationID(3)
+EducationID.CLERICAL_AND_COMMERCIAL = EducationID(4)
+EducationID.CITY_AND_GUILDS_CERTIFICATE = EducationID(5)
+EducationID.CITY_AND_GUILDS_CERTIFICATE_ADVANCED = EducationID(6)
+EducationID.ONC = EducationID(7)
+EducationID.CSE_GRADES_2_5 = EducationID(8)
+EducationID.CSE_GRADE_1_GCE_O_LEVEL_GCSE_SCHOOL_CERTIFICATE = EducationID(9)
+EducationID.SCOTTISH_ORDINARY_LOWER_CERTIFICATE = EducationID(10)
+EducationID.GCE_A_LEVEL_OR_HIGHER_CERTIFICATE = EducationID(11)
+EducationID.SCOTTISH_HIGHER_CERTIFICATE = EducationID(12)
+EducationID.NURSING_QUALIFICATION = EducationID(13)
+EducationID.TEACHING_QUALIFICATION = EducationID(14)
+EducationID.UNIVERSITY_DIPLOMA = EducationID(15)
+EducationID.UNIVERSITY_OR_CNAA_FIRST_DEGREE = EducationID(16)
+EducationID.UNIVERSITY_OR_CNAA_HIGHER_DEGREE = EducationID(17)
+EducationID.OTHER_TECHNICAL_PROFESSIONAL_OR_HIGHER_QUALIFICATION = EducationID(18)
+
+class SurveyEducationMap(GABMAttributeMap):
     """
     A mapping of EducationIds to Education.
 
     By default, the map is initialized as follows::
 
-        e0 = EducationID(0)
-        e1 = EducationID(1)
-        e2 = EducationID(2)
-        e3 = EducationID(3)
-        e4 = EducationID(4)
-        e5 = EducationID(5)
-        e6 = EducationID(6)
-        e7 = EducationID(7)
-        e8 = EducationID(8)
-        e9 = EducationID(9)
-        e10 = EducationID(10)
-        e11 = EducationID(11)
-        e12 = EducationID(12)
-        e13 = EducationID(13)
-        e14 = EducationID(14)
-        e15 = EducationID(15)
-        e16 = EducationID(16)
-        e17 = EducationID(17)
-        e18 = EducationID(18)
         items: Dict[EducationID, Education] = {
-            e0: Education(e0, "unknown"),
-            e1: Education(e1, "no formal qualifications"),
-            e2: Education(e2, "youth training certificate/skillseekers"),
-            e3: Education(e3, "recognised trade apprenticeship completed"),
-            e4: Education(e4, "clerical and commercial"),
-            e5: Education(e5, "city & guilds certificate")
-            e6: Education(e6, "city & guilds certificate - advanced")
-            e7: Education(e7, "ONC"),
-            e8: Education(e8, "CSE grades 2-5"),
-            e9: Education(e9, "CSE grade 1, GCE O level, GCSE, School Certificate"),
-            e10: Education(e10, "Scottish Ordinary/ Lower Certificate"),
-            e11: Education(e11, "GCE A level or Higher Certificate"),
-            e12: Education(e12, "Scottish Higher Certificate"),
-            e13: Education(e13, "Nursing qualification (e.g. SEN, SRN, SCM, RGN)"),
-            e14: Education(e14, "Teaching qualification (not degree)"),
-            e15: Education(e15, "University diploma"),
-            e16: Education(e16, "University or CNAA first degree (e.g. BA, B.Sc, B.Ed)"),
-            e17: Education(e17, "University or CNAA higher degree (e.g. M.Sc, Ph.D)"),
-            e18: Education(e18, "Other technical, professional or higher qualification")
+            EducationID.UNKNOWN: Education(EducationID.UNKNOWN, "unknown"),
+            EducationID.NO_FORMAL_QUALIFICATIONS: Education(EducationID.NO_FORMAL_QUALIFICATIONS, "no formal qualifications"),
+            EducationID.YOUTH_TRAINING_CERTIFICATE: Education(EducationID.YOUTH_TRAINING_CERTIFICATE, "youth training certificate/skillseekers"),
+            EducationID.RECOGNISED_TRADE_APPRENTICESHIP: Education(EducationID.RECOGNISED_TRADE_APPRENTICESHIP, "recognised trade apprenticeship completed"),
+            EducationID.CLERICAL_AND_COMMERCIAL: Education(EducationID.CLERICAL_AND_COMMERCIAL, "clerical and commercial"),
+            EducationID.CITY_AND_GUILDS_CERTIFICATE: Education(EducationID.CITY_AND_GUILDS_CERTIFICATE, "city & guilds certificate"),
+            EducationID.CITY_AND_GUILDS_CERTIFICATE_ADVANCED: Education(EducationID.CITY_AND_GUILDS_CERTIFICATE_ADVANCED, "city & guilds certificate - advanced"),
+            EducationID.ONC: Education(EducationID.ONC, "ONC"),
+            EducationID.CSE_GRADES_2_5: Education(EducationID.CSE_GRADES_2_5, "CSE grades 2-5"),
+            EducationID.CSE_GRADE_1_GCE_O_LEVEL_GCSE_SCHOOL_CERTIFICATE: Education(EducationID.CSE_GRADE_1_GCE_O_LEVEL_GCSE_SCHOOL_CERTIFICATE, "CSE grade 1, GCE O level, GCSE, School Certificate"),
+            EducationID.SCOTTISH_ORDINARY_LOWER_CERTIFICATE: Education(EducationID.SCOTTISH_ORDINARY_LOWER_CERTIFICATE, "Scottish Ordinary/ Lower Certificate"),
+            EducationID.GCE_A_LEVEL_OR_HIGHER_CERTIFICATE: Education(EducationID.GCE_A_LEVEL_OR_HIGHER_CERTIFICATE, "GCE A level or Higher Certificate"),
+            EducationID.SCOTTISH_HIGHER_CERTIFICATE: Education(EducationID.SCOTTISH_HIGHER_CERTIFICATE, "Scottish Higher Certificate"),
+            EducationID.NURSING_QUALIFICATION: Education(EducationID.NURSING_QUALIFICATION, "Nursing qualification (e.g. SEN, SRN, SCM, RGN)"),
+            EducationID.TEACHING_QUALIFICATION: Education(EducationID.TEACHING_QUALIFICATION, "Teaching qualification (not degree)"),
+            EducationID.UNIVERSITY_DIPLOMA: Education(EducationID.UNIVERSITY_DIPLOMA, "University diploma"),
+            EducationID.UNIVERSITY_OR_CNAA_FIRST_DEGREE: Education(EducationID.UNIVERSITY_OR_CNAA_FIRST_DEGREE, "University or CNAA first degree (e.g. BA, B.Sc, B.Ed)"),
+            EducationID.UNIVERSITY_OR_CNAA_HIGHER_DEGREE: Education(EducationID.UNIVERSITY_OR_CNAA_HIGHER_DEGREE, "University or CNAA higher degree (e.g. M.Sc, Ph.D)"),
+            EducationID.OTHER_TECHNICAL_PROFESSIONAL_OR_HIGHER_QUALIFICATION: Education(EducationID.OTHER_TECHNICAL_PROFESSIONAL_OR_HIGHER_QUALIFICATION, "Other technical, professional or higher qualification")
         }
         super().__init__(items)
     """
@@ -64,44 +65,25 @@ class UKEducationMap(GABMAttributeMap):
         """
         Initialize the UKEducationMap object.
         """
-        e0 = EducationID(0)
-        e1 = EducationID(1)
-        e2 = EducationID(2)
-        e3 = EducationID(3)
-        e4 = EducationID(4)
-        e5 = EducationID(5)
-        e6 = EducationID(6)
-        e7 = EducationID(7)
-        e8 = EducationID(8)
-        e9 = EducationID(9)
-        e10 = EducationID(10)
-        e11 = EducationID(11)
-        e12 = EducationID(12)
-        e13 = EducationID(13)
-        e14 = EducationID(14)
-        e15 = EducationID(15)
-        e16 = EducationID(16)
-        e17 = EducationID(17)
-        e18 = EducationID(18)
         items: Dict[EducationID, Education] = {
-            e0: Education(e0, "unknown"),
-            e1: Education(e1, "no formal qualifications"),
-            e2: Education(e2, "youth training certificate/skillseekers"),
-            e3: Education(e3, "recognised trade apprenticeship completed"),
-            e4: Education(e4, "clerical and commercial"),
-            e5: Education(e5, "city & guilds certificate")
-            e6: Education(e6, "city & guilds certificate - advanced")
-            e7: Education(e7, "ONC"),
-            e8: Education(e8, "CSE grades 2-5"),
-            e9: Education(e9, "CSE grade 1, GCE O level, GCSE, School Certificate"),
-            e10: Education(e10, "Scottish Ordinary/ Lower Certificate"),
-            e11: Education(e11, "GCE A level or Higher Certificate"),
-            e12: Education(e12, "Scottish Higher Certificate"),
-            e13: Education(e13, "Nursing qualification (e.g. SEN, SRN, SCM, RGN)"),
-            e14: Education(e14, "Teaching qualification (not degree)"),
-            e15: Education(e15, "University diploma"),
-            e16: Education(e16, "University or CNAA first degree (e.g. BA, B.Sc, B.Ed)"),
-            e17: Education(e17, "University or CNAA higher degree (e.g. M.Sc, Ph.D)"),
-            e18: Education(e18, "Other technical, professional or higher qualification")
+            EducationID.UNKNOWN: Education(EducationID.UNKNOWN, "unknown"),
+            EducationID.NO_FORMAL_QUALIFICATIONS: Education(EducationID.NO_FORMAL_QUALIFICATIONS, "no formal qualifications"),
+            EducationID.YOUTH_TRAINING_CERTIFICATE: Education(EducationID.YOUTH_TRAINING_CERTIFICATE, "youth training certificate/skillseekers"),
+            EducationID.RECOGNISED_TRADE_APPRENTICESHIP: Education(EducationID.RECOGNISED_TRADE_APPRENTICESHIP, "recognised trade apprenticeship completed"),
+            EducationID.CLERICAL_AND_COMMERCIAL: Education(EducationID.CLERICAL_AND_COMMERCIAL, "clerical and commercial"),
+            EducationID.CITY_AND_GUILDS_CERTIFICATE: Education(EducationID.CITY_AND_GUILDS_CERTIFICATE, "city & guilds certificate"),
+            EducationID.CITY_AND_GUILDS_CERTIFICATE_ADVANCED: Education(EducationID.CITY_AND_GUILDS_CERTIFICATE_ADVANCED, "city & guilds certificate - advanced"),
+            EducationID.ONC: Education(EducationID.ONC, "ONC"),
+            EducationID.CSE_GRADES_2_5: Education(EducationID.CSE_GRADES_2_5, "CSE grades 2-5"),
+            EducationID.CSE_GRADE_1_GCE_O_LEVEL_GCSE_SCHOOL_CERTIFICATE: Education(EducationID.CSE_GRADE_1_GCE_O_LEVEL_GCSE_SCHOOL_CERTIFICATE, "CSE grade 1, GCE O level, GCSE, School Certificate"),
+            EducationID.SCOTTISH_ORDINARY_LOWER_CERTIFICATE: Education(EducationID.SCOTTISH_ORDINARY_LOWER_CERTIFICATE, "Scottish Ordinary/ Lower Certificate"),
+            EducationID.GCE_A_LEVEL_OR_HIGHER_CERTIFICATE: Education(EducationID.GCE_A_LEVEL_OR_HIGHER_CERTIFICATE, "GCE A level or Higher Certificate"),
+            EducationID.SCOTTISH_HIGHER_CERTIFICATE: Education(EducationID.SCOTTISH_HIGHER_CERTIFICATE, "Scottish Higher Certificate"),
+            EducationID.NURSING_QUALIFICATION: Education(EducationID.NURSING_QUALIFICATION, "Nursing qualification (e.g. SEN, SRN, SCM, RGN)"),
+            EducationID.TEACHING_QUALIFICATION: Education(EducationID.TEACHING_QUALIFICATION, "Teaching qualification (not degree)"),
+            EducationID.UNIVERSITY_DIPLOMA: Education(EducationID.UNIVERSITY_DIPLOMA, "University diploma"),
+            EducationID.UNIVERSITY_OR_CNAA_FIRST_DEGREE: Education(EducationID.UNIVERSITY_OR_CNAA_FIRST_DEGREE, "University or CNAA first degree (e.g. BA, B.Sc, B.Ed)"),
+            EducationID.UNIVERSITY_OR_CNAA_HIGHER_DEGREE: Education(EducationID.UNIVERSITY_OR_CNAA_HIGHER_DEGREE, "University or CNAA higher degree (e.g. M.Sc, Ph.D)"),
+            EducationID.OTHER_TECHNICAL_PROFESSIONAL_OR_HIGHER_QUALIFICATION: Education(EducationID.OTHER_TECHNICAL_PROFESSIONAL_OR_HIGHER_QUALIFICATION, "Other technical, professional or higher qualification")
         }
         super().__init__(items)

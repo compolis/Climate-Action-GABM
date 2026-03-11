@@ -10,7 +10,7 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 import logging
 # Local imports
 from gabm.abm.attributes.ethnicity import EthnicityID, Ethnicity
-from gabm.abm.attributes.attribute import GABMAttributeMap
+from gabm.abm.attribute import GABMAttributeMap
 
 EthnicityID.UNKNOWN = EthnicityID(0)
 EthnicityID.WHITE = EthnicityID(1)

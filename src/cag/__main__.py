@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
 Entry point for running the Climate-Action-GABM application.
 To run: python3 -m gabm
@@ -20,15 +19,22 @@ import random
 # Visualization
 import matplotlib.pyplot as plt
 # GABM imports
-from gabm.abm.attributes.gender import GenderID, Gender, GenderMap
 from gabm.abm.environment import Nation
+from gabm.abm.attributes.gender import GenderID, Gender, GenderMap
+from gabm.abm.attributes.ethnicity import EthnicityID
+from gabm.abm.attributes.income import IncomeID
+from gabm.abm.attributes.politics import PoliticsID
+from gabm.abm.attributes.education import EducationID
+from gabm.abm.attributes.region import RegionID
+
 # Local imports
-from gabm.abm.agent import Citizen
+from cag.abm.agent import SurveyedCitizen
 from cag.abm.attributes.ethnicity import SurveyEthnicityMap
-from gabm.abm.attributes.income import SurveyIncomeMap
-from gabm.abm.attributes.political_spectrum import PoliticalSpectrumMap
-from gabm.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue,
-from gabm.abm.attributes.region import UKRegionMap
+from cag.abm.attributes.income import SurveyIncomeMap
+from cag.abm.attributes.politics import SurveyPoliticsMap
+from cag.abm.attributes.education import SurveyEducationMap
+from cag.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue
+from cag.abm.attributes.region import UKRegionMap
 
 def main():
     logging.info("\n--- Climate-Action-GABM ---\n")
@@ -44,21 +50,22 @@ def main():
     uk_region_map = UKRegionMap()
     survey_ethnicity_map = SurveyEthnicityMap()
     survey_income_map = SurveyIncomeMap()
-    political_spectrum_map = PoliticalSpectrumMap()
+    survey_politics_map = SurveyPoliticsMap()
+    survey_education_map = SurveyEducationMap()
 
-    # Create a person agent
-    person = Citizen(
+    # Create a SurveyedCitizen agent
+    sc0 = SurveyedCitizen(
         agent_id=0,
         environment=uk,
         year_of_birth=2008,
-        gender_map=gender_map,
-        gender=GenderID.MALE,
-        ethnicity=EthnicityID.WHITE,
-        income=IncomeID.BETWEEN_40000_AND_44999,
-        politics=PoliticsID.CENTRE
+        gender_id=GenderID.MALE,
+        region_id=RegionID.UNKNOWN,
+        ethnicity_id=EthnicityID.WHITE,
+        income_id=IncomeID.BETWEEN_40000_AND_44999,
+        education_id=EducationID.NO_FORMAL_QUALIFICATIONS,
+        politics_id=PoliticsID.CENTRE
     )
-
-    logging.info(f"Created agent: {person}")
+    logging.info(f"Created SurveyedCitizen: {sc0}")
 
     
 if __name__ == "__main__":

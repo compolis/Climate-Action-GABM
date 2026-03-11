@@ -10,7 +10,7 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 import logging
 # Local imports
 from gabm.abm.attributes.income import IncomeID, Income
-from gabm.abm.attributes.attribute import GABMAttributeMap
+from gabm.abm.attribute import GABMAttributeMap
 
 IncomeID.UNKNOWN = IncomeID(0)
 IncomeID.UNDER_5000 = IncomeID(1)
