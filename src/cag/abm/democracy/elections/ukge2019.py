@@ -16,17 +16,17 @@ from gabm.abm.democracy.election import ElectionID
 
 class UKGE2019VoteID(UKGEVoteID):
     """
-    UK General Election 2019 VoteID class, inheriting from the UKGEVoteID class.
+    UK General Election 2019 VoteID.
     """
-    def __init__(self, value: int):
+    def __init__(self, vote_id: int):
         """
-        Initialize a UK General Election 2019 VoteID instance.
-
-        Parameters:
-            value:
+        Initialize.
+        
+        Args:
+            vote_id:
                 The integer value representing the vote ID.
         """
-        super().__init__(value)
+        super().__init__(vote_id)
 
 UKGE2019VoteID.UNKNOWN = UKGE2019VoteID(0)
 UKGE2019VoteID.CONSERVATIVE = UKGE2019VoteID(1)
@@ -39,61 +39,74 @@ UKGE2019VoteID.DONT_KNOW = UKGE2019VoteID(7)
 
 class UKGE2019Vote(UKGEVote):
     """
-    UK General Election 2019 Vote class, inheriting from the UKGEVote class.
-
+    UK General Election 2019 Vote.
+    
     .. note::
         Inherits all attributes and methods from :class:`UKGEVote`.
+
     Attributes:
-        vote_id (UKGEVoteID):
-            The unique identifier for the general election vote.
+        description (str):
+            A description of the vote.
     """
-    def __init__(self, vote_id: UKGEVoteID):
+    def __init__(self, vote_id: UKGE2019VoteID, description: str, election_id: ElectionID, voter_id: str = None, candidate_id: str = None):
         """
         Initialize a UK General Election 2019 Vote instance.
 
-        Parameters:
+        Args:
             vote_id:
-                Unique identifier for the general election vote.
+                Unique identifier for the vote.
+            description:
+                A description of the vote.
+            election_id:
+                Identifier for the associated election.
+            voter_id:
+                Identifier for the voter.
+            candidate_id:
+                Identifier for the candidate being voted for.
         """
-        super().__init__(vote_id)
+        super().__init__(vote_id, election_id, voter_id, candidate_id)
+        self.description = description
 
 class UKGE2019VoteMap(GABMAttributeMap):
     """
-    A mapping of UKGEVoteIDs to UKGE2019Votes.
+    A mapping of UKGE2019VoteIDs to UKGE2019Votes.
 
     By default, the map is initialized as follows::
 
         items: Dict[UKGEVoteID, UKGE2019Vote] = {
-            UKGE2019VoteID.UNKNOWN: UKGE2019Vote(UKGE2019VoteID.UNKNOWN),
-            UKGE2019VoteID.CONSERVATIVE: UKGE2019Vote(UKGE2019VoteID.CONSERVATIVE),
-            UKGE2019VoteID.LABOUR: UKGE2019Vote(UKGE2019VoteID.LABOUR),
-            UKGE2019VoteID.LIBERAL_DEMOCRATS: UKGE2019Vote(UKGE2019VoteID.LIBERAL_DEMOCRATS),
-            UKGE2019VoteID.BREXIT: UKGE2019Vote(UKGE2019VoteID.BREXIT),
-            UKGE2019VoteID.GREEN: UKGE2019Vote(UKGE2019VoteID.GREEN),
-            UKGE2019VoteID.OTHER: UKGE2019Vote(UKGE2019VoteID.OTHER),
-            UKGE2019VoteID.DONT_KNOW: UKGE2019Vote(UKGE2019VoteID.DONT_KNOW)
+            UKGE2019VoteID.UNKNOWN: UKGE2019Vote(UKGE2019VoteID.UNKNOWN, "Unknown vote", election_id),
+            UKGE2019VoteID.CONSERVATIVE: UKGE2019Vote(UKGE2019VoteID.CONSERVATIVE, "Conservative", election_id),
+            UKGE2019VoteID.LABOUR: UKGE2019Vote(UKGE2019VoteID.LABOUR, "Labour", election_id),
+            UKGE2019VoteID.LIBERAL_DEMOCRATS: UKGE2019Vote(UKGE2019VoteID.LIBERAL_DEMOCRATS, "Liberal Democrats", election_id),
+            UKGE2019VoteID.BREXIT: UKGE2019Vote(UKGE2019VoteID.BREXIT, " Brexit", election_id),
+            UKGE2019VoteID.GREEN: UKGE2019Vote(UKGE2019VoteID.GREEN, "Green", election_id),
+            UKGE2019VoteID.OTHER: UKGE2019Vote(UKGE2019VoteID.OTHER, "Other", election_id),
+            UKGE2019VoteID.DONT_KNOW: UKGE2019Vote(UKGE2019VoteID.DONT_KNOW, "Don't know", election_id)
         }
         super().__init__(items)
     """
-    def __init__(self):
+    def __init__(self, election_id: ElectionID):
         """
         Initialize the UK General Election 2019 Vote Map.
         """
         items: Dict[UKGEVoteID, UKGE2019Vote] = {
-            UKGE2019VoteID.UNKNOWN: UKGE2019Vote(UKGE2019VoteID.UNKNOWN),
-            UKGE2019VoteID.CONSERVATIVE: UKGE2019Vote(UKGE2019VoteID.CONSERVATIVE),
-            UKGE2019VoteID.LABOUR: UKGE2019Vote(UKGE2019VoteID.LABOUR),
-            UKGE2019VoteID.LIBERAL_DEMOCRATS: UKGE2019Vote(UKGE2019VoteID.LIBERAL_DEMOCRATS),
-            UKGE2019VoteID.BREXIT: UKGE2019Vote(UKGE2019VoteID.BREXIT),
-            UKGE2019VoteID.GREEN: UKGE2019Vote(UKGE2019VoteID.GREEN),
-            UKGE2019VoteID.OTHER: UKGE2019Vote(UKGE2019VoteID.OTHER),
-            UKGE2019VoteID.DONT_KNOW: UKGE2019Vote(UKGE2019VoteID.DONT_KNOW)
+            UKGE2019VoteID.UNKNOWN: UKGE2019Vote(UKGE2019VoteID.UNKNOWN, "Unknown vote", election_id),
+            UKGE2019VoteID.CONSERVATIVE: UKGE2019Vote(UKGE2019VoteID.CONSERVATIVE, "Conservative", election_id),
+            UKGE2019VoteID.LABOUR: UKGE2019Vote(UKGE2019VoteID.LABOUR, "Labour", election_id),
+            UKGE2019VoteID.LIBERAL_DEMOCRATS: UKGE2019Vote(UKGE2019VoteID.LIBERAL_DEMOCRATS, "Liberal Democrats", election_id),
+            UKGE2019VoteID.BREXIT: UKGE2019Vote(UKGE2019VoteID.BREXIT, " Brexit", election_id),
+            UKGE2019VoteID.GREEN: UKGE2019Vote(UKGE2019VoteID.GREEN, "Green", election_id),
+            UKGE2019VoteID.OTHER: UKGE2019Vote(UKGE2019VoteID.OTHER, "Other", election_id),
+            UKGE2019VoteID.DONT_KNOW: UKGE2019Vote(UKGE2019VoteID.DONT_KNOW, "Don't know", election_id)
         }
         super().__init__(items)
 
 class UKGE2019(UKGE):
     """
-    UK General Election 2019 class, inheriting from the UKGE class.
+    UK General Election 2019 class.
+
+    .. note::
+        Inherits all attributes and methods from :class:`UKGE`.
     """
     def __init__(self, election_id: ElectionID):
         """
@@ -102,6 +115,8 @@ class UKGE2019(UKGE):
         Parameters:
         - election_id: Unique identifier for the general election.
         """
-        date = date.fromisoformat("2019-12-12")
-        super().__init__(election_id, date)
-        logging.info(f"Initialized UK General Election 2019 with ID {election_id} on {date}")
+        date_str = "2019-12-12"
+        description = "UK General Election " + date_str
+        election_date = date.fromisoformat(date_str)
+        super().__init__(election_id, election_date, description)
+        logging.info(f"Initialized {description} with ID {election_id}")

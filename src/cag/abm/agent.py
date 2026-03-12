@@ -114,8 +114,18 @@ class SurveyedCitizen(Citizen):
         r += f", income={sn.income_map.get(self.income_id).description}"
         r += f", politics={sn.politics_map.get(self.politics_id).description}"
         r += f", family={sn.family_map.get(self.family_id).description}"
-        r += f", UKGE2019 vote={sn.ukge2019_map.get(self.ukge2019_vote_id).description}"
-        r += f", Brexit vote={sn.brexit_map.get(self.brexit_vote_id).description}"
+        try:
+            ukge2019_vote = sn.ukge2019_vote_map.get(self.ukge2019_vote_id)
+            ukge2019_vote_str = getattr(ukge2019_vote, 'description', str(ukge2019_vote)) if ukge2019_vote else 'Unknown'
+        except TypeError:
+            ukge2019_vote_str = 'Unknown'
+        try:
+            brexit_vote = sn.brexit_vote_map.get(self.brexit_vote_id)
+            brexit_vote_str = getattr(brexit_vote, 'description', str(brexit_vote)) if brexit_vote else 'Unknown'
+        except TypeError:
+            brexit_vote_str = 'Unknown'
+        r += f", UKGE2019 vote={ukge2019_vote_str}"
+        r += f", Brexit vote={brexit_vote_str}"
         return r
 
     def get_surveyed_nation(self) -> SurveyedNation:
@@ -140,13 +150,21 @@ class SurveyedCitizen(Citizen):
         income = sn.income_map.get(self.income_id).description
         politics = sn.politics_map.get(self.politics_id).description
         family = sn.family_map.get(self.family_id).description
-        ukge2019_vote = sn.ukge2019_map.get(self.ukge2019_vote_id).description
-        brexit_vote = sn.brexit_map.get(self.brexit_vote_id).description
+        try:
+            ukge2019_vote_obj = sn.ukge2019_vote_map.get(self.ukge2019_vote_id)
+            ukge2019_vote = getattr(ukge2019_vote_obj, 'description', str(ukge2019_vote_obj)) if ukge2019_vote_obj else 'Unknown'
+        except TypeError:
+            ukge2019_vote = 'Unknown'
+        try:
+            brexit_vote_obj = sn.brexit_vote_map.get(self.brexit_vote_id)
+            brexit_vote = getattr(brexit_vote_obj, 'description', str(brexit_vote_obj)) if brexit_vote_obj else 'Unknown'
+        except TypeError:
+            brexit_vote = 'Unknown'
 
         return (f"Demographically, I am a {age}-year-old {gender} living in the {region}, United Kingdom. "
             f"My ethnic background is {ethnicity}, and I hold a {education}. "
             f"Financially, my gross household income falls into the {income} bracket. "
             f"Regarding my family status, I {family}. "
             f"Politically, I position myself on the {politics} of the spectrum. "
-            f"In the 2019 General Election, I cast my vote for the {ukge2019_vote}. "
-            f"Looking back at the EU Referendum, {brexit_vote}.")
+            f"In the 2019 General Election, I voted for the {ukge2019_vote} candidate. "
+            f"In the EU Referendum, I voted to {brexit_vote}.")

@@ -10,6 +10,7 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 import logging
 from datetime import date
 # GABM imports
+from gabm.abm.agent import CitizenID
 from gabm.abm.democracy.election import VoteID
 from gabm.abm.attributes import GABMAttributeMap
 from gabm.abm.democracy.election import ElectionID
@@ -20,25 +21,25 @@ class BrexitVoteID(VoteID):
     """
     Brexit Referendum VoteID class, inheriting from the GABM VoteID class.
     """
-    def __init__(self, value: int):
+    def __init__(self, vote_id: int):
         """
         Initialize a Brexit Referendum VoteID instance.
 
         Parameters:
-            value:
+            vote_id:
                 The integer value representing the vote ID.
         """
-        super().__init__(value)
+        super().__init__(vote_id)
 
 BrexitVoteID.UNKNOWN = BrexitVoteID(0)
 BrexitVoteID.REMAIN = BrexitVoteID(1)
 BrexitVoteID.LEAVE = BrexitVoteID(2)
 BrexitVoteID.DONT_KNOW = BrexitVoteID(3)
 
-class BrexitVote(BrexitVoteID):
+class BrexitVote(UKReferendumVote):
     """
-    Brexit Referendum Vote class, inheriting from the UKReferendumVote class.
-
+    Brexit Referendum Vote.
+    
     .. note::
         Inherits all attributes and methods from :class:`UKReferendumVote`.
 
@@ -46,15 +47,18 @@ class BrexitVote(BrexitVoteID):
         vote_id (BrexitVoteID):
             The unique identifier for the Brexit referendum vote.
     """
-    def __init__(self, vote_id: BrexitVoteID):
+    def __init__(self, vote_id: BrexitVoteID, election_id: ElectionID, voter_id: CitizenID = None, description: str = None):
         """
         Initialize a Brexit Referendum Vote instance.
 
         Parameters:
             vote_id:
                 Unique identifier for the Brexit referendum vote.
+                description:
+                    Human-readable description of the vote.
         """
-        super().__init__(vote_id)
+        super().__init__(vote_id, election_id, voter_id=voter_id)
+        self.description = description if description is not None else str(vote_id)
 
 class BrexitVoteMap(GABMAttributeMap):
     """
@@ -63,20 +67,22 @@ class BrexitVoteMap(GABMAttributeMap):
     By default, the map is initialized as follows::
 
         items: Dict[BrexitVoteID, BrexitVote] = {
-            BrexitVoteID.REMAIN: BrexitVote(BrexitVoteID.REMAIN),
-            BrexitVoteID.LEAVE: BrexitVote(BrexitVoteID.LEAVE),
-            BrexitVoteID.DONT_KNOW: BrexitVote(BrexitVoteID.DONT_KNOW)
+            BrexitVoteID.UNKNOWN: BrexitVote(BrexitVoteID.UNKNOWN, election_id),
+            BrexitVoteID.REMAIN: BrexitVote(BrexitVoteID.REMAIN, election_id),
+            BrexitVoteID.LEAVE: BrexitVote(BrexitVoteID.LEAVE, election_id),
+            BrexitVoteID.DONT_KNOW: BrexitVote(BrexitVoteID.DONT_KNOW, election_id)
         }
         super().__init__(items)
     """
-    def __init__(self):
+    def __init__(self, election_id: ElectionID):
         """
         Initialize the UK Brexit Referendum Vote Map.
         """
-        items: Dict[BrexitVoteID, BrexitVote] = {
-            BrexitVoteID.REMAIN: BrexitVote(BrexitVoteID.REMAIN),
-            BrexitVoteID.LEAVE: BrexitVote(BrexitVoteID.LEAVE),
-            BrexitVoteID.DONT_KNOW: BrexitVote(BrexitVoteID.DONT_KNOW)
+        items = {
+            BrexitVoteID.UNKNOWN: BrexitVote(BrexitVoteID.UNKNOWN, election_id, description="Unknown"),
+            BrexitVoteID.REMAIN: BrexitVote(BrexitVoteID.REMAIN, election_id, description="Remain"),
+            BrexitVoteID.LEAVE: BrexitVote(BrexitVoteID.LEAVE, election_id, description="Leave"),
+            BrexitVoteID.DONT_KNOW: BrexitVote(BrexitVoteID.DONT_KNOW, election_id, description="Don't know")
         }
         super().__init__(items)
 
@@ -104,5 +110,7 @@ class Brexit(UKReferendum):
             question:
                 The question posed in the Brexit referendum.
         """
-        super().__init__(election_id, date, question)
-        logging.info(f"Initialized Brexit Referendum with ID {election_id} on {date}")
+        choices = ["Remain", "Leave"]
+        description = f"Brexit Referendum on {date}: {question}"
+        super().__init__(election_id,  date, description, question, choices)
+        logging.info(f"Initialized Brexit Referendum {date} with ID {election_id}")

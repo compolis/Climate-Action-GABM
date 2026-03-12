@@ -43,9 +43,9 @@ class SurveyedNation(Nation):
             A SurveyPoliticsMap instance for politics attribute lookups.
         family_map (SurveyFamilyMap):
             A SurveyFamilyMap instance for family attribute lookups.
-        ukge2019_map (UKGE2019VoteMap):
+        ukge2019_vote_map (UKGE2019VoteMap):
             A UKGE2019VoteMap instance for UK General Election 2019 vote attribute lookups.
-        brexit_map (BrexitVoteMap):
+        brexit_vote_map (BrexitVoteMap):
             A BrexitVoteMap instance for Brexit referendum vote attribute lookups.
 
     """

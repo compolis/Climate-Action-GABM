@@ -27,6 +27,7 @@ from gabm.abm.attributes.politics import PoliticsID
 from gabm.abm.attributes.education import EducationID
 from gabm.abm.attributes.region import RegionID
 from gabm.abm.attributes.family import FamilyID
+from gabm.abm.democracy.election import ElectionID
 from gabm.abm.democracy.elections.uk.general_election import UKGEVoteID
 from gabm.abm.democracy.elections.uk.referendum import UKReferendumVoteID
 # Local imports
@@ -38,8 +39,8 @@ from cag.abm.attributes.politics import SurveyPoliticsMap
 from cag.abm.attributes.education import SurveyEducationMap
 from cag.abm.attributes.region import UKRegionMap
 from cag.abm.attributes.family import SurveyFamilyMap
-from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteMap
-from cag.abm.democracy.elections.brexit import BrexitVoteMap
+from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID, UKGE2019, UKGE2019VoteMap
+from cag.abm.democracy.elections.brexit import BrexitVoteID, Brexit, BrexitVoteMap
 
 from cag.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue
 
@@ -49,6 +50,12 @@ def main():
     # Set random seed for reproducibility
     random.seed(42)
 
+    # Create election instances
+    UKGE2019_ELECTION_ID = ElectionID(0)
+    uk_ge2019 = UKGE2019(UKGE2019_ELECTION_ID)
+    BREXIT_REFERENDUM_ID = ElectionID(1)
+    brexit = Brexit(BREXIT_REFERENDUM_ID)
+
     # Create attribute maps
     gender_map = GenderMap()
     uk_region_map = UKRegionMap()
@@ -57,8 +64,8 @@ def main():
     survey_politics_map = SurveyPoliticsMap()
     survey_education_map = SurveyEducationMap()
     survey_family_map = SurveyFamilyMap()
-    ukge2019_vote_map = UKGE2019VoteMap()
-    brexit_vote_map = BrexitVoteMap()
+    ukge2019_vote_map = UKGE2019VoteMap(UKGE2019_ELECTION_ID)
+    brexit_vote_map = BrexitVoteMap(BREXIT_REFERENDUM_ID)
 
     # Create a SurveyedNation environment
     surveyed_nation = SurveyedNation(
