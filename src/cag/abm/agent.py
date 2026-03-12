@@ -161,10 +161,11 @@ class SurveyedCitizen(Citizen):
         except TypeError:
             brexit_vote = 'Unknown'
 
-        return (f"Demographically, I am a {age}-year-old {gender} living in the {region}, United Kingdom. "
-            f"My ethnic background is {ethnicity}, and I hold a {education}. "
-            f"Financially, my gross household income falls into the {income} bracket. "
-            f"Regarding my family status, I {family}. "
-            f"Politically, I position myself on the {politics} of the spectrum. "
-            f"In the 2019 General Election, I voted for the {ukge2019_vote} candidate. "
-            f"In the EU Referendum, I voted to {brexit_vote}.")
+        return (f"I am a {age} year old {gender} living in the {region}. "
+            f"My ethnicity is {ethnicity}. "
+            f"I have a {education}. "
+            f"My gross household income is {income}. "
+            f"I am {family}. "
+            f"I position myself {politics} of the political spectrum. "
+            f"I voted for the {ukge2019_vote} candidate in the 2019 General Election. "
+            f"I voted to {brexit_vote} in the 2016 EU Referendum.")

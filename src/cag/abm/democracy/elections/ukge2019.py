@@ -88,6 +88,11 @@ class UKGE2019VoteMap(GABMAttributeMap):
     def __init__(self, election_id: ElectionID):
         """
         Initialize the UK General Election 2019 Vote Map.
+
+        Args:
+            election_id:
+                Unique identifier for the associated election.
+
         """
         items: Dict[UKGEVoteID, UKGE2019Vote] = {
             UKGE2019VoteID.UNKNOWN: UKGE2019Vote(UKGE2019VoteID.UNKNOWN, "Unknown vote", election_id),
@@ -112,8 +117,10 @@ class UKGE2019(UKGE):
         """
         Initialize a UK General Election 2019 instance.
 
-        Parameters:
-        - election_id: Unique identifier for the general election.
+        Args:
+            election_id:
+                Unique identifier for the general election.
+        
         """
         date_str = "2019-12-12"
         description = "UK General Election " + date_str

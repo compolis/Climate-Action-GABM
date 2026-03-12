@@ -11,7 +11,6 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 
 # Standard library imports
 import os
-import os
 import sys
 import logging
 from pathlib import Path
@@ -31,6 +30,7 @@ from gabm.abm.democracy.election import ElectionID
 from gabm.abm.democracy.elections.uk.general_election import UKGEVoteID
 from gabm.abm.democracy.elections.uk.referendum import UKReferendumVoteID
 # Local imports
+from cag.io.survey import load
 from cag.abm.environment import SurveyedNation
 from cag.abm.agent import SurveyedCitizen
 from cag.abm.attributes.ethnicity import SurveyEthnicityMap
@@ -68,8 +68,10 @@ def main():
     brexit_vote_map = BrexitVoteMap(BREXIT_REFERENDUM_ID)
 
     # Create a SurveyedNation environment
+    logging.info("Creating SurveyedNation...")
+    year: int = 2026
     surveyed_nation = SurveyedNation(
-        year=2026,
+        year=year,
         place="UK",
         gender_map=gender_map,
         region_map=uk_region_map,
@@ -81,26 +83,120 @@ def main():
         ukge2019_vote_map=ukge2019_vote_map,
         brexit_vote_map=brexit_vote_map
     )
+    logging.info(f"... created SurveyedNation: {surveyed_nation}")
 
-    # Create a SurveyedCitizen agent
-    sc0 = SurveyedCitizen(
-        agent_id=0,
-        environment=surveyed_nation,
-        year_of_birth=2008,
-        gender_id=GenderID.MALE,
-        region_id=RegionID.YORKSHIRE_AND_THE_HUMBER,
-        ethnicity_id=EthnicityID.WHITE,
-        income_id=IncomeID.BETWEEN_40000_AND_44999,
-        education_id=EducationID.NO_FORMAL_QUALIFICATIONS,
-        politics_id=PoliticsID.CENTRE,
-        family_id=FamilyID.NOT_PARENT,
-        ukge2019_vote_id=UKGE2019VoteID.CONSERVATIVE,
-        brexit_vote_id=BrexitVoteID.LEAVE
-    )
-    logging.info(f"Created SurveyedCitizen: {sc0}")
-    # Get the SurveyedCitizen persona
-    get_persona = sc0.get_persona()
-    logging.info(f"Persona: {get_persona}")
+    # Load survey data
+    logging.info("Loading survey data...")
+    required_columns = [
+        'ID',
+        'age', # Used to determine year of birth
+        'male_dummy', # Used to determine gender 0 = female, 1 = male
+        'tprofile_GOR', # Used to determine region
+        "profile_education_level", # Used to determine education level
+        'tprofile_gross_household', # Used to determine income level
+        'ethnicity_R', # Used to determine ethnicity
+        'parent_dummy', # Used to determine family status
+        'Vote2019R', # Used to determine UK General Election 2019 vote
+        'pastvote_EURef', # Used to determine Brexit referendum vote
+        'Political_Left_Right', # Used to determine political views
+        'Selftransc_Val',
+        'Selfenh_Values',
+        'Openness',
+        'ConformTrad',
+        'SDO',
+        'EDO',
+        'RWA',
+        'page5posttreatment6_1',
+        'page5posttreatment6_4',
+        'page5posttreatment6_5',
+        'page5posttreatment6_7',
+        'page5posttreatment6_9',
+        'page5posttreatment6_11',
+        'ProClimatePolSupp'
+    ]
+    data: pd.DataFrame | None= load("data/yougov_survey_data/YouGovProcessedData.csv", required_columns=required_columns)
+    #logging.info(data.head())
+    #logging.info(data.columns)
+    #logging.info(data.dtypes)
+    logging.info("...loaded survey data")
+    
+    # Create SurveyedCitizens from the survey data
+    logging.info("Creating SurveyedCitizens from survey data...")
+    scs = []
+    for i in range(len(data)):
+        agent_id = data.iloc[i].get('ID', None)
+        #logging.info(f"Creating SurveyedCitizen {agent_id} from survey data row {i}...")
+        #logging.info(data.iloc[i])
+        age: int = int(data.iloc[i].get('age', 0))
+        #logging.info(f"age: {age}")
+        year_of_birth: int = year - age
+        #logging.info(f"year_of_birth: {year_of_birth}")
+        male_dummy: int = int(data.iloc[i].get('male_dummy', 0))
+        #logging.info(f"male_dummy: {male_dummy}")
+        gender_id: GenderID = GenderID.MALE if male_dummy == 1 else GenderID.FEMALE
+        #logging.info(f"gender: {gender_map[gender_id].description}")
+        tprofile_GOR: int = int(data.iloc[i].get('tprofile_GOR', 0))
+        #logging.info(f"tprofile_GOR: {tprofile_GOR}")
+        region_id: RegionID = RegionID(tprofile_GOR)
+        #logging.info(f"region: {uk_region_map[region_id].description}")
+        profile_education_level: int = int(data.iloc[i].get('profile_education_level', 0))
+        #logging.info(f"profile_education_level: {profile_education_level}")
+        education_id: EducationID = EducationID(profile_education_level)
+        #logging.info(f"education: {survey_education_map[education_id].description}")
+        tprofile_gross_household: int = int(data.iloc[i].get('tprofile_gross_household', 0))
+        #logging.info(f"tprofile_gross_household: {tprofile_gross_household}")
+        income_id: IncomeID = IncomeID(tprofile_gross_household)
+        #logging.info(f"income: {survey_income_map[income_id].description}")
+        ethnicity_R: int = int(data.iloc[i].get('ethnicity_R', 0))
+        #logging.info(f"ethnicity_R: {ethnicity_R}")
+        ethnicity_id: EthnicityID = EthnicityID(ethnicity_R)
+        #logging.info(f"ethnicity: {survey_ethnicity_map[ethnicity_id].description}")
+        parent_dummy: int = int(data.iloc[i].get('parent_dummy', 0))
+        #logging.info(f"parent_dummy: {parent_dummy}")
+        family_id: FamilyID = FamilyID.PARENT if parent_dummy == 1 else FamilyID.NOT_PARENT
+        #logging.info(f"family status: {survey_family_map[family_id].description}")
+        Vote2019R: int = int(data.iloc[i].get('Vote2019R', 0))
+        #logging.info(f"Vote2019R: {Vote2019R}")
+        ukge2019_vote_id: UKGE2019VoteID = UKGE2019VoteID(Vote2019R)
+        #logging.info(f"UKGE2019 vote: {ukge2019_vote_map[ukge2019_vote_id].description}")
+        pastvote_EURef: int = int(data.iloc[i].get('pastvote_EURef', 0))
+        #logging.info(f"pastvote_EURef: {pastvote_EURef}")
+        brexit_vote_id: BrexitVoteID = BrexitVoteID(pastvote_EURef)
+        #logging.info(f"Brexit vote: {brexit_vote_map[brexit_vote_id].description}")       
+        Political_Left_Right: int = int(data.iloc[i].get('Political_Left_Right', 0))
+        #logging.info(f"Political_Left_Right: {Political_Left_Right}")
+        politics_id: PoliticsID = PoliticsID(Political_Left_Right)
+        #logging.info(f"politics: {survey_politics_map[politics_id].description}")
+        scs.append(SurveyedCitizen(
+            agent_id=agent_id,
+            environment=surveyed_nation,
+            year_of_birth=year_of_birth,
+            gender_id=gender_id,
+            region_id=region_id,
+            ethnicity_id=ethnicity_id,
+            income_id=income_id,
+            education_id=education_id,
+            politics_id=politics_id,
+            family_id=family_id,
+            ukge2019_vote_id=ukge2019_vote_id,
+            brexit_vote_id=brexit_vote_id
+        ))
+        #logging.info(f"...created SurveyedCitizen {agent_id} from survey data row {i}.")       
+    logging.info("...created SurveyedCitizens from survey data")
+
+    # For demonstration purposes, log a random sample of the SurveyedCitizens
+    n_sample = 2
+    logging.info(f"Random sample of {n_sample} SurveyedCitizens...")
+    indexes = random.sample(range(len(scs)), min(n_sample, len(scs))) 
+    for idx in indexes:
+        #logging.info(str(scs[idx]))
+        logging.info(f"Persona: {scs[idx].get_persona()}")
+    
+    # Add SurveyedCitizens to the SurveyedNation environment
+    logging.info("Adding SurveyedCitizens to the SurveyedNation environment...")
+    for sc in scs:
+        surveyed_nation.agents_active[sc.id] = sc
+    logging.info("... added SurveyedCitizens to the SurveyedNation environment")
 
 if __name__ == "__main__":
     # Set up logging to file and console
