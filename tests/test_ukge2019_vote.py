@@ -14,8 +14,8 @@ class TestUKGE2019Vote(unittest.TestCase):
     def test_vote_id_mapping(self):
         self.assertEqual(self.vote_map.get(UKGE2019VoteID.CONSERVATIVE).description, "Conservative")
         self.assertEqual(self.vote_map.get(UKGE2019VoteID.LABOUR).description, "Labour")
-        self.assertEqual(self.vote_map.get(UKGE2019VoteID.UNKNOWN).description, "Unknown vote")
-        self.assertEqual(self.vote_map.get(UKGE2019VoteID.DONT_KNOW).description, "Don't know")
+        self.assertEqual(self.vote_map.get(UKGE2019VoteID.UNKNOWN).description, "unknown")
+        self.assertEqual(self.vote_map.get(UKGE2019VoteID.DONT_KNOW).description, "don't know")
 
     def test_invalid_vote_id(self):
         class DummyVoteID:

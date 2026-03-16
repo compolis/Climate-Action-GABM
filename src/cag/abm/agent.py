@@ -50,10 +50,20 @@ class SurveyedCitizen(Citizen):
             The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
         brexit_vote_id (BrexitVoteID):
             The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
-        selftransc_val_id (Selftransc_ValID):
-            The agent's self-transcendence value, represented as a Selftransc_ValID.
-        selfenh_value_id (Selfenh_ValuesID):
-            The agent's self-enhancement value, represented as a Selfenh_ValuesID.
+        selftransc_id (NarrativeAttributeID):
+            The agent's selftransc value.
+        selfenh_id (NarrativeAttributeID):
+            The agent's selfenh value.
+        openness_id (NarrativeAttributeID):
+            The agent's openness value.
+        conformtrad_id (NarrativeAttributeID):
+            The agent's conformtrad value.
+        sdo_id (NarrativeAttributeID):
+            The agent's SDO value.
+        edo_id (NarrativeAttributeID):
+            The agent's EDO value.
+        rwa_id (NarrativeAttributeID):
+            The agent's RWA value.
     """
     def __init__(
         self,
@@ -69,8 +79,13 @@ class SurveyedCitizen(Citizen):
         family_id: FamilyID,
         ukge2019_vote_id: UKGE2019VoteID = None,
         brexit_vote_id: BrexitVoteID = None,
-        selftransc_val_id: Selftransc_ValID = None,
-        selfenh_value_id: Selfenh_ValuesID = None
+        selftransc_id: NarrativeAttributeID = None,
+        selfenh_id: NarrativeAttributeID = None,
+        openness_id: NarrativeAttributeID = None,
+        conformtrad_id: NarrativeAttributeID = None,
+        sdo_id: NarrativeAttributeID = None,
+        edo_id: NarrativeAttributeID = None,
+        rwa_id: NarrativeAttributeID = None
     ):
         """
         Initializes a SurveyedCitizen agent with the given attributes.
@@ -100,10 +115,20 @@ class SurveyedCitizen(Citizen):
                 The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
             brexit_vote_id (BrexitVoteID):
                 The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
-            selftransc_val_id (Selftransc_ValID):
-                The agent's self-transcendence value, represented as a Selftransc_ValID.
-            selfenh_value_id (Selfenh_ValuesID):
-                The agent's self-enhancement value, represented as a Selfenh_ValuesID.
+            selftransc_id (NarrativeAttributeID):
+                The agent's selftransc value.
+            selfenh_id (NarrativeAttributeID):
+                The agent's selfenh value.
+            openness_id (NarrativeAttributeID):
+                The agent's openness value.
+            conformtrad_id (NarrativeAttributeID):
+                The agent's conformtrad value.
+            sdo_id (NarrativeAttributeID):
+                The agent's SDO value.
+            edo_id (NarrativeAttributeID):
+                The agent's EDO value.
+            rwa_id (NarrativeAttributeID):
+                The agent's RWA value.
         """
         super().__init__(agent_id, environment, year_of_birth, gender_id)
         self.region_id = region_id
@@ -114,8 +139,13 @@ class SurveyedCitizen(Citizen):
         self.family_id = family_id
         self.ukge2019_vote_id = ukge2019_vote_id
         self.brexit_vote_id = brexit_vote_id
-        self.selftransc_val_id = selftransc_val_id
-        self.selfenh_value_id = selfenh_value_id
+        self.selftransc_id = selftransc_id
+        self.selfenh_id = selfenh_id
+        self.openness_id = openness_id
+        self.conformtrad_id = conformtrad_id
+        self.sdo_id = sdo_id
+        self.edo_id = edo_id
+        self.rwa_id = rwa_id
 
     def __str__(self):
         """
@@ -141,8 +171,14 @@ class SurveyedCitizen(Citizen):
             brexit_vote_str = 'Unknown'
         r += f", UKGE2019 vote={ukge2019_vote_str}"
         r += f", Brexit vote={brexit_vote_str}"
-        r += f", Self-transcendence value={sn.selftransc_val_map.get(self.selftransc_val_id).description}"
-        r += f", Self-enhancement value={sn.selfenh_value_map.get(self.selfenh_value_id).description}"
+        r += f", Selftransc value={sn.selftransc_map.get(self.selftransc_id).description}"
+        r += f", Selfenh value={sn.selfenh_map.get(self.selfenh_id).description}"
+        r += f", Openness value={sn.openness_map.get(self.openness_id).description}"
+        r += f", Conformtrad value={sn.conformtrad_map.get(self.conformtrad_id).description}"
+        r += f", SDO value={sn.sdo_map.get(self.sdo_id).description}"
+        r += f", EDO value={sn.edo_map.get(self.edo_id).description}"
+        r += f", RWA value={sn.rwa_map.get(self.rwa_id).description}"
+
         return r
 
     def get_surveyed_nation(self) -> SurveyedNation:
@@ -167,10 +203,16 @@ class SurveyedCitizen(Citizen):
         income = sn.income_map.get(self.income_id).description
         politics = sn.politics_map.get(self.politics_id).description
         family = sn.family_map.get(self.family_id).description
-        ukge2019_vote_obj = sn.ukge2019_vote_map.get(self.ukge2019_vote_id)
-        ukge2019_vote = getattr(ukge2019_vote_obj, 'description', str(ukge2019_vote_obj)) if ukge2019_vote_obj else 'Unknown'
-        brexit_vote_obj = sn.brexit_vote_map.get(self.brexit_vote_id)
-        brexit_vote = getattr(brexit_vote_obj, 'description', str(brexit_vote_obj)) if brexit_vote_obj else 'Unknown'
+        try:
+            ukge2019_vote_obj = sn.ukge2019_vote_map.get(self.ukge2019_vote_id)
+            ukge2019_vote = getattr(ukge2019_vote_obj, 'description', str(ukge2019_vote_obj)) if ukge2019_vote_obj else 'Unknown'
+        except TypeError:
+            ukge2019_vote = 'Unknown'
+        try:
+            brexit_vote_obj = sn.brexit_vote_map.get(self.brexit_vote_id)
+            brexit_vote = getattr(brexit_vote_obj, 'description', str(brexit_vote_obj)) if brexit_vote_obj else 'Unknown'
+        except TypeError:
+            brexit_vote = 'Unknown'
         r: str = f"I am a {age} year old {gender} living in the {region}. "
         if ethnicity != "unknown" and ethnicity != "other":
             r += f"My ethnicity is {ethnicity}. "

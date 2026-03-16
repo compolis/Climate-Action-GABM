@@ -12,10 +12,10 @@ class TestBrexitVote(unittest.TestCase):
         self.vote_map = BrexitVoteMap(self.election_id)
 
     def test_vote_id_mapping(self):
-        self.assertEqual(self.vote_map.get(BrexitVoteID.REMAIN).description, "Remain")
-        self.assertEqual(self.vote_map.get(BrexitVoteID.LEAVE).description, "Leave")
-        self.assertEqual(self.vote_map.get(BrexitVoteID.UNKNOWN).description, "Unknown")
-        self.assertEqual(self.vote_map.get(BrexitVoteID.DONT_KNOW).description, "Don't know")
+        self.assertEqual(self.vote_map.get(BrexitVoteID.UNKNOWN).description, "unknown")
+        self.assertEqual(self.vote_map.get(BrexitVoteID.REMAIN).description, "voted to remain")
+        self.assertEqual(self.vote_map.get(BrexitVoteID.LEAVE).description, "voted to leave")
+        self.assertEqual(self.vote_map.get(BrexitVoteID.DONT_KNOW).description, "don't know what I voted")
 
     def test_invalid_vote_id(self):
         class DummyVoteID:

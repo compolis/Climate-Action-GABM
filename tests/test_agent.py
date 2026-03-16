@@ -20,6 +20,7 @@ from gabm.abm.attributes.politics import PoliticsID
 from gabm.abm.attributes.education import EducationID
 from gabm.abm.attributes.region import RegionID
 from gabm.abm.attributes.family import FamilyID
+from cag.abm.attributes.narratives import SelftranscMap, SelfenhMap, OpennessMap, ConformTradMap, SDOMap, EDOMap, RWAMap, NarrativeAttributeID, UNKNOWN, HIGH, LOW, MODERATE
 
 class TestSurveyedCitizen(unittest.TestCase):
     def setUp(self):
@@ -32,6 +33,13 @@ class TestSurveyedCitizen(unittest.TestCase):
         self.family_map = SurveyFamilyMap()
         self.ukge2019_vote_map = UKGE2019VoteMap(0)
         self.brexit_vote_map = BrexitVoteMap(1)
+        self.selftransc_map = SelftranscMap
+        self.selfenh_map = SelfenhMap
+        self.openness_map = OpennessMap
+        self.conformtrad_map = ConformTradMap
+        self.sdo_map = SDOMap
+        self.edo_map = EDOMap
+        self.rwa_map = RWAMap
         self.env = SurveyedNation(
             year=2026,
             place="UK",
@@ -43,7 +51,14 @@ class TestSurveyedCitizen(unittest.TestCase):
             politics_map=self.politics_map,
             family_map=self.family_map,
             ukge2019_vote_map=self.ukge2019_vote_map,
-            brexit_vote_map=self.brexit_vote_map
+            brexit_vote_map=self.brexit_vote_map,
+            selftransc_map=self.selftransc_map,
+            selfenh_map=self.selfenh_map,
+            openness_map=self.openness_map,
+            conformtrad_map=self.conformtrad_map,
+            sdo_map=self.sdo_map,
+            edo_map=self.edo_map,
+            rwa_map=self.rwa_map
         )
 
     def test_agent_str_and_persona(self):
@@ -59,16 +74,23 @@ class TestSurveyedCitizen(unittest.TestCase):
             politics_id=PoliticsID.CENTRE,
             family_id=FamilyID.NOT_PARENT,
             ukge2019_vote_id=UKGE2019VoteID.CONSERVATIVE,
-            brexit_vote_id=BrexitVoteID.LEAVE
+            brexit_vote_id=BrexitVoteID.LEAVE,
+            selftransc_id=HIGH,
+            selfenh_id=HIGH,
+            openness_id=HIGH,
+            conformtrad_id=HIGH,
+            sdo_id=HIGH,
+            edo_id=HIGH,
+            rwa_id=HIGH
         )
         s = str(agent)
         self.assertIn("London", s)
         self.assertIn("Conservative", s)
-        self.assertIn("Leave", s)
+        self.assertIn("voted to leave", s)
         persona = agent.get_persona()
         self.assertIn("London", persona)
         self.assertIn("Conservative", persona)
-        self.assertIn("Leave", persona)
+        self.assertIn("voted to leave", persona)
 
     def test_unknown_vote(self):
         agent = SurveyedCitizen(
@@ -83,7 +105,14 @@ class TestSurveyedCitizen(unittest.TestCase):
             politics_id=PoliticsID.CENTRE,
             family_id=FamilyID.NOT_PARENT,
             ukge2019_vote_id=None,
-            brexit_vote_id=None
+            brexit_vote_id=None,
+            selftransc_id=HIGH,
+            selfenh_id=HIGH,
+            openness_id=HIGH,
+            conformtrad_id=HIGH,
+            sdo_id=HIGH,
+            edo_id=HIGH,
+            rwa_id=HIGH
         )
         # Should not raise, should include 'Unknown' for votes
         try:
