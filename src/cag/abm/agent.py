@@ -31,7 +31,7 @@ class SurveyedCitizen(Citizen):
     A Surveyed Citizen agent class for Climate-Action-GABM, inheriting from the GABM Citizen class.
         
     .. note::
-        Inherits all attributes from :class:`Person`.
+        Inherits all attributes from :class:`Citizen`.
     
     Attributes:
         region_id (RegionID):
@@ -46,6 +46,24 @@ class SurveyedCitizen(Citizen):
             The agent's political views, represented as a PoliticsID.
         family_id (FamilyID):
             The agent's family status, represented as a FamilyID.
+        ukge2019_vote_id (UKGE2019VoteID):
+            The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
+        brexit_vote_id (BrexitVoteID):
+            The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
+        selftransc_id (NarrativeAttributeID):
+            The agent's selftransc value.
+        selfenh_id (NarrativeAttributeID):
+            The agent's selfenh value.
+        openness_id (NarrativeAttributeID):
+            The agent's openness value.
+        conformtrad_id (NarrativeAttributeID):
+            The agent's conformtrad value.
+        sdo_id (NarrativeAttributeID):
+            The agent's SDO value.
+        edo_id (NarrativeAttributeID):
+            The agent's EDO value.
+        rwa_id (NarrativeAttributeID):
+            The agent's RWA value.
     """
     def __init__(
         self,
@@ -60,7 +78,14 @@ class SurveyedCitizen(Citizen):
         politics_id: PoliticsID,
         family_id: FamilyID,
         ukge2019_vote_id: UKGE2019VoteID = None,
-        brexit_vote_id: BrexitVoteID = None
+        brexit_vote_id: BrexitVoteID = None,
+        selftransc_id: NarrativeAttributeID = None,
+        selfenh_id: NarrativeAttributeID = None,
+        openness_id: NarrativeAttributeID = None,
+        conformtrad_id: NarrativeAttributeID = None,
+        sdo_id: NarrativeAttributeID = None,
+        edo_id: NarrativeAttributeID = None,
+        rwa_id: NarrativeAttributeID = None
     ):
         """
         Initializes a SurveyedCitizen agent with the given attributes.
@@ -90,7 +115,20 @@ class SurveyedCitizen(Citizen):
                 The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
             brexit_vote_id (BrexitVoteID):
                 The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
-
+            selftransc_id (NarrativeAttributeID):
+                The agent's selftransc value.
+            selfenh_id (NarrativeAttributeID):
+                The agent's selfenh value.
+            openness_id (NarrativeAttributeID):
+                The agent's openness value.
+            conformtrad_id (NarrativeAttributeID):
+                The agent's conformtrad value.
+            sdo_id (NarrativeAttributeID):
+                The agent's SDO value.
+            edo_id (NarrativeAttributeID):
+                The agent's EDO value.
+            rwa_id (NarrativeAttributeID):
+                The agent's RWA value.
         """
         super().__init__(agent_id, environment, year_of_birth, gender_id)
         self.region_id = region_id
@@ -101,6 +139,13 @@ class SurveyedCitizen(Citizen):
         self.family_id = family_id
         self.ukge2019_vote_id = ukge2019_vote_id
         self.brexit_vote_id = brexit_vote_id
+        self.selftransc_id = selftransc_id
+        self.selfenh_id = selfenh_id
+        self.openness_id = openness_id
+        self.conformtrad_id = conformtrad_id
+        self.sdo_id = sdo_id
+        self.edo_id = edo_id
+        self.rwa_id = rwa_id
 
     def __str__(self):
         """
@@ -126,6 +171,14 @@ class SurveyedCitizen(Citizen):
             brexit_vote_str = 'Unknown'
         r += f", UKGE2019 vote={ukge2019_vote_str}"
         r += f", Brexit vote={brexit_vote_str}"
+        r += f", Selftransc value={sn.selftransc_map.get(self.selftransc_id).description}"
+        r += f", Selfenh value={sn.selfenh_map.get(self.selfenh_id).description}"
+        r += f", Openness value={sn.openness_map.get(self.openness_id).description}"
+        r += f", Conformtrad value={sn.conformtrad_map.get(self.conformtrad_id).description}"
+        r += f", SDO value={sn.sdo_map.get(self.sdo_id).description}"
+        r += f", EDO value={sn.edo_map.get(self.edo_id).description}"
+        r += f", RWA value={sn.rwa_map.get(self.rwa_id).description}"
+
         return r
 
     def get_surveyed_nation(self) -> SurveyedNation:
@@ -160,12 +213,36 @@ class SurveyedCitizen(Citizen):
             brexit_vote = getattr(brexit_vote_obj, 'description', str(brexit_vote_obj)) if brexit_vote_obj else 'Unknown'
         except TypeError:
             brexit_vote = 'Unknown'
+        r: str = f"I am a {age} year old {gender} living in the {region}. "
+        if ethnicity != "unknown" and ethnicity != "other":
+            r += f"My ethnicity is {ethnicity}. "
+        if education != "unknown":
+            r += f"I have a {education}. "
+        if income != "unknown":
+            r += f"My gross household income is {income}. "
+        if family != "unknown":
+            r += f"I am {family}. "
+        if politics != "unknown" and politics != "don't know":
+            r += f"I position myself {politics} of the political spectrum. "
+        if ukge2019_vote != "unknown" and ukge2019_vote != "another" and ukge2019_vote != "don't know":
+            r += f"I voted for the {ukge2019_vote} party candidate in the 2019 General Election. "
+        if brexit_vote != "unknown" and brexit_vote != "don't know":
+            r += f"I {brexit_vote} in the 2016 EU Referendum."
+        return r
+ 
+    def get_narrative(self) -> str:
+        """
+        Returns a narrative based on attributes.
 
-        return (f"I am a {age} year old {gender} living in the {region}. "
-            f"My ethnicity is {ethnicity}. "
-            f"I have a {education}. "
-            f"My gross household income is {income}. "
-            f"I am {family}. "
-            f"I position myself {politics} of the political spectrum. "
-            f"I voted for the {ukge2019_vote} candidate in the 2019 General Election. "
-            f"I voted to {brexit_vote} in the 2016 EU Referendum.")
+        Returns:
+            A string representing the narrative.
+        """
+        sn = self.environment
+        selftransc = sn.selftransc_map.get(self.selftransc_val_id).description
+        selfenh = sn.selfenh_map.get(self.selfenh_value_id).description
+        openness = sn.openness_map.get(self.selfenh_value_id).description
+        conformtrad = sn.conformtrad_map.get(self.selfenh_value_id).description
+        sdo = sn.sdo_map.get(self.selfenh_value_id).description
+        edo = sn.edo_map.get(self.selfenh_value_id).description
+        rwa = sn.rwa_map.get(self.selfenh_value_id).description
+        return f"{selftransc} {selfenh} {openness} {conformtrad} {sdo} {edo} {rwa}"

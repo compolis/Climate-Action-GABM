@@ -79,10 +79,10 @@ class BrexitVoteMap(GABMAttributeMap):
         Initialize the UK Brexit Referendum Vote Map.
         """
         items = {
-            BrexitVoteID.UNKNOWN: BrexitVote(BrexitVoteID.UNKNOWN, election_id, description="Unknown"),
-            BrexitVoteID.REMAIN: BrexitVote(BrexitVoteID.REMAIN, election_id, description="Remain"),
-            BrexitVoteID.LEAVE: BrexitVote(BrexitVoteID.LEAVE, election_id, description="Leave"),
-            BrexitVoteID.DONT_KNOW: BrexitVote(BrexitVoteID.DONT_KNOW, election_id, description="Don't know")
+            BrexitVoteID.UNKNOWN: BrexitVote(BrexitVoteID.UNKNOWN, election_id, description="unknown"),
+            BrexitVoteID.REMAIN: BrexitVote(BrexitVoteID.REMAIN, election_id, description="voted to remain"),
+            BrexitVoteID.LEAVE: BrexitVote(BrexitVoteID.LEAVE, election_id, description="voted to leave"),
+            BrexitVoteID.DONT_KNOW: BrexitVote(BrexitVoteID.DONT_KNOW, election_id, description="don't know what I voted")
         }
         super().__init__(items)
 

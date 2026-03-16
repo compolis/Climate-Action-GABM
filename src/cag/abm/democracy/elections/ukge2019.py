@@ -95,14 +95,14 @@ class UKGE2019VoteMap(GABMAttributeMap):
 
         """
         items: Dict[UKGEVoteID, UKGE2019Vote] = {
-            UKGE2019VoteID.UNKNOWN: UKGE2019Vote(UKGE2019VoteID.UNKNOWN, "Unknown vote", election_id),
+            UKGE2019VoteID.UNKNOWN: UKGE2019Vote(UKGE2019VoteID.UNKNOWN, "unknown", election_id),
             UKGE2019VoteID.CONSERVATIVE: UKGE2019Vote(UKGE2019VoteID.CONSERVATIVE, "Conservative", election_id),
             UKGE2019VoteID.LABOUR: UKGE2019Vote(UKGE2019VoteID.LABOUR, "Labour", election_id),
-            UKGE2019VoteID.LIBERAL_DEMOCRATS: UKGE2019Vote(UKGE2019VoteID.LIBERAL_DEMOCRATS, "Liberal Democrats", election_id),
-            UKGE2019VoteID.BREXIT: UKGE2019Vote(UKGE2019VoteID.BREXIT, " Brexit", election_id),
+            UKGE2019VoteID.LIBERAL_DEMOCRATS: UKGE2019Vote(UKGE2019VoteID.LIBERAL_DEMOCRATS, "Liberal Democrat", election_id),
+            UKGE2019VoteID.BREXIT: UKGE2019Vote(UKGE2019VoteID.BREXIT, "Brexit", election_id),
             UKGE2019VoteID.GREEN: UKGE2019Vote(UKGE2019VoteID.GREEN, "Green", election_id),
-            UKGE2019VoteID.OTHER: UKGE2019Vote(UKGE2019VoteID.OTHER, "Other", election_id),
-            UKGE2019VoteID.DONT_KNOW: UKGE2019Vote(UKGE2019VoteID.DONT_KNOW, "Don't know", election_id)
+            UKGE2019VoteID.OTHER: UKGE2019Vote(UKGE2019VoteID.OTHER, "another", election_id),
+            UKGE2019VoteID.DONT_KNOW: UKGE2019Vote(UKGE2019VoteID.DONT_KNOW, "don't know", election_id)
         }
         super().__init__(items)
 

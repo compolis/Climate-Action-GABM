@@ -41,7 +41,10 @@ from cag.abm.attributes.region import UKRegionMap
 from cag.abm.attributes.family import SurveyFamilyMap
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID, UKGE2019, UKGE2019VoteMap
 from cag.abm.democracy.elections.brexit import BrexitVoteID, Brexit, BrexitVoteMap
-
+from cag.abm.attributes.narratives import (NarrativeAttributeID, SelftranscMap, SelfenhMap,
+    OpennessMap, ConformTradMap, SDOMap, EDOMap, RWAMap,
+    rescale_1_6, rescale_1_7
+)
 from cag.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue
 
 def main():
@@ -66,6 +69,13 @@ def main():
     survey_family_map = SurveyFamilyMap()
     ukge2019_vote_map = UKGE2019VoteMap(UKGE2019_ELECTION_ID)
     brexit_vote_map = BrexitVoteMap(BREXIT_REFERENDUM_ID)
+    selftransc_map = SelftranscMap
+    selfenh_map = SelfenhMap
+    openness_map = OpennessMap
+    conformtrad_map = ConformTradMap
+    sdo_map = SDOMap
+    edo_map = EDOMap
+    rwa_map = RWAMap
 
     # Create a SurveyedNation environment
     logging.info("Creating SurveyedNation...")
@@ -81,40 +91,20 @@ def main():
         politics_map=survey_politics_map,
         family_map=survey_family_map,
         ukge2019_vote_map=ukge2019_vote_map,
-        brexit_vote_map=brexit_vote_map
+        brexit_vote_map=brexit_vote_map,
+        selftransc_map=selftransc_map,
+        selfenh_map=selfenh_map,
+        openness_map=openness_map,
+        conformtrad_map=conformtrad_map,
+        sdo_map=sdo_map,
+        edo_map=edo_map,
+        rwa_map=rwa_map
     )
     logging.info(f"... created SurveyedNation: {surveyed_nation}")
 
     # Load survey data
     logging.info("Loading survey data...")
-    required_columns = [
-        'ID',
-        'age', # Used to determine year of birth
-        'male_dummy', # Used to determine gender 0 = female, 1 = male
-        'tprofile_GOR', # Used to determine region
-        "profile_education_level", # Used to determine education level
-        'tprofile_gross_household', # Used to determine income level
-        'ethnicity_R', # Used to determine ethnicity
-        'parent_dummy', # Used to determine family status
-        'Vote2019R', # Used to determine UK General Election 2019 vote
-        'pastvote_EURef', # Used to determine Brexit referendum vote
-        'Political_Left_Right', # Used to determine political views
-        'Selftransc_Val',
-        'Selfenh_Values',
-        'Openness',
-        'ConformTrad',
-        'SDO',
-        'EDO',
-        'RWA',
-        'page5posttreatment6_1',
-        'page5posttreatment6_4',
-        'page5posttreatment6_5',
-        'page5posttreatment6_7',
-        'page5posttreatment6_9',
-        'page5posttreatment6_11',
-        'ProClimatePolSupp'
-    ]
-    data: pd.DataFrame | None= load("data/yougov_survey_data/YouGovProcessedData.csv", required_columns=required_columns)
+    data: pd.DataFrame | None= load("data/yougov_survey_data/YouGovProcessedData.csv")
     #logging.info(data.head())
     #logging.info(data.columns)
     #logging.info(data.dtypes)
@@ -167,6 +157,47 @@ def main():
         #logging.info(f"Political_Left_Right: {Political_Left_Right}")
         politics_id: PoliticsID = PoliticsID(Political_Left_Right)
         #logging.info(f"politics: {survey_politics_map[politics_id].description}")
+        Selftransc_Val: int = int(data.iloc[i].get('Selftransc_Val', 0))
+        #logging.info(f"Raw Selftransc_Val from data: {Selftransc_Val}")
+        selftransc_val_id = rescale_1_6(Selftransc_Val)
+        #desc_obj = selftransc_val_map.get(selftransc_val_id)
+        #desc = desc_obj.description if desc_obj is not None else "Unknown"
+        #logging.info(f"self-transcendence value: {desc}")
+        Selfenh_Values: int = int(data.iloc[i].get('Selfenh_Values', 0))
+        #logging.info(f"Raw Selfenh_Values from data: {Selfenh_Values}")
+        selfenh_value_id = rescale_1_6(Selfenh_Values)
+        #logging.info(f"self-enhancement value: {desc}")
+        Openness_Val: int = int(data.iloc[i].get('Openness', 0))
+        #logging.info(f"Raw Openness_Val from data: {Openness_Val}")
+        rescaled_openness = rescale_1_6(Openness_Val)
+        #logging.info(f"Rescaled Openness_Val: {rescaled_openness}")
+        openness_val_id = NarrativeAttributeID(rescaled_openness)
+        #logging.info(f"openness value: {desc}")
+        ConformTrad_Val: int = int(data.iloc[i].get('ConformTrad', 0))
+        #logging.info(f"Raw ConformTrad_Val from data: {ConformTrad_Val}")
+        rescaled_conformtrad = rescale_1_6(ConformTrad_Val)
+        #logging.info(f"Rescaled ConformTrad_Val: {rescaled_conformtrad}")
+        conformtrad_val_id = NarrativeAttributeID(rescaled_conformtrad)
+        #logging.info(f"conformity-tradition value: {desc}")
+        SDO_Val: int = int(data.iloc[i].get('SDO', 0))
+        #logging.info(f"Raw SDO_Val from data: {SDO_Val}")
+        rescaled_sdo = rescale_1_7(SDO_Val)
+        #logging.info(f"Rescaled SDO_Val: {rescaled_sdo}")
+        sdo_val_id = NarrativeAttributeID(rescaled_sdo)
+        #logging.info(f"social dominance orientation value: {desc}")
+        EDO_Val: int = int(data.iloc[i].get('EDO', 0))
+        #logging.info(f"Raw EDO_Val from data: {EDO_Val}")
+        rescaled_edo = rescale_1_7(EDO_Val)
+        #logging.info(f"Rescaled EDO_Val: {rescaled_edo}")
+        edo_val_id = NarrativeAttributeID(rescaled_edo)
+        #logging.info(f"environmental dominance orientation value: {desc}")
+        RWA_Val: int = int(data.iloc[i].get('RWA', 0))
+        #logging.info(f"Raw RWA_Val from data: {RWA_Val}")
+        rescaled_rwa = rescale_1_6(RWA_Val)
+        #logging.info(f"Rescaled RWA_Val: {rescaled_rwa}")
+        rwa_val_id = NarrativeAttributeID(rescaled_rwa)
+        #logging.info(f"right-wing authoritarianism value: {desc}")
+
         scs.append(SurveyedCitizen(
             agent_id=agent_id,
             environment=surveyed_nation,
@@ -179,7 +210,9 @@ def main():
             politics_id=politics_id,
             family_id=family_id,
             ukge2019_vote_id=ukge2019_vote_id,
-            brexit_vote_id=brexit_vote_id
+            brexit_vote_id=brexit_vote_id,
+            selftransc_val_id=selftransc_val_id,
+            selfenh_value_id=selfenh_value_id
         ))
         #logging.info(f"...created SurveyedCitizen {agent_id} from survey data row {i}.")       
     logging.info("...created SurveyedCitizens from survey data")
@@ -191,6 +224,7 @@ def main():
     for idx in indexes:
         #logging.info(str(scs[idx]))
         logging.info(f"Persona: {scs[idx].get_persona()}")
+        logging.info(f"Narrative: {scs[idx].get_narrative()}")
     
     # Add SurveyedCitizens to the SurveyedNation environment
     logging.info("Adding SurveyedCitizens to the SurveyedNation environment...")
