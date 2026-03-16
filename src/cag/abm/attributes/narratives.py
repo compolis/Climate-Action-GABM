@@ -137,3 +137,41 @@ RWA = [
 
 RWA_items = {id: NarrativeAttribute(id, desc) for id, desc in RWA}
 RWAMap = NarrativeAttributeMap(RWA_items)
+
+def rescale_1_6(val : int) -> NarrativeAttributeID: 
+    """
+    Utility function to rescale 1-6 to 1-3 (1-2 -> 1, 3-4 -> 2, 5-6 -> 3)
+
+    Args:
+        val (int): The value to rescale, expected to be in the range 1-6.
+
+    Returns:
+        NarrativeAttributeID: The rescaled value in the range 1-3, or 0 if the input is outside the expected range.
+    """
+    if val in [1, 2]:
+        return LOW
+    elif val in [3, 4]:
+        return MODERATE
+    elif val in [5, 6]:
+        return HIGH
+    else:
+        return UNKNOWN
+
+def rescale_1_7(val : int) -> NarrativeAttributeID:
+    """
+    Utility function to rescale 1-7 to 1-3 (1-3 -> 1, 4-5 -> 2, 6-7 -> 3)
+
+    Args:
+        val (int): The value to rescale, expected to be in the range 1-7.
+
+    Returns:
+        NarrativeAttributeID: The rescaled value in the range 1-3, or NarrativeAttributeID.UNKNOWN if the input is outside the expected range.
+    """
+    if val in [1, 2, 3]:
+        return LOW
+    elif val in [4, 5]:
+        return MODERATE
+    elif val in [6, 7]:
+        return HIGH
+    else:
+        return UNKNOWN

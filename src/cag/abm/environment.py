@@ -22,7 +22,7 @@ from cag.abm.attributes.politics import SurveyPoliticsMap
 from cag.abm.attributes.family import SurveyFamilyMap
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteMap
 from cag.abm.democracy.elections.brexit import BrexitVoteMap
-from cag.abm.attributes.narratives import SelftranscMap, SelfenhMap
+from cag.abm.attributes.narratives import SelftranscMap, SelfenhMap, OpennessMap, ConformTradMap, SDOMap, EDOMap, RWAMap
 
 class SurveyedNation(Nation):
     """
@@ -52,6 +52,16 @@ class SurveyedNation(Nation):
             A SelftranscMap instance for self-transcendence value attribute lookups.
         selfenh_map (SelfenhMap):
             A SelfenhMap instance for self-enhancement value attribute lookups.
+        openness_map (OpennessMap):
+            An OpennessMap instance for openness attribute lookups.
+        conformtrad_map (ConformTradMap):
+            A ConformTradMap instance for conformity-tradition attribute lookups.
+        sdo_map (SDOMap):
+            An SDOMap instance for social dominance orientation attribute lookups.
+        edo_map (EDOMap):
+            An EDOMap instance for environmental dominance orientation attribute lookups.
+        rwa_map (RWAMap):
+            An RWAMap instance for right-wing authoritarianism attribute lookups.
     """
     def __init__(self, year: int = 2026, place: str = "UK", 
         gender_map: GenderMap = None,
@@ -65,7 +75,12 @@ class SurveyedNation(Nation):
         ukge2019_vote_map: UKGE2019VoteMap = None,
         brexit_vote_map: BrexitVoteMap = None,
         selftransc_map: SelftranscMap = None,
-        selfenh_map: SelfenhMap = None):
+        selfenh_map: SelfenhMap = None,
+        openness_map: OpennessMap = None,
+        conformtrad_map: ConformTradMap = None,
+        sdo_map: SDOMap = None,
+        edo_map: EDOMap = None,
+        rwa_map: RWAMap = None):
         """
         Initialize.
         Args:
@@ -98,7 +113,16 @@ class SurveyedNation(Nation):
                 A SelftranscMap instance for self-transcendence value attribute lookups.
             selfenh_map (SelfenhMap):
                 A SelfenhMap instance for self-enhancement value attribute lookups.
-
+            openness_map (OpennessMap):
+                An OpennessMap instance for openness attribute lookups.
+            conformtrad_map (ConformTradMap):
+                A ConformTradMap instance for conformity-tradition attribute lookups.
+            sdo_map (SDOMap):
+                An SDOMap instance for social dominance orientation attribute lookups.
+            edo_map (EDOMap):
+                An EDOMap instance for environmental dominance orientation attribute lookups.
+            rwa_map (RWAMap):
+                An RWAMap instance for right-wing authoritarianism attribute lookups.
         """
         super().__init__(year, place, gender_map, opinions)
         self.region_map = region_map
@@ -111,4 +135,8 @@ class SurveyedNation(Nation):
         self.brexit_vote_map = brexit_vote_map
         self.selftransc_map = selftransc_map
         self.selfenh_map = selfenh_map
-        
+        self.openness_map = openness_map
+        self.conformtrad_map = conformtrad_map
+        self.sdo_map = sdo_map
+        self.edo_map = edo_map
+        self.rwa_map = rwa_map

@@ -41,15 +41,9 @@ from cag.abm.attributes.region import UKRegionMap
 from cag.abm.attributes.family import SurveyFamilyMap
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID, UKGE2019, UKGE2019VoteMap
 from cag.abm.democracy.elections.brexit import BrexitVoteID, Brexit, BrexitVoteMap
-from cag.abm.attributes.narratives import (
-    NarrativeAttributeID,
-    SelftranscMap,
-    SelfenhMap,
-    OpennessMap,
-    ConformTradMap,
-    SDOMap,
-    EDOMap,
-    RWAMap
+from cag.abm.attributes.narratives import (NarrativeAttributeID, SelftranscMap, SelfenhMap,
+    OpennessMap, ConformTradMap, SDOMap, EDOMap, RWAMap,
+    rescale_1_6, rescale_1_7
 )
 from cag.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue
 
@@ -77,6 +71,12 @@ def main():
     brexit_vote_map = BrexitVoteMap(BREXIT_REFERENDUM_ID)
     selftransc_map = SelftranscMap
     selfenh_map = SelfenhMap
+    openness_map = OpennessMap
+    conformtrad_map = ConformTradMap
+    sdo_map = SDOMap
+    edo_map = EDOMap
+    rwa_map = RWAMap
+
     # Create a SurveyedNation environment
     logging.info("Creating SurveyedNation...")
     year: int = 2026
@@ -93,7 +93,12 @@ def main():
         ukge2019_vote_map=ukge2019_vote_map,
         brexit_vote_map=brexit_vote_map,
         selftransc_map=selftransc_map,
-        selfenh_map=selfenh_map
+        selfenh_map=selfenh_map,
+        openness_map=openness_map,
+        conformtrad_map=conformtrad_map,
+        sdo_map=sdo_map,
+        edo_map=edo_map,
+        rwa_map=rwa_map
     )
     logging.info(f"... created SurveyedNation: {surveyed_nation}")
 
@@ -154,43 +159,44 @@ def main():
         #logging.info(f"politics: {survey_politics_map[politics_id].description}")
         Selftransc_Val: int = int(data.iloc[i].get('Selftransc_Val', 0))
         #logging.info(f"Raw Selftransc_Val from data: {Selftransc_Val}")
-        # Rescale from 1-6 to 1-3 (1-2 -> 1, 3-4 -> 2, 5-6 -> 3)
-        if Selftransc_Val in [1, 2]:
-            rescaled_val = 1
-        elif Selftransc_Val in [3, 4]:
-            rescaled_val = 2
-        elif Selftransc_Val in [5, 6]:
-            rescaled_val = 3
-        else:
-            rescaled_val = 0
-            logging.warning(f"Unexpected Selftransc_Val: {Selftransc_Val} for agent_id {agent_id}. Setting to 0 (Unknown).")
-        #logging.info(f"Rescaled Selftransc_Val: {rescaled_val}")
-        selftransc_val_id = NarrativeAttributeID(rescaled_val)
+        selftransc_val_id = rescale_1_6(Selftransc_Val)
         #desc_obj = selftransc_val_map.get(selftransc_val_id)
         #desc = desc_obj.description if desc_obj is not None else "Unknown"
         #logging.info(f"self-transcendence value: {desc}")
         Selfenh_Values: int = int(data.iloc[i].get('Selfenh_Values', 0))
         #logging.info(f"Raw Selfenh_Values from data: {Selfenh_Values}")
-        # Rescale from 1-6 to 1-3 (1-2 -> 1, 3-4 -> 2, 5-6 -> 3)
-        if Selfenh_Values in [1, 2]:
-            rescaled_selfenh = 1
-        elif Selfenh_Values in [3, 4]:        
-            rescaled_selfenh = 2
-        elif Selfenh_Values in [5, 6]:
-            rescaled_selfenh = 3
-        else:
-            rescaled_selfenh = 0
-            logging.warning(f"Unexpected Selfenh_Values: {Selfenh_Values} for agent_id {agent_id}. Setting to 0 (Unknown).")
-        #logging.info(f"Rescaled Selfenh_Values: {rescaled_selfenh}")
-        selfenh_value_id = NarrativeAttributeID(rescaled_selfenh)
-        logging.info(f"DEBUG: rescaled_selfenh={rescaled_selfenh} (type: {type(rescaled_selfenh)})")
-        logging.info(f"DEBUG: selfenh_value_id={selfenh_value_id} (type: {type(selfenh_value_id)})")
-        logging.info(f"DEBUG: SelfenhMap keys: {[k for k in selfenh_map.keys()]}")
-        #logging.info(f"selfenh_value_id: {selfenh_value_id} (type: {type(selfenh_value_id)})")
-        #logging.info(f"selfenh_value_map keys: {[k for k in selfenh_value_map.keys()]}")
-        #desc_obj = selfenh_value_map.get(selfenh_value_id)
-        #desc = desc_obj.description if desc_obj is not None else "Unknown"
+        selfenh_value_id = rescale_1_6(Selfenh_Values)
         #logging.info(f"self-enhancement value: {desc}")
+        Openness_Val: int = int(data.iloc[i].get('Openness', 0))
+        #logging.info(f"Raw Openness_Val from data: {Openness_Val}")
+        rescaled_openness = rescale_1_6(Openness_Val)
+        #logging.info(f"Rescaled Openness_Val: {rescaled_openness}")
+        openness_val_id = NarrativeAttributeID(rescaled_openness)
+        #logging.info(f"openness value: {desc}")
+        ConformTrad_Val: int = int(data.iloc[i].get('ConformTrad', 0))
+        #logging.info(f"Raw ConformTrad_Val from data: {ConformTrad_Val}")
+        rescaled_conformtrad = rescale_1_6(ConformTrad_Val)
+        #logging.info(f"Rescaled ConformTrad_Val: {rescaled_conformtrad}")
+        conformtrad_val_id = NarrativeAttributeID(rescaled_conformtrad)
+        #logging.info(f"conformity-tradition value: {desc}")
+        SDO_Val: int = int(data.iloc[i].get('SDO', 0))
+        #logging.info(f"Raw SDO_Val from data: {SDO_Val}")
+        rescaled_sdo = rescale_1_7(SDO_Val)
+        #logging.info(f"Rescaled SDO_Val: {rescaled_sdo}")
+        sdo_val_id = NarrativeAttributeID(rescaled_sdo)
+        #logging.info(f"social dominance orientation value: {desc}")
+        EDO_Val: int = int(data.iloc[i].get('EDO', 0))
+        #logging.info(f"Raw EDO_Val from data: {EDO_Val}")
+        rescaled_edo = rescale_1_7(EDO_Val)
+        #logging.info(f"Rescaled EDO_Val: {rescaled_edo}")
+        edo_val_id = NarrativeAttributeID(rescaled_edo)
+        #logging.info(f"environmental dominance orientation value: {desc}")
+        RWA_Val: int = int(data.iloc[i].get('RWA', 0))
+        #logging.info(f"Raw RWA_Val from data: {RWA_Val}")
+        rescaled_rwa = rescale_1_6(RWA_Val)
+        #logging.info(f"Rescaled RWA_Val: {rescaled_rwa}")
+        rwa_val_id = NarrativeAttributeID(rescaled_rwa)
+        #logging.info(f"right-wing authoritarianism value: {desc}")
 
         scs.append(SurveyedCitizen(
             agent_id=agent_id,

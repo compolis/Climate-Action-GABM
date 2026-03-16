@@ -196,8 +196,11 @@ class SurveyedCitizen(Citizen):
             A string representing the narrative.
         """
         sn = self.environment
-        v = sn.selftransc_map.get(self.selftransc_val_id) if self.selftransc_val_id is not None else None
-        selftransc_val_desc = v.description if v is not None else 'Unknown'
-        w = sn.selfenh_map.get(self.selfenh_value_id) if self.selfenh_value_id is not None else None
-        selfenh_val_desc = w.description if w is not None else 'Unknown'
-        return f"{selftransc_val_desc} {selfenh_val_desc}"
+        selftransc = sn.selftransc_map.get(self.selftransc_val_id).description
+        selfenh = sn.selfenh_map.get(self.selfenh_value_id).description
+        openness = sn.openness_map.get(self.selfenh_value_id).description
+        conformtrad = sn.conformtrad_map.get(self.selfenh_value_id).description
+        sdo = sn.sdo_map.get(self.selfenh_value_id).description
+        edo = sn.edo_map.get(self.selfenh_value_id).description
+        rwa = sn.rwa_map.get(self.selfenh_value_id).description
+        return f"{selftransc} {selfenh} {openness} {conformtrad} {sdo} {edo} {rwa}"
