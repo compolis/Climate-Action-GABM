@@ -31,7 +31,7 @@ class SurveyedCitizen(Citizen):
     A Surveyed Citizen agent class for Climate-Action-GABM, inheriting from the GABM Citizen class.
         
     .. note::
-        Inherits all attributes from :class:`Person`.
+        Inherits all attributes from :class:`Citizen`.
     
     Attributes:
         region_id (RegionID):
@@ -46,6 +46,14 @@ class SurveyedCitizen(Citizen):
             The agent's political views, represented as a PoliticsID.
         family_id (FamilyID):
             The agent's family status, represented as a FamilyID.
+        ukge2019_vote_id (UKGE2019VoteID):
+            The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
+        brexit_vote_id (BrexitVoteID):
+            The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
+        selftransc_val_id (Selftransc_ValID):
+            The agent's self-transcendence value, represented as a Selftransc_ValID.
+        selfenh_value_id (Selfenh_ValuesID):
+            The agent's self-enhancement value, represented as a Selfenh_ValuesID.
     """
     def __init__(
         self,
@@ -60,7 +68,9 @@ class SurveyedCitizen(Citizen):
         politics_id: PoliticsID,
         family_id: FamilyID,
         ukge2019_vote_id: UKGE2019VoteID = None,
-        brexit_vote_id: BrexitVoteID = None
+        brexit_vote_id: BrexitVoteID = None,
+        selftransc_val_id: Selftransc_ValID = None,
+        selfenh_value_id: Selfenh_ValuesID = None
     ):
         """
         Initializes a SurveyedCitizen agent with the given attributes.
@@ -90,7 +100,10 @@ class SurveyedCitizen(Citizen):
                 The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
             brexit_vote_id (BrexitVoteID):
                 The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
-
+            selftransc_val_id (Selftransc_ValID):
+                The agent's self-transcendence value, represented as a Selftransc_ValID.
+            selfenh_value_id (Selfenh_ValuesID):
+                The agent's self-enhancement value, represented as a Selfenh_ValuesID.
         """
         super().__init__(agent_id, environment, year_of_birth, gender_id)
         self.region_id = region_id
@@ -101,6 +114,8 @@ class SurveyedCitizen(Citizen):
         self.family_id = family_id
         self.ukge2019_vote_id = ukge2019_vote_id
         self.brexit_vote_id = brexit_vote_id
+        self.selftransc_val_id = selftransc_val_id
+        self.selfenh_value_id = selfenh_value_id
 
     def __str__(self):
         """
@@ -126,6 +141,8 @@ class SurveyedCitizen(Citizen):
             brexit_vote_str = 'Unknown'
         r += f", UKGE2019 vote={ukge2019_vote_str}"
         r += f", Brexit vote={brexit_vote_str}"
+        r += f", Self-transcendence value={sn.selftransc_val_map.get(self.selftransc_val_id).description}"
+        r += f", Self-enhancement value={sn.selfenh_value_map.get(self.selfenh_value_id).description}"
         return r
 
     def get_surveyed_nation(self) -> SurveyedNation:
@@ -150,22 +167,37 @@ class SurveyedCitizen(Citizen):
         income = sn.income_map.get(self.income_id).description
         politics = sn.politics_map.get(self.politics_id).description
         family = sn.family_map.get(self.family_id).description
-        try:
-            ukge2019_vote_obj = sn.ukge2019_vote_map.get(self.ukge2019_vote_id)
-            ukge2019_vote = getattr(ukge2019_vote_obj, 'description', str(ukge2019_vote_obj)) if ukge2019_vote_obj else 'Unknown'
-        except TypeError:
-            ukge2019_vote = 'Unknown'
-        try:
-            brexit_vote_obj = sn.brexit_vote_map.get(self.brexit_vote_id)
-            brexit_vote = getattr(brexit_vote_obj, 'description', str(brexit_vote_obj)) if brexit_vote_obj else 'Unknown'
-        except TypeError:
-            brexit_vote = 'Unknown'
+        ukge2019_vote_obj = sn.ukge2019_vote_map.get(self.ukge2019_vote_id)
+        ukge2019_vote = getattr(ukge2019_vote_obj, 'description', str(ukge2019_vote_obj)) if ukge2019_vote_obj else 'Unknown'
+        brexit_vote_obj = sn.brexit_vote_map.get(self.brexit_vote_id)
+        brexit_vote = getattr(brexit_vote_obj, 'description', str(brexit_vote_obj)) if brexit_vote_obj else 'Unknown'
+        r: str = f"I am a {age} year old {gender} living in the {region}. "
+        if ethnicity != "unknown" and ethnicity != "other":
+            r += f"My ethnicity is {ethnicity}. "
+        if education != "unknown":
+            r += f"I have a {education}. "
+        if income != "unknown":
+            r += f"My gross household income is {income}. "
+        if family != "unknown":
+            r += f"I am {family}. "
+        if politics != "unknown" and politics != "don't know":
+            r += f"I position myself {politics} of the political spectrum. "
+        if ukge2019_vote != "unknown" and ukge2019_vote != "another" and ukge2019_vote != "don't know":
+            r += f"I voted for the {ukge2019_vote} party candidate in the 2019 General Election. "
+        if brexit_vote != "unknown" and brexit_vote != "don't know":
+            r += f"I {brexit_vote} in the 2016 EU Referendum."
+        return r
+ 
+    def get_narrative(self) -> str:
+        """
+        Returns a narrative based on attributes.
 
-        return (f"I am a {age} year old {gender} living in the {region}. "
-            f"My ethnicity is {ethnicity}. "
-            f"I have a {education}. "
-            f"My gross household income is {income}. "
-            f"I am {family}. "
-            f"I position myself {politics} of the political spectrum. "
-            f"I voted for the {ukge2019_vote} candidate in the 2019 General Election. "
-            f"I voted to {brexit_vote} in the 2016 EU Referendum.")
+        Returns:
+            A string representing the narrative.
+        """
+        sn = self.environment
+        v = sn.selftransc_map.get(self.selftransc_val_id) if self.selftransc_val_id is not None else None
+        selftransc_val_desc = v.description if v is not None else 'Unknown'
+        w = sn.selfenh_map.get(self.selfenh_value_id) if self.selfenh_value_id is not None else None
+        selfenh_val_desc = w.description if w is not None else 'Unknown'
+        return f"{selftransc_val_desc} {selfenh_val_desc}"

@@ -41,7 +41,16 @@ from cag.abm.attributes.region import UKRegionMap
 from cag.abm.attributes.family import SurveyFamilyMap
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID, UKGE2019, UKGE2019VoteMap
 from cag.abm.democracy.elections.brexit import BrexitVoteID, Brexit, BrexitVoteMap
-
+from cag.abm.attributes.narratives import (
+    NarrativeAttributeID,
+    SelftranscMap,
+    SelfenhMap,
+    OpennessMap,
+    ConformTradMap,
+    SDOMap,
+    EDOMap,
+    RWAMap
+)
 from cag.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue
 
 def main():
@@ -66,7 +75,8 @@ def main():
     survey_family_map = SurveyFamilyMap()
     ukge2019_vote_map = UKGE2019VoteMap(UKGE2019_ELECTION_ID)
     brexit_vote_map = BrexitVoteMap(BREXIT_REFERENDUM_ID)
-
+    selftransc_map = SelftranscMap
+    selfenh_map = SelfenhMap
     # Create a SurveyedNation environment
     logging.info("Creating SurveyedNation...")
     year: int = 2026
@@ -81,40 +91,15 @@ def main():
         politics_map=survey_politics_map,
         family_map=survey_family_map,
         ukge2019_vote_map=ukge2019_vote_map,
-        brexit_vote_map=brexit_vote_map
+        brexit_vote_map=brexit_vote_map,
+        selftransc_map=selftransc_map,
+        selfenh_map=selfenh_map
     )
     logging.info(f"... created SurveyedNation: {surveyed_nation}")
 
     # Load survey data
     logging.info("Loading survey data...")
-    required_columns = [
-        'ID',
-        'age', # Used to determine year of birth
-        'male_dummy', # Used to determine gender 0 = female, 1 = male
-        'tprofile_GOR', # Used to determine region
-        "profile_education_level", # Used to determine education level
-        'tprofile_gross_household', # Used to determine income level
-        'ethnicity_R', # Used to determine ethnicity
-        'parent_dummy', # Used to determine family status
-        'Vote2019R', # Used to determine UK General Election 2019 vote
-        'pastvote_EURef', # Used to determine Brexit referendum vote
-        'Political_Left_Right', # Used to determine political views
-        'Selftransc_Val',
-        'Selfenh_Values',
-        'Openness',
-        'ConformTrad',
-        'SDO',
-        'EDO',
-        'RWA',
-        'page5posttreatment6_1',
-        'page5posttreatment6_4',
-        'page5posttreatment6_5',
-        'page5posttreatment6_7',
-        'page5posttreatment6_9',
-        'page5posttreatment6_11',
-        'ProClimatePolSupp'
-    ]
-    data: pd.DataFrame | None= load("data/yougov_survey_data/YouGovProcessedData.csv", required_columns=required_columns)
+    data: pd.DataFrame | None= load("data/yougov_survey_data/YouGovProcessedData.csv")
     #logging.info(data.head())
     #logging.info(data.columns)
     #logging.info(data.dtypes)
@@ -167,6 +152,46 @@ def main():
         #logging.info(f"Political_Left_Right: {Political_Left_Right}")
         politics_id: PoliticsID = PoliticsID(Political_Left_Right)
         #logging.info(f"politics: {survey_politics_map[politics_id].description}")
+        Selftransc_Val: int = int(data.iloc[i].get('Selftransc_Val', 0))
+        #logging.info(f"Raw Selftransc_Val from data: {Selftransc_Val}")
+        # Rescale from 1-6 to 1-3 (1-2 -> 1, 3-4 -> 2, 5-6 -> 3)
+        if Selftransc_Val in [1, 2]:
+            rescaled_val = 1
+        elif Selftransc_Val in [3, 4]:
+            rescaled_val = 2
+        elif Selftransc_Val in [5, 6]:
+            rescaled_val = 3
+        else:
+            rescaled_val = 0
+            logging.warning(f"Unexpected Selftransc_Val: {Selftransc_Val} for agent_id {agent_id}. Setting to 0 (Unknown).")
+        #logging.info(f"Rescaled Selftransc_Val: {rescaled_val}")
+        selftransc_val_id = NarrativeAttributeID(rescaled_val)
+        #desc_obj = selftransc_val_map.get(selftransc_val_id)
+        #desc = desc_obj.description if desc_obj is not None else "Unknown"
+        #logging.info(f"self-transcendence value: {desc}")
+        Selfenh_Values: int = int(data.iloc[i].get('Selfenh_Values', 0))
+        #logging.info(f"Raw Selfenh_Values from data: {Selfenh_Values}")
+        # Rescale from 1-6 to 1-3 (1-2 -> 1, 3-4 -> 2, 5-6 -> 3)
+        if Selfenh_Values in [1, 2]:
+            rescaled_selfenh = 1
+        elif Selfenh_Values in [3, 4]:        
+            rescaled_selfenh = 2
+        elif Selfenh_Values in [5, 6]:
+            rescaled_selfenh = 3
+        else:
+            rescaled_selfenh = 0
+            logging.warning(f"Unexpected Selfenh_Values: {Selfenh_Values} for agent_id {agent_id}. Setting to 0 (Unknown).")
+        #logging.info(f"Rescaled Selfenh_Values: {rescaled_selfenh}")
+        selfenh_value_id = NarrativeAttributeID(rescaled_selfenh)
+        logging.info(f"DEBUG: rescaled_selfenh={rescaled_selfenh} (type: {type(rescaled_selfenh)})")
+        logging.info(f"DEBUG: selfenh_value_id={selfenh_value_id} (type: {type(selfenh_value_id)})")
+        logging.info(f"DEBUG: SelfenhMap keys: {[k for k in selfenh_map.keys()]}")
+        #logging.info(f"selfenh_value_id: {selfenh_value_id} (type: {type(selfenh_value_id)})")
+        #logging.info(f"selfenh_value_map keys: {[k for k in selfenh_value_map.keys()]}")
+        #desc_obj = selfenh_value_map.get(selfenh_value_id)
+        #desc = desc_obj.description if desc_obj is not None else "Unknown"
+        #logging.info(f"self-enhancement value: {desc}")
+
         scs.append(SurveyedCitizen(
             agent_id=agent_id,
             environment=surveyed_nation,
@@ -179,7 +204,9 @@ def main():
             politics_id=politics_id,
             family_id=family_id,
             ukge2019_vote_id=ukge2019_vote_id,
-            brexit_vote_id=brexit_vote_id
+            brexit_vote_id=brexit_vote_id,
+            selftransc_val_id=selftransc_val_id,
+            selfenh_value_id=selfenh_value_id
         ))
         #logging.info(f"...created SurveyedCitizen {agent_id} from survey data row {i}.")       
     logging.info("...created SurveyedCitizens from survey data")
@@ -191,6 +218,7 @@ def main():
     for idx in indexes:
         #logging.info(str(scs[idx]))
         logging.info(f"Persona: {scs[idx].get_persona()}")
+        logging.info(f"Narrative: {scs[idx].get_narrative()}")
     
     # Add SurveyedCitizens to the SurveyedNation environment
     logging.info("Adding SurveyedCitizens to the SurveyedNation environment...")

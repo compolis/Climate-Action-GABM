@@ -3,15 +3,16 @@ Environment module for Climate-Action-GABM.
 """
 # Metadata
 __author__ = ["Andy Turner <agdturner@gmail.com>"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __copyright__ = "Copyright (c) 2026 GABM contributors, University of Leeds"
 
 # Standard library imports
+import logging
 from typing import Dict
-
 # GABM imports
 from gabm.abm.environment import Nation
 from gabm.abm.attributes.gender import GenderMap
+# Local imports
 from cag.abm.attributes.opinion import OpinionTopicID, Opinion
 from cag.abm.attributes.region import UKRegionMap
 from cag.abm.attributes.education import SurveyEducationMap
@@ -21,7 +22,7 @@ from cag.abm.attributes.politics import SurveyPoliticsMap
 from cag.abm.attributes.family import SurveyFamilyMap
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteMap
 from cag.abm.democracy.elections.brexit import BrexitVoteMap
-
+from cag.abm.attributes.narratives import SelftranscMap, SelfenhMap
 
 class SurveyedNation(Nation):
     """
@@ -47,10 +48,14 @@ class SurveyedNation(Nation):
             A UKGE2019VoteMap instance for UK General Election 2019 vote attribute lookups.
         brexit_vote_map (BrexitVoteMap):
             A BrexitVoteMap instance for Brexit referendum vote attribute lookups.
-
+        selftransc_map (SelftranscMap):
+            A SelftranscMap instance for self-transcendence value attribute lookups.
+        selfenh_map (SelfenhMap):
+            A SelfenhMap instance for self-enhancement value attribute lookups.
     """
     def __init__(self, year: int = 2026, place: str = "UK", 
-        gender_map: GenderMap = None, opinions: Dict[OpinionTopicID, Opinion] = None,
+        gender_map: GenderMap = None,
+        opinions: Dict[OpinionTopicID, Opinion] = None,
         region_map: UKRegionMap = None,
         education_map: SurveyEducationMap = None,
         ethnicity_map: SurveyEthnicityMap = None,
@@ -58,7 +63,9 @@ class SurveyedNation(Nation):
         politics_map: SurveyPoliticsMap = None,
         family_map: SurveyFamilyMap = None,
         ukge2019_vote_map: UKGE2019VoteMap = None,
-        brexit_vote_map: BrexitVoteMap = None):
+        brexit_vote_map: BrexitVoteMap = None,
+        selftransc_map: SelftranscMap = None,
+        selfenh_map: SelfenhMap = None):
         """
         Initialize.
         Args:
@@ -87,6 +94,10 @@ class SurveyedNation(Nation):
                 A UKGE2019VoteMap instance for UK General Election 2019 vote attribute lookups.
             brexit_vote_map (BrexitVoteMap):
                 A BrexitVoteMap instance for Brexit referendum vote attribute lookups.
+            selftransc_map (SelftranscMap):
+                A SelftranscMap instance for self-transcendence value attribute lookups.
+            selfenh_map (SelfenhMap):
+                A SelfenhMap instance for self-enhancement value attribute lookups.
 
         """
         super().__init__(year, place, gender_map, opinions)
@@ -98,3 +109,6 @@ class SurveyedNation(Nation):
         self.family_map = family_map
         self.ukge2019_vote_map = ukge2019_vote_map
         self.brexit_vote_map = brexit_vote_map
+        self.selftransc_map = selftransc_map
+        self.selfenh_map = selfenh_map
+        
