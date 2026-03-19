@@ -159,43 +159,43 @@ def main():
         #logging.info(f"politics: {survey_politics_map[politics_id].description}")
         Selftransc_Val: int = int(data.iloc[i].get('Selftransc_Val', 0))
         #logging.info(f"Raw Selftransc_Val from data: {Selftransc_Val}")
-        selftransc_val_id = rescale_1_6(Selftransc_Val)
-        #desc_obj = selftransc_val_map.get(selftransc_val_id)
+        selftransc_id = rescale_1_6(Selftransc_Val)
+        #desc_obj = selftransc_map.get(selftransc_id)
         #desc = desc_obj.description if desc_obj is not None else "Unknown"
         #logging.info(f"self-transcendence value: {desc}")
         Selfenh_Values: int = int(data.iloc[i].get('Selfenh_Values', 0))
         #logging.info(f"Raw Selfenh_Values from data: {Selfenh_Values}")
-        selfenh_value_id = rescale_1_6(Selfenh_Values)
+        selfenh_id = rescale_1_6(Selfenh_Values)
         #logging.info(f"self-enhancement value: {desc}")
         Openness_Val: int = int(data.iloc[i].get('Openness', 0))
         #logging.info(f"Raw Openness_Val from data: {Openness_Val}")
         rescaled_openness = rescale_1_6(Openness_Val)
         #logging.info(f"Rescaled Openness_Val: {rescaled_openness}")
-        openness_val_id = NarrativeAttributeID(rescaled_openness)
+        openness_id = NarrativeAttributeID(rescaled_openness)
         #logging.info(f"openness value: {desc}")
         ConformTrad_Val: int = int(data.iloc[i].get('ConformTrad', 0))
         #logging.info(f"Raw ConformTrad_Val from data: {ConformTrad_Val}")
         rescaled_conformtrad = rescale_1_6(ConformTrad_Val)
         #logging.info(f"Rescaled ConformTrad_Val: {rescaled_conformtrad}")
-        conformtrad_val_id = NarrativeAttributeID(rescaled_conformtrad)
+        conformtrad_id = NarrativeAttributeID(rescaled_conformtrad)
         #logging.info(f"conformity-tradition value: {desc}")
         SDO_Val: int = int(data.iloc[i].get('SDO', 0))
         #logging.info(f"Raw SDO_Val from data: {SDO_Val}")
         rescaled_sdo = rescale_1_7(SDO_Val)
         #logging.info(f"Rescaled SDO_Val: {rescaled_sdo}")
-        sdo_val_id = NarrativeAttributeID(rescaled_sdo)
+        sdo_id = NarrativeAttributeID(rescaled_sdo)
         #logging.info(f"social dominance orientation value: {desc}")
         EDO_Val: int = int(data.iloc[i].get('EDO', 0))
         #logging.info(f"Raw EDO_Val from data: {EDO_Val}")
         rescaled_edo = rescale_1_7(EDO_Val)
         #logging.info(f"Rescaled EDO_Val: {rescaled_edo}")
-        edo_val_id = NarrativeAttributeID(rescaled_edo)
+        edo_id = NarrativeAttributeID(rescaled_edo)
         #logging.info(f"environmental dominance orientation value: {desc}")
         RWA_Val: int = int(data.iloc[i].get('RWA', 0))
         #logging.info(f"Raw RWA_Val from data: {RWA_Val}")
         rescaled_rwa = rescale_1_6(RWA_Val)
         #logging.info(f"Rescaled RWA_Val: {rescaled_rwa}")
-        rwa_val_id = NarrativeAttributeID(rescaled_rwa)
+        rwa_id = NarrativeAttributeID(rescaled_rwa)
         #logging.info(f"right-wing authoritarianism value: {desc}")
 
         scs.append(SurveyedCitizen(
@@ -203,6 +203,7 @@ def main():
             environment=surveyed_nation,
             year_of_birth=year_of_birth,
             gender_id=gender_id,
+            opinions=None,
             region_id=region_id,
             ethnicity_id=ethnicity_id,
             income_id=income_id,
@@ -211,8 +212,8 @@ def main():
             family_id=family_id,
             ukge2019_vote_id=ukge2019_vote_id,
             brexit_vote_id=brexit_vote_id,
-            selftransc_val_id=selftransc_val_id,
-            selfenh_value_id=selfenh_value_id
+            selftransc_id=selftransc_id,
+            selfenh_id=selfenh_id
         ))
         #logging.info(f"...created SurveyedCitizen {agent_id} from survey data row {i}.")       
     logging.info("...created SurveyedCitizens from survey data")
