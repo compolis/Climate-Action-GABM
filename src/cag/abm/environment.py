@@ -124,11 +124,9 @@ class SurveyedNation(Nation):
             rwa_map (RWAMap):
                 An RWAMap instance for right-wing authoritarianism attribute lookups.
         """
-        super().__init__(year, place, gender_map, opinions)
-        self.region_map = region_map
-        self.education_map = education_map
-        self.ethnicity_map = ethnicity_map
-        self.income_map = income_map
+        super().__init__(year=year, place=place, gender_map=gender_map, opinions=opinions,
+            region_map=region_map, education_map=education_map, ethnicity_map=ethnicity_map,
+            income_map=income_map)
         self.politics_map = politics_map
         self.family_map = family_map
         self.ukge2019_vote_map = ukge2019_vote_map

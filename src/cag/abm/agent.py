@@ -34,12 +34,6 @@ class SurveyedCitizen(Citizen):
         Inherits all attributes from :class:`Citizen`.
     
     Attributes:
-        region_id (RegionID):
-            The agent's region, represented as a RegionID.
-        education_id (EducationID):
-            The agent's education level, represented as an EducationID.
-        ethnicity_id (EthnicityID):
-            The agent's ethnicity, represented as an EthnicityID.
         income_id (IncomeID):
             The agent's income level, represented as an IncomeID.
         politics_id (PoliticsID):
@@ -71,12 +65,13 @@ class SurveyedCitizen(Citizen):
         environment: SurveyedNation,
         year_of_birth: int,
         gender_id: GenderID,
-        region_id: RegionID,
-        education_id: EducationID,
-        ethnicity_id: EthnicityID,
-        income_id: IncomeID,
-        politics_id: PoliticsID,
-        family_id: FamilyID,
+        opinions: Dict[OpinionTopicID, Opinion] = None,
+        region_id: RegionID = None,
+        education_id: EducationID = None,
+        ethnicity_id: EthnicityID = None,
+        income_id: IncomeID = None,
+        politics_id: PoliticsID = None,
+        family_id: FamilyID = None,
         ukge2019_vote_id: UKGE2019VoteID = None,
         brexit_vote_id: BrexitVoteID = None,
         selftransc_id: NarrativeAttributeID = None,
@@ -99,6 +94,8 @@ class SurveyedCitizen(Citizen):
                 The year the agent was born.
             gender_id (GenderID):
                 The agent's gender, represented as a GenderID.
+            opinions (Dict[OpinionTopicID, Opinion], optional):
+                The agent's opinions.
             region_id (RegionID):
                 The agent's region, represented as a RegionID.
             education_id (EducationID):
@@ -130,10 +127,10 @@ class SurveyedCitizen(Citizen):
             rwa_id (NarrativeAttributeID):
                 The agent's RWA value.
         """
-        super().__init__(agent_id, environment, year_of_birth, gender_id)
-        self.region_id = region_id
-        self.education_id = education_id
-        self.ethnicity_id = ethnicity_id
+        super().__init__(citizen_id=agent_id, environment=environment, year_of_birth=year_of_birth,
+            gender_id=gender_id, opinions=opinions, 
+            region_id=region_id, education_id=education_id,
+            ethnicity_id=ethnicity_id)
         self.income_id = income_id
         self.politics_id = politics_id
         self.family_id = family_id
@@ -238,11 +235,19 @@ class SurveyedCitizen(Citizen):
             A string representing the narrative.
         """
         sn = self.environment
-        selftransc = sn.selftransc_map.get(self.selftransc_val_id).description
-        selfenh = sn.selfenh_map.get(self.selfenh_value_id).description
-        openness = sn.openness_map.get(self.selfenh_value_id).description
-        conformtrad = sn.conformtrad_map.get(self.selfenh_value_id).description
-        sdo = sn.sdo_map.get(self.selfenh_value_id).description
-        edo = sn.edo_map.get(self.selfenh_value_id).description
-        rwa = sn.rwa_map.get(self.selfenh_value_id).description
+        def safe_get(attr_map, attr_id):
+            if attr_id is None:
+                return "Unknown"
+            try:
+                return attr_map.get(attr_id).description
+            except Exception:
+                return "Unknown"
+
+        selftransc = safe_get(sn.selftransc_map, self.selftransc_id)
+        selfenh = safe_get(sn.selfenh_map, self.selfenh_id)
+        openness = safe_get(sn.openness_map, self.openness_id)
+        conformtrad = safe_get(sn.conformtrad_map, self.conformtrad_id)
+        sdo = safe_get(sn.sdo_map, self.sdo_id)
+        edo = safe_get(sn.edo_map, self.edo_id)
+        rwa = safe_get(sn.rwa_map, self.rwa_id)
         return f"{selftransc} {selfenh} {openness} {conformtrad} {sdo} {edo} {rwa}"
