@@ -2,7 +2,7 @@
 # Install with: pip install -r requirements.txt
 
 # GABM
-gabm==0.2.17
+gabm==0.2.18
 
 # For climate-action specific development
 pandas==3.0.1
