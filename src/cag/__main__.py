@@ -219,7 +219,7 @@ def main():
     logging.info("...created SurveyedCitizens from survey data")
 
     # For demonstration purposes, log a random sample of the SurveyedCitizens
-    n_sample = 2
+    n_sample = 20
     logging.info(f"Random sample of {n_sample} SurveyedCitizens...")
     indexes = random.sample(range(len(scs)), min(n_sample, len(scs))) 
     for idx in indexes:
