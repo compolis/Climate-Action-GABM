@@ -5,6 +5,7 @@
 - [Overview](#overview)
 - [Contributing and Communicating](#contributing-and-communicating)
 - [Project Directories](#project-directories)
+- [Testing](#testing)
 - [Python Package Entry Point](#python-package-entry-point)
 - [Makefile Targets](#makefile-targets)
 - [Developing Documentation](#developing-documentation)
@@ -33,7 +34,7 @@ For the time being, please communicate by commenting on or raising new [Climate-
 You should have forked the [Climate-Action-GABM Repository](https://github.com/compolis/Climate-Action-GABM) to your own GitHub account.
 
 The general workflow for contributing is to:
-- Create a check out new local branch:
+- Create and check out a new local branch:
 
 ```bash
 git branch my_feature
@@ -65,9 +66,9 @@ make docs
 git push origin my_feature
 ```
 
-- Open a PR on GitHub to merge your `my_feature` branch into the the `main` branch of the upstream GABM Repository.
+- Open a PR on GitHub to merge your `my_feature` branch into the the `main` branch of the upstream Climate-Action-GABM Repository.
   - Please refer to any related issues in the PR comments.
-- The PR will be reviewed and once the review is complete, changes will be merged.
+- The PR will be reviewed and once the review is complete, the changes will be merged.
 
 
 ## Project Directories
@@ -81,8 +82,34 @@ The root project directory contains documentation and files needed for building 
 - `venv-build-test/`: For temporary virtual environments created for testing.
 
 
+## Testing
+
+Climate-Action-GABM uses [pytest](https://docs.pytest.org/) for unit and integration tests. The unit test suite is located in the `tests/` directory, mirroring the module structure.
+
+### Running Tests
+
+Run most tests with:
+  ```bash
+  make test
+  ```
+or:
+  ```bash
+  pytest
+  ```
+
+### Adding Tests
+
+Please add or update tests when modifying or adding features. Aim for high test coverage to catch regressions and ensure code reliability.
+
+### Test Workflow
+
+- PRs should pass the test workflow before being merged.
+- See `.github/workflows/test.yml` for Continuous Integration (CI) details.
+
+
 ## Python Package Entry Point
-The main entry point for the GABM package is `src/cag/__main__.py`. This allows the application to be run using:
+
+The main entry point for the Climate-Action-GABM package is `src/cag/__main__.py`. This allows the application to be run using:
 
 	python3 -m cag
 
@@ -97,9 +124,12 @@ Please see the [Python Packaging documentation](https://docs.python.org/3/librar
 
 
 ## Makefile Targets
+
 The root directory contains a [Makefile](https://www.gnu.org/software/make/manual/make.html#Introduction). This is set up to automate tasks using [GNU Make](https://www.gnu.org/software/make). This section explains the rules or targets in the Makefile. Please ensure any changes to the Makefile are platform agnostic.
 
+
 ### Target Chaining, DRY, and Consistency
+
 For maintainability, all Makefile targets that depend on other build steps should use Make's built-in dependency chaining (e.g., `gh-pages-deploy: docs`) rather than manually invoking `$(MAKE)` or shelling out to `make` within a target. This ensures:
 - Each target is only responsible for its own logic.
 - Consistency: all targets use the same build steps, and changes to one target (like `docs`) automatically propagate to dependents (like `gh-pages-deploy`). The following is a presentation of the Makefile rules/targets:
@@ -124,6 +154,8 @@ For maintainability, all Makefile targets that depend on other build steps shoul
 | `make pypi-release` | Upload the built package to PyPI (twine upload dist/*)                         |
 | `make testpypi-release` | Upload the built package to TestPyPI (twine upload --repository testpypi dist/*) |
 | `make bump-version` | Bump the project version everywhere (patch by default; use `make bump-version part=minor` or `part=major` for other bumps). Uses bump2version and updates all relevant files. |
+| `make run-local` | Run cag using local source (PYTHONPATH=src) |
+| `make run-installed` | Run cag using installed package |
 
 
 All Python scripts used by Makefile targets are in the `scripts/` directory and are named consistently with their Makefile targets (e.g., `make docs-clean` runs `scripts/docs-clean.py`).
@@ -146,9 +178,11 @@ Markdown files in the root directory, each serving a specific purpose:
   - [DEVELOPMENT_HISTORY.md]: Document about development, milestones, and reflections.
 
 - If you add a new Markdown file in the root directory, please update entries to `doc_assets.py` DOC_FILES and `docs/index.md` Project Documents to include them in Sphinx documentation.
-- Add API docs via `docs/index.md`
+- Add API docs via `docs/index.md` or `docs/api.rst`.
+
 
 ### Sphinx Documentation
+
 To build run:
 
 ```bash
@@ -157,19 +191,22 @@ make docs
 
 - This effectively runs `scripts/docs.py` to copy key documentation files from the project root to the `docs/` directory, pre-processes them for building the Sphinx documentation, then delete those copied files once the build completes.
 
-
 **Note on Sphinx/MyST Documentation Warnings:**
 
 When building the documentation with [Sphinx](https://www.sphinx-doc.org/) and [MyST](https://mystmd.org/), you may see warnings like:
 
   Document headings start at H2, not H1 [myst.header]
+  document isn't included in any toctree [toc.not_included]
+  duplicate object description ... use :no-index: for one of them
+  WARNING: Field list ends without a blank line; unexpected unindent. [docutils]
+  'myst' cross-reference target not found: ... [myst.xref_missing]
 
-These warnings occur even though all Markdown files start with H2 (`##`). This is a known quirk with MyST/Sphinx and does not affect the rendered documentation. You can safely ignore these warnings unless the formatting in the HTML output is incorrect.
+These warnings are common with Sphinx/Autosummary/MyST and do not affect the rendered documentation if the HTML output looks correct. In particular, myst.xref_missing means that a Markdown/MyST cross-reference (e.g., {ref}`target`) could not be resolved. If the documentation renders correctly and the missing reference is not critical, these can be safely ignored. You can safely ignore all these warnings unless the formatting in the HTML output is incorrect or a critical feature is missing.
 
 
 Preview the Sphinx documentation by opening `docs/_build/html/index.html` in a [Web browser](https://en.wikipedia.org/wiki/Web_browser).
 
-To deploying the Sphinx Documentation run:
+To deploy the Sphinx Documentation run:
 
 ```bash
 make gh-pages-deploy
@@ -179,9 +216,23 @@ This should deploy/update the `gh-pages` branch on your origin Fork. If your For
 
 If it all looks good. Please submit a PR to incorporate documentation changes into main. A maintainer will subsequently update the upstream repository gh-pages branch.
 
+#### Sphinx API Documentation and Autosummary
+
+
+Climate-Action-GABM uses Sphinx with the autosummary extension to generate API documentation for all major modules. To document new modules:
+
+- Import the new module in the appropriate `__init__.py` file so Sphinx can discover it (e.g., add `from .my_module import *`).
+- Add the module to the API Reference toctree in `docs/index.md` (as an `_autosummary/` entry) to ensure it appears in the documentation navigation.
+- You do not need to manually maintain individual `.rst` files for each module; autosummary will generate them automatically during `make docs`.
+- If you remove or rename modules, update both the `__init__.py` imports and the API Reference list in `docs/index.md`.
+- You may delete stale `.rst` files in `_autosummary` if they are no longer referenced.
+
+Preview the Sphinx documentation by opening `docs/_build/html/index.html` in a web browser.
+
 
 ## Packaging and Deployment
-The following files and directories are essential for building, testing, and distributing the GABM package:
+
+The following files and directories are essential for building, testing, and distributing the Climate-Action-GABM package:
 - **pyproject.toml**: Declares build system requirements and project metadata. Required for modern Python packaging (PEP 517/518).
 - **setup.cfg**: Contains static package metadata and configuration for setuptools, such as:
 	- Package name, version, author, and description
@@ -193,7 +244,7 @@ The following files and directories are essential for building, testing, and dis
 - **requirements.txt**: Lists pinned dependencies for end users (used by pip install -r requirements.txt).
 - **requirements-dev.txt**: Lists development dependencies (testing, linting, docs) with version ranges for contributors.
 - **dist/**: Output directory for built distributions (.tar.gz and .whl files) after running the build process.
-- **src/gabm.egg-info/**: Metadata directory created by setuptools during build. Contains information about the package (version, dependencies, etc.). Safe to delete; will be recreated as needed.
+- **src/cag.egg-info/**: Metadata directory created by setuptools during build. Contains information about the package (version, dependencies, etc.). Safe to delete; will be recreated as needed.
 - **venv-build-test/**: Temporary virtual environment created by `make build-test` for testing the built package in isolation. This can be safely deleted after testing.
 
 
@@ -202,19 +253,20 @@ The following files and directories are essential for building, testing, and dis
 - `.github/workflows/test.yml` automatically runs `make test` on PRs to the main branch.
 - `.github/workflows/gh-pages-deploy.yml` builds documentation for the gh-pages branch and is for automated docs deployment.
 
-PRs to the [GAB Repository main branch](https://github.com/compolis/GABM/tree/main) must pass the test workflow before merging.
+PRs to the [Climate-Action-GAB Repository main branch](https://github.com/compolis/Climate-Action-GABM/tree/main) must pass the test workflow before merging.
 
 The gh-pages branch is protected from deletion.
 
 
 ## Maintainer Guide
+
 This section is aimed at developers that are maintainers. Developers that are not maintainers are requested to refrain from publishing releases to PyPI so maintainers can ensure project integrity and security.
 
 
 ### PyPI Release Process
-To release a new version of GABM to [PyPI](https://pypi.org/), follow these steps:
+To release a new version of Climate-Action-GABM to [PyPI](https://pypi.org/), follow these steps:
 
-1. **Update Version**: Run `make bump-version` to update the version everywhere (including setup.cfg, pyproject.toml, src/gabm/__init__.py, requirements-dev.txt, and all occurrences in [User Guide](USER_GUIDE.md)). Use `make bump-version part=minor` or `part=major` for non-patch bumps. Commit and push the changes before continuing.
+1. **Update Version**: Run `make bump-version` to update the version everywhere (including setup.cfg, pyproject.toml, src/cag/__init__.py, requirements-dev.txt, and all occurrences in [User Guide](USER_GUIDE.md)). Use `make bump-version part=minor` or `part=major` for non-patch bumps. Commit and push the changes before continuing.
 2. **Build the Package**:
 	```sh
 	make build
@@ -247,6 +299,7 @@ For more details, see the [Python Packaging User Guide](https://packaging.python
 
 
 ### Branch and Documentation Deployment
+
 Sphinx documentation is built and deployed using `make gh-pages-deploy`. If the upstream `gh-pages` branch is out of sync or needs to be replaced, use `git push --force upstream gh-pages` to overwrite it with the correct local version. This should be done with care, as it replaces the branch history. 
 
 When deploying documentation with `make gh-pages-deploy`, you may encounter an error like:
@@ -265,13 +318,15 @@ For more details, see the comments in the Makefile and the deployment script.
 
 
 ## GitHub Copilot
+
 Using [GitHub Copilot](https://github.com/features/copilot)) for [vibe coding](https://en.wikipedia.org/wiki/Vibe_coding), can help with understanding workflows and developing documentation, code and tests.
 
 GitHub Copilot uses limited context and the chat context does not currently persist between sessions. As a result, it is good to develop/update documentation along with changes. GitHub Copilot can be asked to read the [README](README.md) and [Developer Guide](DEV_GUIDE.md) at the start of a session so as to be more context aware and provide better support.
 
 
 ## Managing Logs and Caches
-Logs and caches (including prompt/response caches for LLM services) are generated during development and use. These files can become large. Typically they are not committed to the repository. Tidy-up scripts and Makefile targets for managing logs and caches are planned for version 0.2.0.
+
+Logs and caches (including prompt/response caches for LLM services) are generated during development and use. These files can become large. Typically they are not committed to the repository.
 
 Project Python scripts use Python logging and write logs to:
 
@@ -287,8 +342,9 @@ If you encounter problems, please check relevant log files for details.
 
 
 ## Files and Directories Excluded from Version Control
+
 Certain files and directories are intentionally excluded from the repository via `.gitignore` to keep the project clean and secure:
 
 - `data/logs/` — All log files generated by scripts and modules (can be large and environment-specific)
-- `data/io/llm/*/cache.pkl` — LLM response cache files (can be large and are not needed for collaboration)
+- `data/io/llm/*/prompt_response_cache.pkl` — LLM response cache files
 - `data/api_key.csv` — API keys (never commit secrets)
