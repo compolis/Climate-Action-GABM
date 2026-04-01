@@ -1,13 +1,8 @@
 ```{include} README.md
 ```
 
+---
 
-```{toctree}
-:maxdepth: 2
-:caption: API Reference
-
-
-```
 
 ```{toctree}
 :maxdepth: 1
@@ -29,9 +24,12 @@ SECURITY.md
 CONTACT.md
 ```
 
-Indices and tables
-==================
+---
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+
+```{toctree}
+:maxdepth: 2
+:caption: API Reference
+
+api
+```

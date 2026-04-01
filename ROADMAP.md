@@ -15,11 +15,6 @@ This file outlines planned next steps and future goals.
 
 
 ## 0.2
-- Add src/cag directory
-  - src/cag/agent.py
-  - src/cag/model.py
-  - src/cag/__init__.py
-  - src/cag/__main__.py
 - agent.py  
   - Agents will:
     - Belong to "networks" of other Agents
@@ -31,3 +26,4 @@ This file outlines planned next steps and future goals.
   - Agents will interact with other agents a set number of times
   - All prompts/responses will be cached.
   - Graphs will be output to show how individual and aggregate opinions change over time.
+- Remove redundant old modules and sandbox directories
