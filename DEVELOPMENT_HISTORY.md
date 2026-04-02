@@ -9,7 +9,7 @@
 
 
 ## Overview
-This document summarises the development of GABM, including key decisions, milestones, and collaborative experiences. A summary of changes is provided in the [Change Log](CHANGE_LOG.md).
+This document summarises the development of Climate-Action-GABM, including key decisions, milestones, and collaborative experiences. A summary of changes is provided in the [Change Log](CHANGE_LOG.md).
 
 
 ## GitHub Copilot
@@ -21,7 +21,8 @@ See [CONTRIBUTORS].
 
 
 ## Development Timeline
-- [2026-02-18] Dependency update to [GABM==0.2.2](https://pypi.org/project/gabm/0.2.2/). Basic ABM runs.
+- [2026-03-30] Dependency update to [GABM==0.2.18](https://pypi.org/project/gabm/0.2.18/).
+- [2026-02-18] Dependency update to [GABM==0.2.2](https://pypi.org/project/gabm/0.2.2/).
 - [2026-02-16] Planned release of Climate-Action-GABM==0.1.0.
 - [2026-02-10] Documentation and Makefile added based on those developed for [GABM](https://github.com/compolis/GABM).
 - [2026-02-03] Andy added as developer/maintainer. BSD License agreed and put in place.
