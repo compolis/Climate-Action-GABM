@@ -21,26 +21,75 @@ This simulation models how citizen opinions on climate-related policies evolve u
 
 ### 2.1 Citizen Agents
 
-Each citizen agent represents a real survey respondent. The agent is constructed from individual-level survey data including:
+Each citizen agent represents a real survey respondent from the **YouGov survey commissioned by the University of Leeds (January 2024)**. The data file used is `data/yougov_survey_data/YouGovProcessedData.csv` (train/validation splits available). Rows with missing values or flagged responses (e.g., "Don't know" on political identity) are excluded before simulation.
 
-- **Socio-demographics:** Age, gender, education, income, region, etc.
-- **Political identity:** Party affiliation, ideology, political engagement.
-- **Prior voting behavior:** Past election choices.
-- **Core value indicators:** Multiple indicators capturing underlying value orientations.
-- **Baseline policy opinions:** Support/opposition on 6–12 climate-related policies.
+The agent is constructed from the following individual-level variables:
 
-This data is converted into a **natural-language persona prompt**, which the LLM (via API or local instance) adopts as its identity for the duration of the simulation.
+| Variable | Description | Type |
+|---|---|---|
+| `age` | Respondent age in years | Numeric |
+| `male_dummy` | Gender (1 = Male, 0 = Female) | Binary |
+| `tprofile_GOR` | UK Government Office Region (1–13) | Categorical |
+| `profile_education_level` | Highest qualification (1–18) | Categorical |
+| `tprofile_gross_household` | Annual gross household income band (1–15) | Categorical |
+| `ethnicity_R` | Ethnicity (White / Asian / Black / Mixed) | Categorical |
+| `parent_dummy` | Parental status (1 = parent, 0 = not) | Binary |
+| `Vote2019R` | 2019 General Election vote (1–7) | Categorical |
+| `pastvote_EURef` | EU Referendum vote (Remain / Leave / Did not vote) | Categorical |
+| `Political_Left_Right` | Self-reported political position (1 = Very left-wing … 7 = Very right-wing) | Ordinal |
+| `Selftransc_Val` | Self-transcendence values score (Schwartz) | Continuous |
+| `Selfenh_Values` | Self-enhancement values score (Schwartz) | Continuous |
+| `Openness` | Openness to change values score (Schwartz) | Continuous |
+| `ConformTrad` | Conformity/tradition values score (Schwartz) | Continuous |
+| `SDO` | Social Dominance Orientation score | Continuous |
+| `EDO` | Environmental Dominance Orientation score | Continuous |
+| `RWA` | Right-Wing Authoritarianism score | Continuous |
 
-**Example persona prompt (illustrative):**
+The coded values are decoded using `PROFILE_DICT` (from `sandbox/ajay_sandbox/survey_dict.py`), and the seven continuous scores are converted to low/moderate/high narrative descriptors via `get_narrative()`. All attributes are then assembled into a first-person **natural-language persona prompt** using `format_persona_from_row()` (from `sandbox/ajay_sandbox/gabm_basic_v1.py`), which the LLM adopts as its identity for the duration of the simulation.
+
+**Persona template (`format_persona_from_row`):**
+
+```python
+def format_persona_from_row(row):
+    base_persona = (
+        f"Demographically, I am a {row['age']}-year-old {row['male_dummy']} living in the "
+        f"{row['tprofile_GOR']}, United Kingdom. "
+        f"My ethnic background is {row['ethnicity_R']}, and I hold a {row['profile_education_level']}. "
+        f"Financially, my gross household income falls into the {row['tprofile_gross_household']} bracket. "
+        f"Regarding my family status, I {row['parent_dummy']} a parent. "
+        f"Politically, I position myself on the {row['Political_Left_Right']} of the spectrum. "
+        f"In the 2019 General Election, I cast my vote for the {row['Vote2019R']}. "
+        f"Looking back at the EU Referendum, {row['pastvote_EURef']}."
+    )
+    full_persona = (
+        f"{base_persona}\n\n"
+        f"When it comes to my core values and worldview: {selftransc_narrative} {selfenh_narrative} "
+        f"{openness_narrative} {conform_narrative} {sdo_narrative} {edo_narrative} {rwa_narrative}"
+    )
+    return full_persona
+```
+
+**Example persona prompt (from real YouGov respondent):**
 
 ```
-You are a 54-year-old man living in a rural area. You have a high school education
-and work in manufacturing. You identify as politically conservative and voted
-Republican in the last two elections. You value economic stability and personal
-freedom highly, and are skeptical of government regulation. You attend church
-regularly and are active in your local community. You are somewhat concerned about
-the environment but believe economic growth should not be sacrificed for
-environmental protection.
+Demographically, I am a 52-year-old Male living in the South East, United Kingdom.
+My ethnic background is White, and I hold a GCE A level or Higher Certificate.
+Financially, my gross household income falls into the £35,000 to £39,999 per year bracket.
+Regarding my family status, I am a parent.
+Politically, I position myself on the Slightly right-of-centre of the spectrum.
+In the 2019 General Election, I cast my vote for the Conservative Party.
+Looking back at the EU Referendum, I voted to Leave.
+
+When it comes to my core values and worldview: I care about the people close to me and
+have a basic respect for nature, but I do not actively champion global equality or make
+environmental protection a primary, driving life focus. I appreciate personal success and
+am capable of taking charge when necessary, but I do not feel a constant need to dominate
+decisions or impress others to feel fulfilled. I prefer routine and the familiar, showing
+little interest in taking risks or seeking out new adventures. I place a high value on
+obedience and maintaining traditional ways of thinking. I generally support fairness but
+might implicitly accept that some mild social hierarchies are a natural part of society.
+I believe human progress is important but should generally be balanced with environmental
+respect. I have a healthy respect for leaders and traditions but maintain some skepticism.
 ```
 
 ### 2.2 Political Group Agents
@@ -62,13 +111,24 @@ Before any simulation begins, each citizen agent is administered the **original 
 
 | Response | Label              | Numeric |
 |----------|--------------------|---------|
-| A        | Strongly Against   | -3      |
-| B        | Against            | -2      |
-| C        | Somewhat Against   | -1      |
+| A        | Strongly oppose    | -3      |
+| B        | Somewhat oppose    | -2      |
+| C        | Slightly oppose    | -1      |
 | D        | Neutral            |  0      |
-| E        | Somewhat Support   | +1      |
-| F        | Support            | +2      |
-| G        | Strongly Support   | +3      |
+| E        | Slightly support   | +1      |
+| F        | Somewhat support   | +2      |
+| G        | Strongly support   | +3      |
+
+**Target survey questions (from `SURVEY_QUESTIONS` in `sandbox/ajay_sandbox/survey_dict.py`):**
+
+| ID | Column | Policy question |
+|----|--------|----------------|
+| Q1 | `page5posttreatment6_1` | Please say how much you support or oppose government policies that do the following: **Accelerate the roll-out of renewable energy production** (e.g. more offshore and onshore wind parks) |
+| Q2 | `page5posttreatment6_4` | Please say how much you support or oppose government policies that do the following: **Ban new oil/gas/coal licenses** |
+| Q3 | `page5posttreatment6_5` | Please say how much you support or oppose government policies that do the following: **Ban the sale of new petrol cars by no later than 2030** |
+| Q4 | `page5posttreatment6_7` | Please say how much you support or oppose government policies that do the following: **Mandate that all new housing developments should have non-fossil fuel heating systems, roof-top solar panels, high-level of insulation** |
+| Q5 | `page5posttreatment6_9` | Please say how much you support or oppose government policies that do the following: **Impose a carbon tax on fossil fuel sale and distribute the tax revenues to the public** (i.e. carbon fee and dividend) |
+| Q6 | `page5posttreatment6_11` | Please say how much you support or oppose government policies that do the following: **Compensate people in other countries who are impacted by climate change** |
 
 Baseline responses are compared against the real respondent's survey answers to assess **persona fidelity** — a calibration check on how well the LLM reproduces the attitudes of the person it represents. Agents with poor fidelity may be flagged or excluded.
 
@@ -132,6 +192,8 @@ All 6 permutations are valid:
 
 Phase ordering is treated as an **experimental condition** — the simulation is run multiple times with different fixed orderings, and outcomes are compared across runs. This directly tests whether the sequence of exposure matters for opinion dynamics.
 
+Note: One PA has more resource than the other. More messages from one than other. 
+
 ### 4.3 End-of-Day Survey
 
 At the close of each simulated day, every citizen agent is re-administered the **original survey instrument** for the target policy. The question wording and response options (A–G) are identical to the real survey.
@@ -163,6 +225,9 @@ def clamp_opinion_shift(previous: int, new: int, max_shift: int = 1) -> int:
 **Design choice:** Shift magnitude is **uniform** — it does not depend on how extreme the agent's prior position is. This keeps the model simple and can be revisited in later iterations.
 
 **Parameter:** `max_shift` is configurable (default: 1). Sensitivity analysis can test values from 0.5 to 2.
+
+
+Note by AJ:  Quantify reflection in sub-scale of the survey (e.g., 0.1, 0.3) and takes survey every few days.
 
 ### 4.5 Day Iteration
 
@@ -319,6 +384,7 @@ Citizens with right-leaning attributes → connected to Political Agent B (anti-
 Citizens with moderate attributes      → connected to both (or neither)
 ```
 
+Note by AJ: We should rely on voting history rather than just political leaning.
 ### 8.2 Exposure Categories
 
 Each citizen is assigned an **exposure category** based on their survey data:
@@ -531,6 +597,12 @@ Vary `max_shift` (0.5, 1, 1.5, 2) and compare results to empirical benchmarks fr
 - **Multi-policy interaction:** Model how opinions on one policy spill over to related policies.
 - **Influencer nodes:** Introduce scale-free network elements or designated opinion leaders.
 - **Dynamic networks:** Allow network ties to form and dissolve based on opinion similarity (homophily-driven rewiring).
+
+---
+
+## 15. Implementation Plan
+
+The implementation of this design spec is broken into 19 GitHub issues organised across 5 dependency phases. See [github_issues.md](github_issues.md) for the full issue breakdown, dependency graph, and acceptance criteria.
 
 ---
 
