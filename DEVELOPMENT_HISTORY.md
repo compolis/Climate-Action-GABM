@@ -22,6 +22,9 @@ See [CONTRIBUTORS].
 
 ## Development Timeline
 - [2026-03-30] Dependency update to [GABM==0.2.18](https://pypi.org/project/gabm/0.2.18/).
+- [2026-03-12] Dependency update to [GABM==0.2.17](https://pypi.org/project/gabm/0.2.17/).
+- [2026-03-05] Dependency update to [GABM==0.2.16](https://pypi.org/project/gabm/0.2.16/).
+- [2026-02-20] Dependency update to [GABM==0.2.6](https://pypi.org/project/gabm/0.2.6/).
 - [2026-02-18] Dependency update to [GABM==0.2.2](https://pypi.org/project/gabm/0.2.2/).
 - [2026-02-16] Planned release of Climate-Action-GABM==0.1.0.
 - [2026-02-10] Documentation and Makefile added based on those developed for [GABM](https://github.com/compolis/GABM).
