@@ -5,7 +5,7 @@ from __future__ import annotations
 Agent module for Climate-Action-GABM.
 """
 # Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>"]
+__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>"]
 __version__ = "0.1.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
@@ -250,4 +250,7 @@ class SurveyedCitizen(Citizen):
         sdo = safe_get(sn.sdo_map, self.sdo_id)
         edo = safe_get(sn.edo_map, self.edo_id)
         rwa = safe_get(sn.rwa_map, self.rwa_id)
-        return f"{selftransc} {selfenh} {openness} {conformtrad} {sdo} {edo} {rwa}"
+        descriptions = [d for d in [selftransc, selfenh, openness, conformtrad, sdo, edo, rwa] if d.lower() != "unknown"]
+        if not descriptions:
+            return ""
+        return "When it comes to my core values and worldview: " + " ".join(descriptions)

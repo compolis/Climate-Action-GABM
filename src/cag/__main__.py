@@ -5,7 +5,7 @@ Entry point for running the Climate-Action-GABM application.
 To run: python3 -m gabm
 """
 # Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>"]
+__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>"]
 __version__ = "0.3.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
@@ -169,33 +169,23 @@ def main():
         #logging.info(f"self-enhancement value: {desc}")
         Openness_Val: int = int(data.iloc[i].get('Openness', 0))
         #logging.info(f"Raw Openness_Val from data: {Openness_Val}")
-        rescaled_openness = rescale_1_6(Openness_Val)
-        #logging.info(f"Rescaled Openness_Val: {rescaled_openness}")
-        openness_id = NarrativeAttributeID(rescaled_openness)
+        openness_id = rescale_1_6(Openness_Val)
         #logging.info(f"openness value: {desc}")
         ConformTrad_Val: int = int(data.iloc[i].get('ConformTrad', 0))
         #logging.info(f"Raw ConformTrad_Val from data: {ConformTrad_Val}")
-        rescaled_conformtrad = rescale_1_6(ConformTrad_Val)
-        #logging.info(f"Rescaled ConformTrad_Val: {rescaled_conformtrad}")
-        conformtrad_id = NarrativeAttributeID(rescaled_conformtrad)
+        conformtrad_id = rescale_1_6(ConformTrad_Val)
         #logging.info(f"conformity-tradition value: {desc}")
         SDO_Val: int = int(data.iloc[i].get('SDO', 0))
         #logging.info(f"Raw SDO_Val from data: {SDO_Val}")
-        rescaled_sdo = rescale_1_7(SDO_Val)
-        #logging.info(f"Rescaled SDO_Val: {rescaled_sdo}")
-        sdo_id = NarrativeAttributeID(rescaled_sdo)
+        sdo_id = rescale_1_7(SDO_Val)
         #logging.info(f"social dominance orientation value: {desc}")
         EDO_Val: int = int(data.iloc[i].get('EDO', 0))
         #logging.info(f"Raw EDO_Val from data: {EDO_Val}")
-        rescaled_edo = rescale_1_7(EDO_Val)
-        #logging.info(f"Rescaled EDO_Val: {rescaled_edo}")
-        edo_id = NarrativeAttributeID(rescaled_edo)
+        edo_id = rescale_1_7(EDO_Val)
         #logging.info(f"environmental dominance orientation value: {desc}")
         RWA_Val: int = int(data.iloc[i].get('RWA', 0))
         #logging.info(f"Raw RWA_Val from data: {RWA_Val}")
-        rescaled_rwa = rescale_1_6(RWA_Val)
-        #logging.info(f"Rescaled RWA_Val: {rescaled_rwa}")
-        rwa_id = NarrativeAttributeID(rescaled_rwa)
+        rwa_id = rescale_1_6(RWA_Val)
         #logging.info(f"right-wing authoritarianism value: {desc}")
 
         scs.append(SurveyedCitizen(
@@ -213,7 +203,12 @@ def main():
             ukge2019_vote_id=ukge2019_vote_id,
             brexit_vote_id=brexit_vote_id,
             selftransc_id=selftransc_id,
-            selfenh_id=selfenh_id
+            selfenh_id=selfenh_id,
+            openness_id=openness_id,
+            conformtrad_id=conformtrad_id,
+            sdo_id=sdo_id,
+            edo_id=edo_id,
+            rwa_id=rwa_id
         ))
         #logging.info(f"...created SurveyedCitizen {agent_id} from survey data row {i}.")       
     logging.info("...created SurveyedCitizens from survey data")
