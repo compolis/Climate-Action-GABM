@@ -1,7 +1,11 @@
 """
 Tests for the climate policy opinion system (Issue 1).
 """
+import os
+import sys
 import unittest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from cag.abm.attributes.opinion import (
     ClimatePolicyID,
@@ -119,6 +123,10 @@ class TestClampOpinionShift(unittest.TestCase):
     def test_custom_max_shift(self):
         # Shift of 3 with max_shift=2: clamped to 2: -1 + 2 = 1
         self.assertEqual(clamp_opinion_shift(-1, 2, max_shift=2), 1)
+
+    def test_negative_max_shift_raises(self):
+        with self.assertRaises(ValueError):
+            clamp_opinion_shift(0, 1, max_shift=-1)
 
 
 if __name__ == "__main__":

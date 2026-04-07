@@ -105,7 +105,12 @@ def clamp_opinion_shift(previous: int, new: int, max_shift: int = 1) -> int:
 
     Returns:
         Clamped opinion value (-3 to +3).
+
+    Raises:
+        ValueError: If max_shift is negative.
     """
+    if max_shift < 0:
+        raise ValueError(f"max_shift must be non-negative, got {max_shift}")
     shift = new - previous
     clamped_shift = max(min(shift, max_shift), -max_shift)
     return previous + clamped_shift

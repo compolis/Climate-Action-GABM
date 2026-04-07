@@ -250,7 +250,7 @@ class SurveyedCitizen(Citizen):
         sdo = safe_get(sn.sdo_map, self.sdo_id)
         edo = safe_get(sn.edo_map, self.edo_id)
         rwa = safe_get(sn.rwa_map, self.rwa_id)
-        descriptions = [d for d in [selftransc, selfenh, openness, conformtrad, sdo, edo, rwa] if d != "Unknown"]
+        descriptions = [d for d in [selftransc, selfenh, openness, conformtrad, sdo, edo, rwa] if d.lower() != "unknown"]
         if not descriptions:
             return ""
         return "When it comes to my core values and worldview: " + " ".join(descriptions)
