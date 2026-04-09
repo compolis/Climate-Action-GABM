@@ -8,12 +8,13 @@ __copyright__ = "Copyright (c) 2026 GABM contributors, University of Leeds"
 
 # Standard library imports
 import logging
+import pandas as pd
 from typing import Dict
 # GABM imports
 from gabm.abm.environment import Nation
 from gabm.abm.attributes.gender import GenderMap
 # Local imports
-from cag.abm.attributes.opinion import OpinionTopicID, Opinion
+from gabm.abm.attributes.opinion import OpinionTopicID, Opinion
 from cag.abm.attributes.region import UKRegionMap
 from cag.abm.attributes.education import SurveyEducationMap
 from cag.abm.attributes.ethnicity import SurveyEthnicityMap
@@ -138,3 +139,35 @@ class SurveyedNation(Nation):
         self.sdo_map = sdo_map
         self.edo_map = edo_map
         self.rwa_map = rwa_map
+
+    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", max_agents=5):
+       
+        baseline_rows = []
+       
+        agents = list(self.agents_active.values())[:max_agents]
+        logging.info(f"Running baseline for {len(agents)} agents using model '{model}' and provider '{provider}'. If you want more agents then change max_agents in environment.run_baseline()")
+
+        for agent in agents:
+            agent_result = agent.run_baseline(api_key=api_key, model=model, provider=provider)
+            for policy_id, (letter, numeric) in agent_result.items():
+                real_response = agent.get_real_survey_response(policy_id=policy_id)
+                logging.info(f"Agent {agent.id} - Policy {policy_id}: LLM response = {letter} ({numeric}), Real survey response = {real_response}")
+                baseline_rows.append({
+                    "agent_id": agent.id,
+                    "policy_id": str(policy_id),
+                    "llm_letter": letter,
+                    "llm_numeric": numeric,
+                    "real_response": real_response,
+                    "match": (numeric == real_response)
+                })
+        df = pd.DataFrame(baseline_rows)
+        # log overall accuracy
+        overall_accuracy = df["match"].mean()
+        logging.info(f"Overall baseline accuracy: {overall_accuracy:.1%}")
+
+        # log accuracy per policy
+        policy_accuracy = df.groupby("policy_id")["match"].mean()
+        for policy_id, accuracy in policy_accuracy.items():
+            logging.info(f"Policy {policy_id} - Accuracy: {accuracy:.1%}")
+
+        return df

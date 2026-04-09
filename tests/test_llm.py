@@ -2,7 +2,6 @@
 
 import csv
 import os
-import tempfile
 from unittest import mock
 
 import pytest
@@ -18,9 +17,6 @@ from cag.io.llm import load_api_key, parse_letter_response, send_chat
 # ===================================================================
 
 class TestParseLetterResponse:
-    """Tests for parse_letter_response."""
-
-    # --- Happy-path cases from the acceptance criteria ---
 
     def test_just_letter(self):
         assert parse_letter_response("G") == "G"
@@ -52,8 +48,6 @@ class TestParseLetterResponse:
     def test_answer_is_pattern(self):
         assert parse_letter_response("My answer is C") == "C"
 
-    # --- Error cases ---
-
     def test_no_valid_letter(self):
         with pytest.raises(ValueError):
             parse_letter_response("I'm not sure")
@@ -67,7 +61,6 @@ class TestParseLetterResponse:
             parse_letter_response("   ")
 
     def test_letter_outside_range(self):
-        # H is not in A-G
         with pytest.raises(ValueError):
             parse_letter_response("H")
 
@@ -77,10 +70,8 @@ class TestParseLetterResponse:
 # ===================================================================
 
 class TestLoadApiKey:
-    """Tests for load_api_key."""
 
     def _write_csv(self, path, rows):
-        """Helper to write a CSV without header."""
         with open(path, "w", newline="") as fh:
             writer = csv.writer(fh)
             for row in rows:
@@ -129,30 +120,37 @@ class TestLoadApiKey:
 # ===================================================================
 
 class TestSendChat:
-    """Tests for send_chat (mocked — no real API calls)."""
 
     def test_raises_for_unsupported_provider(self):
         with pytest.raises(ValueError, match="Unsupported provider"):
-            send_chat("sys", "usr", "key", "model", provider="anthropic")
+            send_chat("sys", "usr", api_key="key", model="model", provider="anthropic")
 
     @mock.patch("cag.io.llm._send_openai", return_value="Hello!")
     def test_openai_dispatch(self, mock_openai):
-        result = send_chat("sys", "usr", "key", "gpt-4o-mini", provider="openai")
+        result = send_chat("sys", "usr", api_key="key", model="gpt-4o-mini", provider="openai")
         assert result == "Hello!"
         mock_openai.assert_called_once_with("sys", "usr", "key", "gpt-4o-mini", 0.7)
 
     @mock.patch("cag.io.llm._send_genai", return_value="Hi from Gemini!")
     def test_genai_dispatch(self, mock_genai):
-        result = send_chat("sys", "usr", "key", "gemini-2.0-flash", provider="genai")
+        result = send_chat("sys", "usr", api_key="key", model="gemini-2.0-flash", provider="genai")
         assert result == "Hi from Gemini!"
         mock_genai.assert_called_once_with("sys", "usr", "key", "gemini-2.0-flash", 0.7)
 
     @mock.patch("cag.io.llm._send_openai", return_value="warm")
     def test_temperature_passed(self, mock_openai):
-        send_chat("sys", "usr", "key", "model", provider="openai", temperature=0.3)
+        send_chat("sys", "usr", api_key="key", model="model", provider="openai", temperature=0.3)
         mock_openai.assert_called_once_with("sys", "usr", "key", "model", 0.3)
 
     @mock.patch("cag.io.llm._send_openai", return_value="OPENAI")
     def test_provider_case_insensitive(self, mock_openai):
-        result = send_chat("sys", "usr", "key", "model", provider="OpenAI")
+        result = send_chat("sys", "usr", api_key="key", model="model", provider="OpenAI")
         assert result == "OPENAI"
+
+    @mock.patch("cag.io.llm.load_api_key", return_value="auto-loaded-key")
+    @mock.patch("cag.io.llm._send_openai", return_value="auto key works")
+    def test_auto_loads_api_key_when_none(self, mock_openai, mock_load_key):
+        result = send_chat("sys", "usr", model="model", provider="openai")
+        assert result == "auto key works"
+        mock_load_key.assert_called_once_with("openai")
+        mock_openai.assert_called_once_with("sys", "usr", "auto-loaded-key", "model", 0.7)

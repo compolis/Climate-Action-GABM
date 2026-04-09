@@ -45,7 +45,6 @@ from cag.abm.attributes.narratives import (NarrativeAttributeID, SelftranscMap, 
     OpennessMap, ConformTradMap, SDOMap, EDOMap, RWAMap,
     rescale_1_6, rescale_1_7
 )
-from cag.abm.attributes.opinion import OpinionTopicID, OpinionTopic, OpinionValue
 
 def main():
     logging.info("\n--- Climate-Action-GABM ---\n")
@@ -190,6 +189,7 @@ def main():
 
         scs.append(SurveyedCitizen(
             agent_id=agent_id,
+            original_survey_data=data.iloc[i],
             environment=surveyed_nation,
             year_of_birth=year_of_birth,
             gender_id=gender_id,
@@ -214,7 +214,7 @@ def main():
     logging.info("...created SurveyedCitizens from survey data")
 
     # For demonstration purposes, log a random sample of the SurveyedCitizens
-    n_sample = 20
+    n_sample = 2
     logging.info(f"Random sample of {n_sample} SurveyedCitizens...")
     indexes = random.sample(range(len(scs)), min(n_sample, len(scs))) 
     for idx in indexes:
@@ -227,6 +227,14 @@ def main():
     for sc in scs:
         surveyed_nation.agents_active[sc.id] = sc
     logging.info("... added SurveyedCitizens to the SurveyedNation environment")
+
+    #scs[2].run_baseline()
+
+    from cag.abm.attributes.opinion import ClimatePolicyID
+    letter, numeric = scs[2].administer_survey(ClimatePolicyID.BAN_FOSSIL_FUEL)
+    scs[2].get_real_survey_response(policy_id = ClimatePolicyID.BAN_FOSSIL_FUEL)
+
+    surveyed_nation.run_baseline()
 
 if __name__ == "__main__":
     # Set up logging to file and console

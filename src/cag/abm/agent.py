@@ -4,20 +4,23 @@ from __future__ import annotations
 """
 Agent module for Climate-Action-GABM.
 """
-# Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com"]
+__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
 __version__ = "0.1.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
-# Standard library imports
 from datetime import date
+
+from cag.io.llm import send_chat, parse_letter_response
+from cag.abm.attributes.opinion import SURVEY_QUESTIONS, RESPONSE_LABELS, RESPONSE_SCALE, SURVEY_COLUMN_MAP
+
 
 class SurveyedCitizen():
     
     def __init__(
         self,
         agent_id,
-        environment,
+        original_survey_data = None,
+        environment = None,
         year_of_birth = None,
         gender_id = None,
         region_id = None,
@@ -39,6 +42,7 @@ class SurveyedCitizen():
     ):
         
         self.id = agent_id
+        self.original_survey_data = original_survey_data
         self.environment = environment
         self.year_of_birth = year_of_birth
         self.gender_id = gender_id
@@ -66,7 +70,7 @@ class SurveyedCitizen():
         Returns a string representation of the SurveyedCitizen agent.
         """
         r = super().__str__()
-        sn = self.get_surveyed_nation()
+        sn = self.environment
         r += f", region={sn.region_map.get(self.region_id).description}"
         r += f", education={sn.education_map.get(self.education_id).description}"
         r += f", ethnicity={sn.ethnicity_map.get(self.ethnicity_id).description}"
@@ -95,12 +99,6 @@ class SurveyedCitizen():
 
         return r
 
-    def get_surveyed_nation(self) -> SurveyedNation:
-        """
-        Returns the SurveyedNation environment that the agent is in.
-        """
-        return self.environment
-
     def get_persona(self) -> str:
         """
         Returns a persona based on attributes.
@@ -108,7 +106,7 @@ class SurveyedCitizen():
         Returns:
             A string representing the persona.
         """
-        sn = self.get_surveyed_nation()
+        sn = self.environment
         age = date.today().year - self.year_of_birth
         gender = sn.gender_map.get(self.gender_id).description
         region = sn.region_map.get(self.region_id).description
@@ -171,3 +169,40 @@ class SurveyedCitizen():
         if not descriptions:
             return ""
         return "When it comes to my core values and worldview: " + " ".join(descriptions)
+    
+    def administer_survey(self, policy_id, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
+        
+        system_prompt = self.get_persona() + "\n" + self.get_narrative()
+
+        policy_question = SURVEY_QUESTIONS.get(policy_id)
+        response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
+        user_prompt = policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+
+        llm_response = send_chat(system_prompt, user_prompt, api_key=api_key, model=model,
+              provider=provider, temperature=temperature)
+        letter_response = parse_letter_response(llm_response)
+        opinion_value = RESPONSE_SCALE.get(letter_response)
+        # Store the opinion value and history    
+        return letter_response, opinion_value
+
+    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai") -> dict:
+
+        results = {}
+        for policy_id in SURVEY_QUESTIONS.keys():
+            letter_response, opinion_value = self.administer_survey(policy_id, model=model, provider=provider, api_key=api_key)
+            self.opinion_history[policy_id] = [(0, opinion_value)]
+            results[policy_id] = (letter_response, opinion_value)
+        return results
+    
+    def get_real_survey_response(self, policy_id=None) -> int:
+        
+        column_name = SURVEY_COLUMN_MAP.get(policy_id)
+        raw_value = int(self.original_survey_data.get(column_name))
+        return raw_value - 4
+
+
+
+
+
+
+        
