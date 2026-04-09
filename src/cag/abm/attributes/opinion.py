@@ -114,3 +114,10 @@ def clamp_opinion_shift(previous: int, new: int, max_shift: int = 1) -> int:
     shift = new - previous
     clamped_shift = max(min(shift, max_shift), -max_shift)
     return previous + clamped_shift
+
+if __name__ == "__main__":
+    logging.info("\n--- Climate-Action-GABM: Opinion Module ---\n")
+    logging.info("Defined climate policy IDs, survey questions, response scales, and opinion shift clamping function.") 
+
+    # get a policy and print it
+    policy_id = ClimatePolicyID.BAN_PETROL_CARS
