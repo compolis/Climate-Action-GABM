@@ -135,14 +135,6 @@ class TestSendChat:
         with pytest.raises(ValueError, match="Unsupported provider"):
             send_chat("sys", "usr", "key", "model", provider="anthropic")
 
-    def test_raises_for_empty_api_key(self):
-        with pytest.raises(ValueError, match="non-empty string"):
-            send_chat("sys", "usr", "", "model", provider="openai")
-
-    def test_raises_for_none_api_key(self):
-        with pytest.raises(ValueError, match="non-empty string"):
-            send_chat("sys", "usr", None, "model", provider="openai")
-
     @mock.patch("cag.io.llm._send_openai", return_value="Hello!")
     def test_openai_dispatch(self, mock_openai):
         result = send_chat("sys", "usr", "key", "gpt-4o-mini", provider="openai")

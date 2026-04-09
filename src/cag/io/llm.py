@@ -16,7 +16,7 @@ import re
 # send_chat
 # ---------------------------------------------------------------------------
 
-def send_chat(system_prompt, user_prompt, api_key, model,
+def send_chat(system_prompt, user_prompt, api_key=None, model="gpt-4o-mini",
               provider="openai", temperature=0.7):
     """Send a chat completion request and return the assistant's text.
 
@@ -48,7 +48,7 @@ def send_chat(system_prompt, user_prompt, api_key, model,
         If the API call fails.
     """
     if not api_key:
-        raise ValueError(f"API key must be a non-empty string (got {api_key!r}).")
+        api_key = load_api_key(provider)
 
     provider = provider.lower()
 
