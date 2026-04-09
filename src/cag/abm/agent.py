@@ -5,12 +5,11 @@ from __future__ import annotations
 Agent module for Climate-Action-GABM.
 """
 # Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>"]
+__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com"]
 __version__ = "0.1.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 # Standard library imports
-import logging
 from datetime import date
 
 class SurveyedCitizen():
