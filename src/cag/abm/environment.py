@@ -2,7 +2,7 @@
 Environment module for Climate-Action-GABM.
 """
 # Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>"]
+__author__ = ["Andy Turner <agdturner@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
 __version__ = "0.2.0"
 __copyright__ = "Copyright (c) 2026 GABM contributors, University of Leeds"
 
