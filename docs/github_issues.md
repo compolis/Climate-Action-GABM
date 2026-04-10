@@ -12,14 +12,14 @@ This file contains the full implementation plan for the Climate-Action-GABM MVP,
 
 ### What Is This Project?
 
-Climate-Action-GABM is a **Generative Agent-Based Model** (GABM) that simulates how citizen opinions on climate-related policies evolve under the influence of competing political messaging and peer-to-peer deliberation. It is a research tool, not a product.
+Climate-Action-GABM is a **Generative Agent-Based Model** (GABM) that simulates how citizen opinions on climate-related policies evolve under the influence of competing political messaging and peer-to-peer messaging. It is a research tool, not a product.
 
 **How it works at a high level:**
 
 1. **200 citizen agents** are created from real YouGov survey data (UK, January 2024). Each agent has a detailed demographic profile, political history, and psychological value scores.
 2. Each agent is given a **natural-language persona prompt** derived from their survey data, which an LLM adopts as its identity.
 3. Two **political group agents** (pro-climate and anti-climate) broadcast persuasive messages to subsets of citizens.
-4. Citizens **converse with network neighbors** (peer deliberation).
+4. Citizens **exchange messages with network neighbors** (peer messaging).
 5. After each simulated day, citizens are **re-surveyed** on 6 climate policies using the original survey instrument (A–G scale, mapped to -3 to +3).
 6. Opinion shifts are **clamped** to enforce realistic change limits (max ±1 per day).
 7. A **tiered memory system** compresses older reflections into summaries to manage LLM context windows.
@@ -84,7 +84,7 @@ tests/
 - Political agent message generation
 - Social network creation + political exposure assignment
 - Political broadcast → citizen reflection cycle
-- Peer conversation with simultaneous update
+- Peer messaging with simultaneous update
 - End-of-day survey with opinion shift clamping
 - Tiered memory architecture (full → daily → weekly summaries)
 - Simulation loop with configurable phase ordering + CSV/plot output
@@ -396,7 +396,7 @@ Create a `PoliticalAgent` class representing a fixed-stance political communicat
 
 Build a stochastic block model network connecting citizens and assign political exposure categories that determine which political agent's messages each citizen receives.
 
-**Background:** The social network determines who talks to whom during peer conversation (Phase C). It is implemented as a [NetworkX](https://networkx.org/) graph. The default topology is a **Stochastic Block Model** with two blocks representing political clusters — this models echo chambers vs. cross-cutting exposure, which is central to the research questions. See [Model_Design.md Section 7](Model_Design.md#7-network-structure).
+**Background:** The social network determines who exchanges messages during peer messaging (Phase C). It is implemented as a [NetworkX](https://networkx.org/) graph. The default topology is a **Stochastic Block Model** with two blocks representing political clusters — this models echo chambers vs. cross-cutting exposure, which is central to the research questions. See [Model_Design.md Section 7](Model_Design.md#7-network-structure).
 
 Political exposure determines which political agent's broadcasts a citizen receives. Assignment is based on the citizen's **voting history** (Brexit referendum vote + 2019 General Election vote) as the primary signal, with political self-placement as secondary. This is documented in [Model_Design.md Section 8](Model_Design.md#8-political-exposure-attribute-based). The research lead specifically noted that voting history should be prioritised over self-reported political leaning.
 
@@ -534,16 +534,16 @@ Implement the political agent broadcast → citizen reflection cycle. In each po
 
 ---
 
-### Issue 7: Peer Conversation Phase (C)
+### Issue 7: Peer Messaging Phase (C)
 
 **Labels:** `enhancement`, `phase-3`, `simulation`
 **Depends on:** Issue 5, Issue 6
 
 #### Description
 
-Implement simultaneous peer-to-peer conversation. During Phase C, citizens exchange views on the target policy with a random subset of their network neighbors. The update is **synchronous (simultaneous)** — ALL citizen messages are generated based on their current state BEFORE any reflections occur. This prevents cascade effects where one citizen's updated thinking influences another's message within the same phase.
+Implement simultaneous peer-to-peer messaging. During Phase C, citizens exchange views on the target policy with a random subset of their network neighbors. The update is **synchronous (simultaneous)** — ALL citizen messages are generated based on their current state BEFORE any reflections occur. This prevents cascade effects where one citizen's updated thinking influences another's message within the same phase.
 
-**Background:** This is the peer deliberation mechanism from [Model_Design.md Section 4.1 (Phase C)](Model_Design.md#41-interaction-phases). The simultaneous update ensures that the order in which agents are processed doesn't affect outcomes. Each citizen talks to at most `k` neighbors per day (default: 2–3), controlled by the `k_conversations_per_day` parameter ([Section 7.3](Model_Design.md#73-peer-conversations-per-day)).
+**Background:** This is the peer messaging mechanism from [Model_Design.md Section 4.1 (Phase C)](Model_Design.md#41-interaction-phases). The simultaneous update ensures that the order in which agents are processed doesn't affect outcomes. Each citizen exchanges messages with at most `k` neighbors per day (default: 2–3), controlled by the `k_peers_per_day` parameter ([Section 7.3](Model_Design.md#73-peer-messages-per-day)).
 
 #### What to build
 
@@ -573,16 +573,16 @@ Implement simultaneous peer-to-peer conversation. During Phase C, citizens excha
 
 2. Add to `SurveyedNation` in `src/cag/abm/environment.py`:
 
-   - **`run_peer_conversation(policy_id, day, k_conversations=3, api_key="", model="", provider="openai")`**
-     - **Step 1 — Select neighbors:** For each citizen, randomly select `min(k_conversations, len(citizen.network_neighbors))` neighbors.
+   - **`run_peer_messaging(policy_id, day, k_peers=3, api_key="", model="", provider="openai")`**
+     - **Step 1 — Select neighbors:** For each citizen, randomly select `min(k_peers, len(citizen.network_neighbors))` neighbors.
      - **Step 2 — Generate messages (SIMULTANEOUS):** Loop through ALL citizens and have each generate their peer message FIRST, collecting all messages before any reflections happen.
      - **Step 3 — Deliver + Reflect:** Build a mapping of which messages each citizen received. Each citizen who received messages calls `receive_peer_messages()`.
-     - Logs: number of conversations, sample messages and reflections.
+     - Logs: number of messages exchanged, sample messages and reflections.
 
 #### Reference
 
 - [Model_Design.md Section 4.1 (Phase C)](Model_Design.md#41-interaction-phases) — simultaneous update procedure
-- [Model_Design.md Section 7.3](Model_Design.md#73-peer-conversations-per-day) — `k_conversations_per_day` (default: 2–3)
+- [Model_Design.md Section 7.3](Model_Design.md#73-peer-messages-per-day) — `k_peers_per_day` (default: 2–3)
 
 #### Acceptance Criteria
 
@@ -781,7 +781,7 @@ Create the end-to-end simulation runner that wires all components together. This
          target_policies: list = None    # ClimatePolicyIDs; defaults to all 6, rotated
          phase_order: list = None        # e.g., ["P-A", "P-B", "C"]; defaults to this order
          max_shift: int = 1
-         k_conversations_per_day: int = 3
+         k_peers_per_day: int = 3
          network_type: str = "stochastic_block"
          p_intra: float = 0.15
          p_inter: float = 0.02
@@ -825,7 +825,7 @@ Create the end-to-end simulation runner that wires all components together. This
              elif phase == "P-B":
                  surveyed_nation.run_political_broadcast("P-B", policy, day, ...)
              elif phase == "C":
-                 surveyed_nation.run_peer_conversation(policy, day, k=config.k_conversations_per_day, ...)
+                 surveyed_nation.run_peer_messaging(policy, day, k_peers=config.k_peers_per_day, ...)
 
          End-of-day survey:
              surveyed_nation.run_end_of_day_survey(policy, day, config.max_shift, ...)
@@ -899,7 +899,7 @@ Create the end-to-end simulation runner that wires all components together. This
 | 4 | Political Agent Class | 2 | `agent.py` | 1, 2 | Issue 3 |
 | 5 | Network + Political Exposure | 2 | `environment.py`, `agent.py`, `tests/test_network.py` | 4 | — |
 | 6 | Political Broadcast Phases | 3 | `agent.py`, `environment.py` | 3, 4, 5 | Issue 7 (agent methods) |
-| 7 | Peer Conversation Phase | 3 | `agent.py`, `environment.py` | 5, 6 | Issue 6 (agent methods) |
+| 7 | Peer Messaging Phase | 3 | `agent.py`, `environment.py` | 5, 6 | Issue 6 (agent methods) |
 | 8 | End-of-Day Survey + Clamping | 3 | `agent.py`, `environment.py` | 3, 6, 7 | — |
 | 9 | Tiered Memory Architecture | 4 | `agent.py` | 6 | Issue 10 (partially) |
 | 10 | Simulation Loop + Output | 5 | **NEW:** `abm/simulation.py`, **NEW:** `io/output.py`, `__main__.py` | All | — |
