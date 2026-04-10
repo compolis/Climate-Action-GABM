@@ -223,6 +223,48 @@ class SurveyedCitizen():
         })
         return reflection_text
 
+    def generate_peer_message(self, policy_id, api_key=None,
+                              model="gpt-4o-mini", provider="openai",
+                              temperature=0.7) -> str:
+        system_prompt = self.get_system_prompt()
+        policy_description = SURVEY_QUESTIONS[policy_id]
+        user_prompt = (
+            f"Express your current thinking on the following policy in "
+            f"2–3 sentences. Be genuine and conversational: "
+            f"{policy_description}"
+        )
+        return send_chat(system_prompt, user_prompt, api_key=api_key,
+                         model=model, provider=provider,
+                         temperature=temperature)
+
+    def receive_peer_messages(self, messages, policy_id, day,
+                              api_key=None, model="gpt-4o-mini",
+                              provider="openai", temperature=0.7) -> str:
+        system_prompt = self.get_system_prompt()
+        policy_description = SURVEY_QUESTIONS[policy_id]
+        numbered = "\n".join(
+            f'{i+1}. "{m}"' for i, m in enumerate(messages)
+        )
+        user_prompt = (
+            f"You just had conversations with some of your peers about "
+            f"{policy_description}.\n"
+            f"Here is what they said:\n\n"
+            f"{numbered}\n\n"
+            f"In a few sentences, reflect on how these conversations affect "
+            f"your thinking.\n"
+            f"Do not state a final position — just think out loud."
+        )
+        reflection_text = send_chat(system_prompt, user_prompt, api_key=api_key,
+                                    model=model, provider=provider,
+                                    temperature=temperature)
+        self.reflections.append({
+            "day": day,
+            "phase": "C",
+            "text": reflection_text,
+            "messages_received": list(messages),
+        })
+        return reflection_text
+
     def get_real_survey_response(self, policy_id=None) -> int:
         
         column_name = SURVEY_COLUMN_MAP.get(policy_id)

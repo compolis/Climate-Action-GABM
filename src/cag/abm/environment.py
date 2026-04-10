@@ -8,6 +8,7 @@ __copyright__ = "Copyright (c) 2026 GABM contributors, University of Leeds"
 
 # Standard library imports
 import logging
+import random
 import pandas as pd
 from typing import Dict
 import networkx as nx
@@ -360,5 +361,79 @@ class SurveyedNation(Nation):
         return {
             "message": message,
             "reflections_count": len(reflections),
+            "sample_reflections": reflections[:2],
+        }
+
+    def run_peer_messaging(self, policy_id, day, k_peers=3, api_key=None,
+                           model="gpt-4o-mini", provider="openai",
+                           temperature=0.7):
+        """
+        Run the peer messaging phase (C) with simultaneous update.
+
+        Step 1: Select random neighbors for each citizen.
+        Step 2: ALL citizens generate their messages BEFORE any reflections.
+        Step 3: Deliver messages and have each recipient reflect.
+
+        Args:
+            policy_id: The target ClimatePolicyID.
+            day: Current simulation day number.
+            k_peers: Max number of peers each citizen exchanges messages with.
+            api_key: LLM API key.
+            model: LLM model identifier.
+            provider: LLM provider.
+            temperature: Sampling temperature.
+
+        Returns:
+            dict with keys "messages_generated", "reflections_count",
+            "sample_messages", "sample_reflections".
+        """
+        # Step 1: Select neighbors for each citizen
+        selections = {}  # citizen_id -> list of neighbor citizen objects
+        for citizen in self.agents_active.values():
+            if not citizen.network_neighbors:
+                continue
+            k = min(k_peers, len(citizen.network_neighbors))
+            selections[citizen.id] = random.sample(citizen.network_neighbors, k)
+
+        # Step 2: Generate ALL messages first (simultaneous update)
+        generated_messages = {}  # citizen_id -> message text
+        for cid in selections:
+            citizen = self.agents_active[cid]
+            msg = citizen.generate_peer_message(
+                policy_id, api_key=api_key, model=model,
+                provider=provider, temperature=temperature,
+            )
+            generated_messages[cid] = msg
+
+        # Step 3: Build inbox (which messages each citizen receives) and reflect
+        inbox = {}  # citizen_id -> list of message strings
+        for sender_id, neighbors in selections.items():
+            for neighbor in neighbors:
+                inbox.setdefault(neighbor.id, []).append(
+                    generated_messages[sender_id]
+                )
+
+        reflections = []
+        for recipient_id, messages in inbox.items():
+            citizen = self.agents_active[recipient_id]
+            reflection = citizen.receive_peer_messages(
+                messages, policy_id, day,
+                api_key=api_key, model=model, provider=provider,
+                temperature=temperature,
+            )
+            reflections.append(reflection)
+
+        sample_msgs = list(generated_messages.values())[:2]
+        logging.info(
+            f"[C] Day {day}: {len(generated_messages)} citizens generated "
+            f"messages, {len(reflections)} citizens reflected."
+        )
+        if sample_msgs:
+            logging.info(f"[C] Sample message: {sample_msgs[0][:200]}...")
+
+        return {
+            "messages_generated": len(generated_messages),
+            "reflections_count": len(reflections),
+            "sample_messages": sample_msgs,
             "sample_reflections": reflections[:2],
         }

@@ -12,7 +12,7 @@ This simulation models how citizen opinions on climate-related policies evolve u
 
 - How do competing political messages shape citizen opinions on climate policy over time?
 - Does peer deliberation amplify, moderate, or redirect the effects of political persuasion?
-- How does the order of exposure (political messaging vs. peer conversation) affect opinion trajectories?
+- How does the order of exposure (political messaging vs. peer messaging) affect opinion trajectories?
 - What role does network structure (echo chambers vs. cross-cutting ties) play in opinion dynamics?
 
 ---
@@ -157,9 +157,9 @@ Do not state a final position — just think out loud.
 
 Identical to Phase P-A, but Political Agent B sends a counter-message on the same target policy to its connected subset. Exposed citizens again produce a private reflection.
 
-#### Phase C: Peer Conversation (Citizen-to-Citizen)
+#### Phase C: Peer Messaging (Citizen-to-Citizen)
 
-Citizens converse with a random subset of their network neighbors (controlled by `k_conversations_per_day`). Citizens exchange their current thinking on the target policy through natural-language messages.
+Citizens exchange messages with a random subset of their network neighbors (controlled by `k_peers_per_day`). Citizens share their current thinking on the target policy through natural-language messages.
 
 **Update mode: Simultaneous (synchronous).**
 
@@ -169,7 +169,7 @@ All citizen messages are generated based on their **current state** before any r
 
 1. **Message generation:** Each citizen generates a message for each selected neighbor, expressing their current thinking on the target policy.
 2. **Message delivery:** All messages are collected.
-3. **Reflection:** Each citizen who received peer messages produces a private reflection summarizing how the conversation affected their thinking.
+3. **Reflection:** Each citizen who received peer messages produces a private reflection summarizing how the messages affected their thinking.
 
 ### 4.2 Phase Ordering
 
@@ -350,13 +350,13 @@ The default network is a **Stochastic Block Model** with two blocks representing
 - `p_inter ≈ 0` → fully polarized echo chambers
 - Intermediate values → realistic partial segregation
 
-### 7.3 Peer Conversations Per Day
+### 7.3 Peer Messages Per Day
 
-On each day during Phase C, each citizen does **not** talk to all network neighbors. Instead, they converse with a random subset of `k` neighbors.
+On each day during Phase C, each citizen does **not** message all network neighbors. Instead, they exchange messages with a random subset of `k` neighbors.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `k_conversations_per_day` | Number of peer conversations per citizen per day | 2–3 |
+| `k_peers_per_day` | Number of peers each citizen exchanges messages with per day | 2–3 |
 
 ### 7.4 Alternative Topologies (Future Iterations)
 
@@ -426,7 +426,7 @@ def assign_political_exposure(agent_attributes: dict) -> str:
 | `target_policies` | list[str] | 6 policies | Which policies are targeted each day |
 | `phase_order` | list[str] | ["P-A", "P-B", "C"] | Order of interaction phases per day |
 | `max_shift` | int | 1 | Maximum opinion shift per day (clamping) |
-| `k_conversations_per_day` | int | 3 | Peer conversations per citizen per day |
+| `k_peers_per_day` | int | 3 | Peers each citizen exchanges messages with per day |
 | `network_type` | str | "stochastic_block" | Network topology type |
 | `p_intra` | float | 0.15 | Within-block connection probability |
 | `p_inter` | float | 0.02 | Across-block connection probability |
@@ -529,7 +529,7 @@ SIMULATION LOOP (Day 1 to n_days):
                 Generate peer message expressing current thinking
             For each citizen (simultaneous - then deliver and reflect):
                 Receive all peer messages
-                Produce private reflection on peer conversation
+                Produce private reflection on peer messages
                 Store reflection in agent context
 
     END-OF-DAY SURVEY:

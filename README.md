@@ -18,6 +18,9 @@
 
 ## Table of Contents
 - [Overview](#overview)
+- [Current Status](#current-status)
+- [Architecture](#architecture)
+- [Notebooks](#notebooks)
 - [License](#license)
 - [Roadmap](#roadmap)
 - [Change Log](#change-log)
@@ -34,10 +37,57 @@ GABM provides a framework for using Large Language Model (LLM) models to develop
 
 Changes in individual agents beliefs/desires/stances can cascade through their networks to shape collective attitudes.
 
-The vision for a first model is of agents playing a coordination (social-tipping) game with persuasive communication, where each agent chooses one of two options (climate mitigation action, no climate mitigation action). One committed minority group representing climate action advocates (such as green political parties, campaign groups, climate movements, etc.) will always vote for a climate mitigation action. Another committed minority group representing climate inaction advocates (such as climate-denial/delay political parties and grassroots groups) will always vote for no climate mitigation action. A larger majority group will be persuadable either way.
+The first model simulates how citizen opinions on six UK climate policies evolve over repeated "days" of competing political messaging and peer-to-peer deliberation. Two fixed political group agents — one pro-climate-action, one anti-climate-action — broadcast persuasive messages to citizen agents through a configurable network (default: stochastic block model). Between broadcasts, citizens converse with network neighbours and produce private reflections. At the end of each day, every citizen is re-administered the original survey instrument and their opinion is recorded on a 7-point scale (Strongly oppose → Strongly support). A post-hoc clamping function limits opinion shifts to empirically realistic magnitudes.
+
+Citizen agents are constructed from real **YouGov survey data** (UK, April 2024). Each agent's persona — demographics, voting history, and psychological value profile — is assembled into a natural-language prompt that the LLM adopts for the duration of the simulation. A tiered memory architecture (full reflections → daily summaries → weekly summaries) manages context window limits while preserving experiential continuity.
 
 
-The model is based on survey data. This is used to construct the majority agents.
+## Current Status
+
+**MVP in progress — 7 of 10 issues complete.**
+
+| Metric | Value |
+|--------|-------|
+| Tests | 171 passing |
+| Issues done | 1–7 of 10 |
+| Notebooks | 8 (01–08) |
+| Source files | 19 under `src/cag/` |
+
+See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
+See [docs/Model_Design.md](docs/Model_Design.md) for the design specification.
+
+
+## Architecture
+
+```
+src/cag/
+├── abm/
+│   ├── agent.py           # SurveyedCitizen, PoliticalAgent
+│   ├── environment.py     # SurveyedNation (network, broadcast, peer messaging)
+│   ├── attributes/
+│   │   └── opinion.py     # ClimatePolicyID, survey constants, clamping
+│   └── democracy/         # Brexit & UKGE2019 vote enums (from gabm)
+├── io/
+│   ├── llm.py             # send_chat(), load_api_key(), parse_letter_response()
+│   └── survey.py          # Survey loading utilities
+└── __main__.py
+```
+
+
+## Notebooks
+
+Interactive demos live in `notebooks/`. Each covers one simulation component:
+
+| # | Notebook | Description |
+|---|----------|-------------|
+| 01 | Agent Profiles | Build personas from YouGov survey data |
+| 02 | LLMs and Surveys | Send chat prompts, administer baseline survey |
+| 03 | Network and Exposure | Stochastic block model, exposure assignment |
+| 04 | Political Agent Broadcast | Political agents generate messages, citizens reflect |
+| 05 | Peer Messaging | Simultaneous neighbour message exchange |
+| 06 | End-of-Day Survey | Re-survey after daily phases |
+| 07 | Memory | Tiered memory compression |
+| 08 | Full Simulation | End-to-end multi-day simulation run |
 
 
 ## License
