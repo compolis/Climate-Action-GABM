@@ -11,6 +11,10 @@ import csv
 import os
 import re
 
+from pathlib import Path
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_DEFAULT_KEY_CSV = _REPO_ROOT / "data" / "api_key.csv"
+
 
 # ---------------------------------------------------------------------------
 # send_chat
@@ -118,7 +122,7 @@ def _send_genai(system_prompt, user_prompt, api_key, model, temperature):
 # load_api_key
 # ---------------------------------------------------------------------------
 
-def load_api_key(provider, csv_path="data/api_key.csv"):
+def load_api_key(provider, csv_path=_DEFAULT_KEY_CSV):
     """Load an API key from the project CSV or an environment variable.
 
     The CSV file has two columns (api, key) with no header row.  Each row
@@ -145,6 +149,7 @@ def load_api_key(provider, csv_path="data/api_key.csv"):
         If no key is found from either source.
     """
     provider = provider.lower()
+
 
     # Try CSV first.
     try:
@@ -225,7 +230,7 @@ def parse_letter_response(response):
         return match.group(1).upper()
 
     # 3. Standalone letter bounded by word boundaries.
-    match = re.search(r"\b([A-Ga-g])\b", text)
+    match = re.search(r"\b([A-G])\b", text)
     if match:
         letter = match.group(1).upper()
         if letter in _VALID_LETTERS:
@@ -249,7 +254,7 @@ if __name__ == "__main__":
     except ValueError as exc:
         print(exc)
 
-    response = send_chat("You are a haelthy eating promoter.", 
+    response = send_chat("You are a healthy eating promoter.", 
                          "I made a sandwich, ham and cheese, how is it?", 
                          api_key, 
                          model, provider)

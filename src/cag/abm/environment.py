@@ -163,11 +163,11 @@ class SurveyedNation(Nation):
         df = pd.DataFrame(baseline_rows)
         # log overall accuracy
         overall_accuracy = df["match"].mean()
-        logging.info(f"Overall baseline accuracy: {overall_accuracy:.1%}")
+        print(f"Overall baseline accuracy: {overall_accuracy:.1%}")
 
         # log accuracy per policy
         policy_accuracy = df.groupby("policy_id")["match"].mean()
         for policy_id, accuracy in policy_accuracy.items():
-            logging.info(f"Policy {policy_id} - Accuracy: {accuracy:.1%}")
+            print(f"Policy {policy_id} - Accuracy: {accuracy:.1%}")
 
         return df

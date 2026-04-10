@@ -169,13 +169,18 @@ class SurveyedCitizen():
             return ""
         return "When it comes to my core values and worldview: " + " ".join(descriptions)
     
-    def administer_survey(self, policy_id, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
-        
-        system_prompt = self.get_persona() + "\n" + self.get_narrative()
+    def get_system_prompt(self) -> str:
+        return self.get_persona() + "\n" + self.get_narrative()
 
+    def get_user_prompt(self, policy_id) -> str:
         policy_question = SURVEY_QUESTIONS.get(policy_id)
         response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
-        user_prompt = policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+        return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+
+    def administer_survey(self, policy_id, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
+        
+        system_prompt = self.get_system_prompt()
+        user_prompt = self.get_user_prompt(policy_id)
 
         llm_response = send_chat(system_prompt, user_prompt, api_key=api_key, model=model,
               provider=provider, temperature=temperature)
