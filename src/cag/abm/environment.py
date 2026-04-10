@@ -24,6 +24,7 @@ from cag.abm.attributes.family import SurveyFamilyMap
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteMap
 from cag.abm.democracy.elections.brexit import BrexitVoteMap
 from cag.abm.attributes.narratives import SelftranscMap, SelfenhMap, OpennessMap, ConformTradMap, SDOMap, EDOMap, RWAMap
+from cag.abm.attributes.opinion import ordinal_score
 
 class SurveyedNation(Nation):
     """
@@ -158,16 +159,18 @@ class SurveyedNation(Nation):
                     "llm_letter": letter,
                     "llm_numeric": numeric,
                     "real_response": real_response,
-                    "match": (numeric == real_response)
+                    "match": (numeric == real_response),
+                    "ordinal_score": ordinal_score(numeric, real_response),
                 })
         df = pd.DataFrame(baseline_rows)
         # log overall accuracy
         overall_accuracy = df["match"].mean()
-        print(f"Overall baseline accuracy: {overall_accuracy:.1%}")
+        overall_ordinal = df["ordinal_score"].mean()
+        print(f"Overall baseline accuracy: {overall_accuracy:.1%} (exact match), {overall_ordinal:.3f} (ordinal score)")
 
         # log accuracy per policy
-        policy_accuracy = df.groupby("policy_id")["match"].mean()
-        for policy_id, accuracy in policy_accuracy.items():
-            print(f"Policy {policy_id} - Accuracy: {accuracy:.1%}")
+        policy_stats = df.groupby("policy_id").agg({"match": "mean", "ordinal_score": "mean"})
+        for policy_id, row in policy_stats.iterrows():
+            print(f"Policy {policy_id} - Exact: {row['match']:.1%}, Ordinal: {row['ordinal_score']:.3f}")
 
         return df

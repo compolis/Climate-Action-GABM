@@ -115,6 +115,30 @@ def clamp_opinion_shift(previous: int, new: int, max_shift: int = 1) -> int:
     clamped_shift = max(min(shift, max_shift), -max_shift)
     return previous + clamped_shift
 
+
+def ordinal_score(llm_numeric: int, real_numeric: int, scale_min: int = -3, scale_max: int = 3) -> float:
+    """
+    Distance-based accuracy score between an LLM response and the real survey response.
+
+    Returns a float in [0.0, 1.0] where 1.0 is an exact match and 0.0 is the
+    maximum possible distance on the scale.
+
+    Args:
+        llm_numeric: LLM's numeric opinion value.
+        real_numeric: Real survey respondent's numeric value.
+        scale_min: Minimum value on the scale (default: -3).
+        scale_max: Maximum value on the scale (default: 3).
+
+    Returns:
+        Ordinal accuracy score between 0.0 and 1.0.
+    """
+    max_distance = scale_max - scale_min
+    if max_distance == 0:
+        return 1.0 if llm_numeric == real_numeric else 0.0
+    distance = abs(llm_numeric - real_numeric)
+    return 1 - (distance / max_distance)
+
+
 if __name__ == "__main__":
     logging.info("\n--- Climate-Action-GABM: Opinion Module ---\n")
     logging.info("Defined climate policy IDs, survey questions, response scales, and opinion shift clamping function.") 

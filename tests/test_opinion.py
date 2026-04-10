@@ -15,6 +15,7 @@ from cag.abm.attributes.opinion import (
     RESPONSE_LABELS,
     SURVEY_COLUMN_MAP,
     clamp_opinion_shift,
+    ordinal_score,
 )
 
 
@@ -127,6 +128,30 @@ class TestClampOpinionShift(unittest.TestCase):
     def test_negative_max_shift_raises(self):
         with self.assertRaises(ValueError):
             clamp_opinion_shift(0, 1, max_shift=-1)
+
+
+class TestOrdinalScore(unittest.TestCase):
+
+    def test_exact_match(self):
+        self.assertEqual(ordinal_score(2, 2), 1.0)
+
+    def test_max_distance(self):
+        self.assertEqual(ordinal_score(-3, 3), 0.0)
+
+    def test_one_step_away(self):
+        self.assertAlmostEqual(ordinal_score(0, 1), 5 / 6)
+
+    def test_symmetric(self):
+        self.assertEqual(ordinal_score(1, -1), ordinal_score(-1, 1))
+
+    def test_two_steps_away(self):
+        self.assertAlmostEqual(ordinal_score(-1, 1), 4 / 6)
+
+    def test_zero_range_same_value(self):
+        self.assertEqual(ordinal_score(5, 5, scale_min=5, scale_max=5), 1.0)
+
+    def test_zero_range_different_value(self):
+        self.assertEqual(ordinal_score(5, 6, scale_min=5, scale_max=5), 0.0)
 
 
 if __name__ == "__main__":
