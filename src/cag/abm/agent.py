@@ -13,7 +13,6 @@ from datetime import date
 from cag.io.llm import send_chat, parse_letter_response
 from cag.abm.attributes.opinion import SURVEY_QUESTIONS, RESPONSE_LABELS, RESPONSE_SCALE, SURVEY_COLUMN_MAP
 
-
 class SurveyedCitizen():
     
     def __init__(
@@ -69,7 +68,7 @@ class SurveyedCitizen():
         """
         Returns a string representation of the SurveyedCitizen agent.
         """
-        r = super().__str__()
+        r = f"year_of_birth={self.year_of_birth}, gender={self.get_gender()}, opinions={self.opinions}"
         sn = self.environment
         r += f", region={sn.region_map.get(self.region_id).description}"
         r += f", education={sn.education_map.get(self.education_id).description}"
