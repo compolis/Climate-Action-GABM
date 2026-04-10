@@ -2,7 +2,7 @@
 Environment module for Climate-Action-GABM.
 """
 # Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
+__author__ = ["Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Andy Turner <agdturner@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
 __version__ = "0.2.0"
 __copyright__ = "Copyright (c) 2026 GABM contributors, University of Leeds"
 
@@ -307,3 +307,58 @@ class SurveyedNation(Nation):
                 self.agents_active[neighbor_id]
                 for neighbor_id in self.network.neighbors(citizen.id)
             ]
+
+    def run_political_broadcast(self, phase, policy_id, day, api_key=None,
+                                model="gpt-4o-mini", provider="openai",
+                                temperature=0.7):
+        """
+        Run a political broadcast phase (P-A or P-B).
+
+        The selected political agent generates one persuasive message about the
+        target policy and delivers it to all its connected citizens.  Each
+        receiving citizen produces a private reflection.
+
+        Args:
+            phase: "P-A" or "P-B".
+            policy_id: The target ClimatePolicyID.
+            day: Current simulation day number.
+            api_key: LLM API key.
+            model: LLM model identifier.
+            provider: LLM provider ("openai" or "genai").
+            temperature: Sampling temperature.
+
+        Returns:
+            dict with keys "message", "reflections_count", "sample_reflections".
+        """
+        if phase == "P-A":
+            agent = self.political_agent_a
+        elif phase == "P-B":
+            agent = self.political_agent_b
+        else:
+            raise ValueError(f"phase must be 'P-A' or 'P-B', got '{phase}'")
+
+        message = agent.generate_message(policy_id, api_key=api_key, model=model,
+                                         provider=provider, temperature=temperature)
+
+        reflections = []
+        for citizen in agent.connected_citizens:
+            reflection = citizen.receive_political_message(
+                message, policy_id, phase, day,
+                api_key=api_key, model=model, provider=provider,
+                temperature=temperature,
+            )
+            reflections.append(reflection)
+
+        logging.info(
+            f"[{phase}] Day {day}: delivered message to "
+            f"{len(reflections)} citizens. Message (first 120 chars): "
+            f"{message[:120]}..."
+        )
+        if reflections:
+            logging.info(f"[{phase}] Sample reflection: {reflections[0][:200]}...")
+
+        return {
+            "message": message,
+            "reflections_count": len(reflections),
+            "sample_reflections": reflections[:2],
+        }

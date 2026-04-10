@@ -65,6 +65,7 @@ class SurveyedCitizen():
         self.opinion_history = {}
         self.political_exposure = "neither"
         self.network_neighbors = []
+        self.reflections = []
 
     def __str__(self):
         """
@@ -200,6 +201,28 @@ class SurveyedCitizen():
             results[policy_id] = (letter_response, opinion_value)
         return results
     
+    def receive_political_message(self, message, policy_id, phase, day,
+                                    api_key=None, model="gpt-4o-mini",
+                                    provider="openai", temperature=0.7) -> str:
+        system_prompt = self.get_system_prompt()
+        policy_description = SURVEY_QUESTIONS[policy_id]
+        user_prompt = (
+            f'You just received the following message:\n'
+            f'"{message}"\n\n'
+            f'In a few sentences, reflect on how this affects your thinking about {policy_description}.\n'
+            f'Do not state a final position \u2014 just think out loud.'
+        )
+        reflection_text = send_chat(system_prompt, user_prompt, api_key=api_key,
+                                    model=model, provider=provider,
+                                    temperature=temperature)
+        self.reflections.append({
+            "day": day,
+            "phase": phase,
+            "text": reflection_text,
+            "messages_received": [message],
+        })
+        return reflection_text
+
     def get_real_survey_response(self, policy_id=None) -> int:
         
         column_name = SURVEY_COLUMN_MAP.get(policy_id)
