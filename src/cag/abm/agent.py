@@ -68,8 +68,8 @@ class SurveyedCitizen():
         """
         Returns a string representation of the SurveyedCitizen agent.
         """
-        r = f"year_of_birth={self.year_of_birth}, gender={self.get_gender()}, opinions={self.opinions}"
         sn = self.environment
+        r = f"year_of_birth={self.year_of_birth}, gender={sn.gender_map.get(self.gender_id).description}, opinions={self.opinions}"
         r += f", region={sn.region_map.get(self.region_id).description}"
         r += f", education={sn.education_map.get(self.education_id).description}"
         r += f", ethnicity={sn.ethnicity_map.get(self.ethnicity_id).description}"
