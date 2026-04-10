@@ -4,133 +4,50 @@ from __future__ import annotations
 """
 Agent module for Climate-Action-GABM.
 """
-# Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>"]
+__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
 __version__ = "0.1.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
-# Standard library imports
-from typing import TYPE_CHECKING
-import logging
 from datetime import date
-# GABM imports
-from gabm.abm.agent import Citizen
-from gabm.abm.attributes.gender import GenderID, Gender, GenderMap
-# TYPE_CHECKING is used to avoid circular imports.
-if TYPE_CHECKING:
-    from cag.abm.environment import SurveyedNation
-# Local imports
-from cag.abm.attributes.education import SurveyEducationMap
-from cag.abm.attributes.ethnicity import SurveyEthnicityMap
-from cag.abm.attributes.income import SurveyIncomeMap
-from cag.abm.attributes.politics import SurveyPoliticsMap
-from cag.abm.attributes.region import UKRegionMap
 
-class SurveyedCitizen(Citizen):
-    """
-    A Surveyed Citizen agent class for Climate-Action-GABM, inheriting from the GABM Citizen class.
-        
-    .. note::
-        Inherits all attributes from :class:`Citizen`.
+from cag.io.llm import send_chat, parse_letter_response
+from cag.abm.attributes.opinion import SURVEY_QUESTIONS, RESPONSE_LABELS, RESPONSE_SCALE, SURVEY_COLUMN_MAP
+
+class SurveyedCitizen():
     
-    Attributes:
-        income_id (IncomeID):
-            The agent's income level, represented as an IncomeID.
-        politics_id (PoliticsID):
-            The agent's political views, represented as a PoliticsID.
-        family_id (FamilyID):
-            The agent's family status, represented as a FamilyID.
-        ukge2019_vote_id (UKGE2019VoteID):
-            The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
-        brexit_vote_id (BrexitVoteID):
-            The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
-        selftransc_id (NarrativeAttributeID):
-            The agent's selftransc value.
-        selfenh_id (NarrativeAttributeID):
-            The agent's selfenh value.
-        openness_id (NarrativeAttributeID):
-            The agent's openness value.
-        conformtrad_id (NarrativeAttributeID):
-            The agent's conformtrad value.
-        sdo_id (NarrativeAttributeID):
-            The agent's SDO value.
-        edo_id (NarrativeAttributeID):
-            The agent's EDO value.
-        rwa_id (NarrativeAttributeID):
-            The agent's RWA value.
-    """
     def __init__(
         self,
-        agent_id: int,
-        environment: SurveyedNation,
-        year_of_birth: int,
-        gender_id: GenderID,
-        opinions: Dict[OpinionTopicID, Opinion] = None,
-        region_id: RegionID = None,
-        education_id: EducationID = None,
-        ethnicity_id: EthnicityID = None,
-        income_id: IncomeID = None,
-        politics_id: PoliticsID = None,
-        family_id: FamilyID = None,
-        ukge2019_vote_id: UKGE2019VoteID = None,
-        brexit_vote_id: BrexitVoteID = None,
-        selftransc_id: NarrativeAttributeID = None,
-        selfenh_id: NarrativeAttributeID = None,
-        openness_id: NarrativeAttributeID = None,
-        conformtrad_id: NarrativeAttributeID = None,
-        sdo_id: NarrativeAttributeID = None,
-        edo_id: NarrativeAttributeID = None,
-        rwa_id: NarrativeAttributeID = None
+        agent_id,
+        original_survey_data = None,
+        environment = None,
+        year_of_birth = None,
+        gender_id = None,
+        region_id = None,
+        education_id = None,
+        ethnicity_id = None,
+        income_id = None,
+        politics_id = None,
+        family_id = None,
+        ukge2019_vote_id = None,
+        brexit_vote_id = None,
+        selftransc_id = None,
+        selfenh_id = None,
+        openness_id = None,
+        conformtrad_id = None,
+        sdo_id = None,
+        edo_id = None,
+        rwa_id = None,
+        opinions = None
     ):
-        """
-        Initializes a SurveyedCitizen agent with the given attributes.
-
-        Args:
-            agent_id (int):
-                Unique identifier for the agent.
-            environment (SurveyedNation):
-                The environment in which the agent exists.
-            year_of_birth (int):
-                The year the agent was born.
-            gender_id (GenderID):
-                The agent's gender, represented as a GenderID.
-            opinions (Dict[OpinionTopicID, Opinion], optional):
-                The agent's opinions.
-            region_id (RegionID):
-                The agent's region, represented as a RegionID.
-            education_id (EducationID):
-                The agent's education level, represented as an EducationID.
-            ethnicity_id (EthnicityID):
-                The agent's ethnicity, represented as an EthnicityID.
-            income_id (IncomeID):
-                The agent's income level, represented as an IncomeID.
-            politics_id (PoliticsID):
-                The agent's political views, represented as a PoliticsID.
-            family_id (FamilyID):
-                The agent's family status, represented as a FamilyID.
-            ukge2019_vote_id (UKGE2019VoteID):
-                The agent's vote in the 2019 UK General Election, represented as a UKGE2019VoteID.
-            brexit_vote_id (BrexitVoteID):
-                The agent's vote in the 2016 UK Brexit Referendum, represented as a BrexitVoteID.
-            selftransc_id (NarrativeAttributeID):
-                The agent's selftransc value.
-            selfenh_id (NarrativeAttributeID):
-                The agent's selfenh value.
-            openness_id (NarrativeAttributeID):
-                The agent's openness value.
-            conformtrad_id (NarrativeAttributeID):
-                The agent's conformtrad value.
-            sdo_id (NarrativeAttributeID):
-                The agent's SDO value.
-            edo_id (NarrativeAttributeID):
-                The agent's EDO value.
-            rwa_id (NarrativeAttributeID):
-                The agent's RWA value.
-        """
-        super().__init__(citizen_id=agent_id, environment=environment, year_of_birth=year_of_birth,
-            gender_id=gender_id, opinions=opinions, 
-            region_id=region_id, education_id=education_id,
-            ethnicity_id=ethnicity_id)
+        
+        self.id = agent_id
+        self.original_survey_data = original_survey_data
+        self.environment = environment
+        self.year_of_birth = year_of_birth
+        self.gender_id = gender_id
+        self.region_id = region_id
+        self.education_id = education_id
+        self.ethnicity_id = ethnicity_id
         self.income_id = income_id
         self.politics_id = politics_id
         self.family_id = family_id
@@ -143,13 +60,16 @@ class SurveyedCitizen(Citizen):
         self.sdo_id = sdo_id
         self.edo_id = edo_id
         self.rwa_id = rwa_id
+        self.opinions = opinions or {}
+
+        self.opinion_history = {}
 
     def __str__(self):
         """
         Returns a string representation of the SurveyedCitizen agent.
         """
-        r = super().__str__()
-        sn = self.get_surveyed_nation()
+        r = f"year_of_birth={self.year_of_birth}, gender={self.get_gender()}, opinions={self.opinions}"
+        sn = self.environment
         r += f", region={sn.region_map.get(self.region_id).description}"
         r += f", education={sn.education_map.get(self.education_id).description}"
         r += f", ethnicity={sn.ethnicity_map.get(self.ethnicity_id).description}"
@@ -178,12 +98,6 @@ class SurveyedCitizen(Citizen):
 
         return r
 
-    def get_surveyed_nation(self) -> SurveyedNation:
-        """
-        Returns the SurveyedNation environment that the agent is in.
-        """
-        return self.environment
-
     def get_persona(self) -> str:
         """
         Returns a persona based on attributes.
@@ -191,8 +105,8 @@ class SurveyedCitizen(Citizen):
         Returns:
             A string representing the persona.
         """
-        sn = self.get_surveyed_nation()
-        age = self.get_age()
+        sn = self.environment
+        age = date.today().year - self.year_of_birth
         gender = sn.gender_map.get(self.gender_id).description
         region = sn.region_map.get(self.region_id).description
         ethnicity = sn.ethnicity_map.get(self.ethnicity_id).description
@@ -254,3 +168,45 @@ class SurveyedCitizen(Citizen):
         if not descriptions:
             return ""
         return "When it comes to my core values and worldview: " + " ".join(descriptions)
+    
+    def get_system_prompt(self) -> str:
+        return self.get_persona() + "\n" + self.get_narrative()
+
+    def get_user_prompt(self, policy_id) -> str:
+        policy_question = SURVEY_QUESTIONS.get(policy_id)
+        response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
+        return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+
+    def administer_survey(self, policy_id, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
+        
+        system_prompt = self.get_system_prompt()
+        user_prompt = self.get_user_prompt(policy_id)
+
+        llm_response = send_chat(system_prompt, user_prompt, api_key=api_key, model=model,
+              provider=provider, temperature=temperature)
+        letter_response = parse_letter_response(llm_response)
+        opinion_value = RESPONSE_SCALE.get(letter_response)
+        # Store the opinion value and history    
+        return letter_response, opinion_value
+
+    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai") -> dict:
+
+        results = {}
+        for policy_id in SURVEY_QUESTIONS.keys():
+            letter_response, opinion_value = self.administer_survey(policy_id, model=model, provider=provider, api_key=api_key)
+            self.opinion_history[policy_id] = [(0, opinion_value)]
+            results[policy_id] = (letter_response, opinion_value)
+        return results
+    
+    def get_real_survey_response(self, policy_id=None) -> int:
+        
+        column_name = SURVEY_COLUMN_MAP.get(policy_id)
+        raw_value = int(self.original_survey_data.get(column_name))
+        return raw_value - 4
+
+
+
+
+
+
+        
