@@ -63,6 +63,8 @@ class SurveyedCitizen():
         self.opinions = opinions or {}
 
         self.opinion_history = {}
+        self.political_exposure = "neither"
+        self.network_neighbors = []
 
     def __str__(self):
         """

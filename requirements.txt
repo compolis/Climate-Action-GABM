@@ -7,3 +7,5 @@ gabm==0.2.18
 # For climate-action specific development
 pandas==3.0.1
 networkx==3.6.1
+scipy==1.17.1
+matplotlib==3.10.8
