@@ -10,11 +10,16 @@ __copyright__ = "Copyright (c) 2026 GABM contributors, University of Leeds"
 import logging
 import pandas as pd
 from typing import Dict
+import networkx as nx
 # GABM imports
 from gabm.abm.environment import Nation
 from gabm.abm.attributes.gender import GenderMap
+from gabm.abm.attributes.politics import PoliticsID
 # Local imports
 from gabm.abm.attributes.opinion import OpinionTopicID, Opinion
+from cag.abm.agent import PoliticalAgent
+from cag.abm.democracy.elections.brexit import BrexitVoteID
+from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID
 from cag.abm.attributes.region import UKRegionMap
 from cag.abm.attributes.education import SurveyEducationMap
 from cag.abm.attributes.ethnicity import SurveyEthnicityMap
@@ -140,6 +145,9 @@ class SurveyedNation(Nation):
         self.sdo_map = sdo_map
         self.edo_map = edo_map
         self.rwa_map = rwa_map
+        self.network = None
+        self.political_agent_a = None
+        self.political_agent_b = None
 
     def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", max_agents=5):
        
@@ -174,3 +182,128 @@ class SurveyedNation(Nation):
             print(f"Policy {policy_id} - Exact: {row['match']:.1%}, Ordinal: {row['ordinal_score']:.3f}")
 
         return df
+
+    def assign_political_exposure(self):
+        """
+        Assign political exposure categories to all citizens based on voting history.
+
+        Priority rules (checked in order):
+        1. Leave + Conservative/Brexit → "B-only"
+        2. Remain + Labour/Green/LibDem → "A-only"
+        3. Leave + Labour/Green/LibDem (mixed) → "both"
+        4. Remain + Conservative (mixed) → "both"
+        5. Centre politics (any votes) → "both"
+        6. Unknown/DontKnow both votes → "neither"
+        7. Fallback → "neither"
+
+        Also populates political_agent_a.connected_citizens and
+        political_agent_b.connected_citizens.
+        """
+        left_parties = {UKGE2019VoteID.LABOUR, UKGE2019VoteID.GREEN,
+                        UKGE2019VoteID.LIBERAL_DEMOCRATS}
+        right_parties = {UKGE2019VoteID.CONSERVATIVE, UKGE2019VoteID.BREXIT}
+        unknown_brexit = {BrexitVoteID.UNKNOWN, BrexitVoteID.DONT_KNOW}
+        unknown_ge = {UKGE2019VoteID.UNKNOWN, UKGE2019VoteID.DONT_KNOW}
+
+        a_citizens = []
+        b_citizens = []
+
+        for citizen in self.agents_active.values():
+            brexit = citizen.brexit_vote_id
+            ge = citizen.ukge2019_vote_id
+            politics = citizen.politics_id
+
+            if brexit == BrexitVoteID.LEAVE and ge in right_parties:
+                exposure = "B-only"
+            elif brexit == BrexitVoteID.REMAIN and ge in left_parties:
+                exposure = "A-only"
+            elif brexit == BrexitVoteID.LEAVE and ge in left_parties:
+                exposure = "both"
+            elif brexit == BrexitVoteID.REMAIN and ge in right_parties:
+                exposure = "both"
+            elif politics == PoliticsID.CENTRE:
+                exposure = "both"
+            elif brexit in unknown_brexit and ge in unknown_ge:
+                exposure = "neither"
+            else:
+                exposure = "neither"
+
+            citizen.political_exposure = exposure
+
+            if exposure in ("A-only", "both"):
+                a_citizens.append(citizen)
+            if exposure in ("B-only", "both"):
+                b_citizens.append(citizen)
+
+        if self.political_agent_a is not None:
+            self.political_agent_a.connected_citizens = a_citizens
+        if self.political_agent_b is not None:
+            self.political_agent_b.connected_citizens = b_citizens
+
+    def create_network(self, n_blocks=2, p_intra=0.15, p_inter=0.02, seed=42):
+        """
+        Create a stochastic block model network with citizens assigned to blocks
+        based on their political exposure categories.
+
+        Must call assign_political_exposure() before this method.
+
+        Args:
+            n_blocks: Number of blocks (default 2).
+            p_intra: Within-block connection probability.
+            p_inter: Between-block connection probability.
+            seed: Random seed for reproducibility.
+
+        Returns:
+            The created nx.Graph, also stored as self.network.
+        """
+        agents = list(self.agents_active.values())
+
+        # Sort citizens into blocks based on exposure
+        block_0 = []  # A-leaning
+        block_1 = []  # B-leaning
+        swing = []     # both + neither — distribute across blocks
+
+        for citizen in agents:
+            if citizen.political_exposure == "A-only":
+                block_0.append(citizen)
+            elif citizen.political_exposure == "B-only":
+                block_1.append(citizen)
+            else:
+                swing.append(citizen)
+
+        # Round-robin distribute swing citizens across blocks
+        for i, citizen in enumerate(swing):
+            if i % 2 == 0:
+                block_0.append(citizen)
+            else:
+                block_1.append(citizen)
+
+        # Build the ordered agent list (block 0 first, then block 1)
+        ordered_agents = block_0 + block_1
+        block_sizes = [len(block_0), len(block_1)]
+
+        # Build probability matrix
+        p_matrix = [[p_intra if i == j else p_inter
+                      for j in range(n_blocks)]
+                     for i in range(n_blocks)]
+
+        G = nx.stochastic_block_model(block_sizes, p_matrix, seed=seed)
+
+        # Relabel nodes from integer indices to agent IDs
+        mapping = {i: ordered_agents[i].id for i in range(len(ordered_agents))}
+        G = nx.relabel_nodes(G, mapping)
+
+        self.network = G
+        return G
+
+    def assign_network_blocks(self):
+        """
+        Populate each citizen's network_neighbors from the graph adjacency.
+
+        Must call create_network() before this method.
+        """
+        for citizen in self.agents_active.values():
+            citizen.network_neighbors = [
+                self.agents_active[neighbor_id]
+                for neighbor_id in self.network.neighbors(citizen.id)
+            ]
