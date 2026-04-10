@@ -246,11 +246,11 @@ class SurveyedCitizen():
             f'{i+1}. "{m}"' for i, m in enumerate(messages)
         )
         user_prompt = (
-            f"You just had conversations with some of your peers about "
+            f"You just received peer messages from some of your peers about "
             f"{policy_description}.\n"
             f"Here is what they said:\n\n"
             f"{numbered}\n\n"
-            f"In a few sentences, reflect on how these conversations affect "
+            f"In a few sentences, reflect on how these peer messages affect "
             f"your thinking.\n"
             f"Do not state a final position — just think out loud."
         )
