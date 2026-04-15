@@ -188,7 +188,7 @@ class TestReceivePeerMessages(unittest.TestCase):
             ["msg1"], ClimatePolicyID.CARBON_TAX, day=1
         )
         ref = self.citizen.reflections[0]
-        self.assertEqual(set(ref.keys()), {"day", "phase", "text", "messages_received"})
+        self.assertEqual(set(ref.keys()), {"day", "phase", "policy_id", "text", "messages_received"})
 
     @patch("cag.abm.agent.send_chat", return_value=_MOCK_REFLECTION)
     def test_messages_received_is_copy(self, mock_send):

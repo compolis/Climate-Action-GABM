@@ -81,7 +81,7 @@ class TestEndOfDayPrompts:
     def test_day1_system_prompt_includes_reflections(self, mock_send):
         citizen = _make_citizen()
         citizen.reflections = [
-            {"day": 1, "phase": "P-A", "text": "The carbon tax idea seems fair."},
+            {"day": 1, "phase": "P-A", "policy_id": ClimatePolicyID.CARBON_TAX, "text": "The carbon tax idea seems fair."},
         ]
         citizen.opinion_history[ClimatePolicyID.CARBON_TAX] = [(0, 1)]
         citizen.administer_survey(ClimatePolicyID.CARBON_TAX, day=1)

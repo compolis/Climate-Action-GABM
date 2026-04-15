@@ -438,7 +438,7 @@ class SurveyedNation(Nation):
         for cid in selections:
             citizen = self.agents_active[cid]
             msg = citizen.generate_peer_message(
-                policy_id, api_key=api_key, model=model,
+                policy_id, day=day, api_key=api_key, model=model,
                 provider=provider, temperature=temperature,
             )
             generated_messages[cid] = msg
