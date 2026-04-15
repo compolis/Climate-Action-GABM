@@ -172,32 +172,63 @@ class SurveyedCitizen():
             return ""
         return "When it comes to my core values and worldview: " + " ".join(descriptions)
     
-    def get_system_prompt(self) -> str:
-        return self.get_persona() + "\n" + self.get_narrative()
+    def get_system_prompt(self, day=0) -> str:
+        if day == 0:
+            return self.get_persona() + "\n" + self.get_narrative()
+        else:
+            persona = self.get_persona()
+            narrative = self.get_narrative()
 
-    def get_user_prompt(self, policy_id) -> str:
-        policy_question = SURVEY_QUESTIONS.get(policy_id)
-        response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
-        return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+            reflections_framing = "You have received messages. Here are some of your reflections following these messages:"
+            reflections = "\n".join([f"- {r['text']}" for r in self.reflections[-3:]])  # Include the last 3 reflections
+            return "\n\n".join([persona, narrative, reflections_framing, reflections])
 
-    def administer_survey(self, policy_id, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
+    def get_user_prompt(self, policy_id, day=0) -> str:
+        if day == 0:
+            policy_question = SURVEY_QUESTIONS.get(policy_id)
+            response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
+            return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+        else:   
+            framing = "Based on everything you've experienced today, please answer the following survey question."
+
+            policy_question = SURVEY_QUESTIONS.get(policy_id)
+
+            response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
+
+            # This is not ideal. The existing mapping is the other way around. I suggest we think oif a better way of storing these, i.e. as letters. 
+            NUMERIC_TO_LETTER = {-3: "A", -2: "B", -1: "C", 0: "D", 1: "E", 2: "F", 3: "G"}
+
+            previous_numeric = self.opinion_history.get(policy_id, [(None, None)])[-1][1]
+            previous_letter = NUMERIC_TO_LETTER.get(previous_numeric, "N/A")
+            previous_label = RESPONSE_LABELS.get(previous_letter, "N/A")
+            previous_response_text = f"Your previous response was: {previous_letter} ({previous_label})"
+
+            question = "Respond with only a single letter (A-G)."
+            user_prompt = "\n\n".join([framing, policy_question, response_options, previous_response_text, question])
+            return user_prompt
+
+    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
         
-        system_prompt = self.get_system_prompt()
-        user_prompt = self.get_user_prompt(policy_id)
+        system_prompt = self.get_system_prompt(day=day)
+        user_prompt = self.get_user_prompt(policy_id, day=day)
 
         llm_response = send_chat(system_prompt, user_prompt, api_key=api_key, model=model,
               provider=provider, temperature=temperature)
         letter_response = parse_letter_response(llm_response)
         opinion_value = RESPONSE_SCALE.get(letter_response)
-        # Store the opinion value and history    
+
+        # Store in opinion_history (append, don't overwrite)
+        if policy_id not in self.opinion_history:
+            self.opinion_history[policy_id] = []
+        self.opinion_history[policy_id].append((day, opinion_value))
+
         return letter_response, opinion_value
 
     def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai") -> dict:
 
         results = {}
         for policy_id in SURVEY_QUESTIONS.keys():
-            letter_response, opinion_value = self.administer_survey(policy_id, model=model, provider=provider, api_key=api_key)
-            self.opinion_history[policy_id] = [(0, opinion_value)]
+            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key)
             results[policy_id] = (letter_response, opinion_value)
         return results
     
