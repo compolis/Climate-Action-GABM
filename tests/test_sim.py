@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import unittest
+from itertools import permutations
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
@@ -379,6 +380,52 @@ class TestRunSimulation(unittest.TestCase):
         broadcast_calls = nation.run_political_broadcast.call_args_list
         days_called = [c[0][2] for c in broadcast_calls]  # 3rd positional arg = day
         self.assertEqual(days_called, [1, 2])
+
+
+# ── Phase ordering acceptance ─────────────────────────────────
+
+class TestAllPhaseOrderings(unittest.TestCase):
+    """All 6 permutations of [P-A, P-B, C] should run without error."""
+
+    ALL_ORDERINGS = list(permutations(["P-A", "P-B", "C"]))
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_all_six_orderings_produce_results(self, mock_pa_cls, mock_api):
+        policy = ClimatePolicyID.CARBON_TAX
+        for phases in self.ALL_ORDERINGS:
+            with self.subTest(phases=phases):
+                nation = _make_mock_nation(3)
+                config = {"days": [{"policy": policy, "phases": list(phases)}]}
+                results = run_simulation(config, nation)
+                self.assertFalse(results["opinion_trajectories"].empty,
+                                 f"No trajectories for ordering {phases}")
+                self.assertGreater(len(results["reflections"]), 0,
+                                   f"No reflections for ordering {phases}")
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_different_orderings_produce_different_call_sequences(self, mock_pa_cls, mock_api):
+        """Different phase orderings should execute phases in different orders."""
+        policy = ClimatePolicyID.CARBON_TAX
+        call_sequences = {}
+
+        for phases in self.ALL_ORDERINGS:
+            nation = _make_mock_nation(3)
+            call_order = []
+            nation.run_peer_messaging.side_effect = lambda *a, **kw: call_order.append("C")
+            nation.run_political_broadcast.side_effect = lambda phase, *a, **kw: call_order.append(phase)
+            nation.run_end_of_day_survey.side_effect = lambda *a, **kw: None
+
+            config = {"days": [{"policy": policy, "phases": list(phases)}]}
+            run_simulation(config, nation)
+            call_sequences[phases] = tuple(call_order)
+
+        # All 6 orderings should produce distinct call sequences
+        unique_sequences = set(call_sequences.values())
+        self.assertEqual(len(unique_sequences), 6,
+                         f"Expected 6 distinct call sequences, got {len(unique_sequences)}: "
+                         f"{call_sequences}")
 
 
 # ── SIM_CONFIG defaults ────────────────────────────────────────
