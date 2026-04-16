@@ -13,6 +13,8 @@ from datetime import date
 from cag.io.llm import send_chat, parse_letter_response
 from cag.abm.attributes.opinion import SURVEY_QUESTIONS, RESPONSE_LABELS, RESPONSE_SCALE, SURVEY_COLUMN_MAP
 
+NUMERIC_TO_LETTER = {-3: "A", -2: "B", -1: "C", 0: "D", 1: "E", 2: "F", 3: "G"}
+
 class SurveyedCitizen():
     
     def __init__(
@@ -66,6 +68,7 @@ class SurveyedCitizen():
         self.political_exposure = "neither"
         self.network_neighbors = []
         self.reflections = []
+        self.daily_summaries = {}   # {(day, policy_id): summary_text}
 
     def __str__(self):
         """
@@ -172,39 +175,150 @@ class SurveyedCitizen():
             return ""
         return "When it comes to my core values and worldview: " + " ".join(descriptions)
     
-    def get_system_prompt(self) -> str:
-        return self.get_persona() + "\n" + self.get_narrative()
+    def get_system_prompt(self, day=0, policy_id=None) -> str:
+        """Delegates to assemble_context."""
+        return self.assemble_context(day, policy_id=policy_id)
 
-    def get_user_prompt(self, policy_id) -> str:
-        policy_question = SURVEY_QUESTIONS.get(policy_id)
-        response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
-        return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+    def assemble_context(self, day=0, policy_id=None) -> str:
+        """Build the full LLM context for a given day.
 
-    def administer_survey(self, policy_id, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
+        Structure:
+        1. Persona + narrative (always)
+        2. Daily summaries (older than d-1)
+        3. Full reflections (days d-1 and d)
+        4. Opinion trajectory
+        5. Persona reminder
+        """
+        sections = []
+        persona = self.get_persona()
+        narrative = self.get_narrative()
+
+        if day == 0:
+            return persona + "\n" + narrative
+
+        # 2. Daily summaries (everything older than d-1)
+        daily_parts = []
+        for key in sorted(self.daily_summaries.keys()):
+            d, pid = key
+            if d < day - 1 and (policy_id is None or pid == policy_id):
+                daily_parts.append(f"Day {d}: {self.daily_summaries[key]}")
+        if daily_parts:
+            sections.append("Summary of recent days:\n" + "\n".join(daily_parts))
+
+        # 3. Full reflections for days d-1 and d
+        recent_days = {day - 1, day}
+        recent_reflections = [r for r in self.reflections
+                              if r["day"] in recent_days
+                              and (policy_id is None or r.get("policy_id") == policy_id)]
+        if recent_reflections:
+            ref_lines = [f"- [{r['phase']}] {r['text']}" for r in recent_reflections]
+            sections.append("Your recent reflections following received messages:\n" + "\n".join(ref_lines))
+
+        persona = self.get_persona()
+        narrative = self.get_narrative()
+        sections.append(persona + "\n" + narrative)
+
+        trajectory = self._build_opinion_trajectory(policy_id=policy_id)
+        if trajectory:
+            sections.append("Your opinion trajectory so far:\n" + trajectory)
+
+        return "\n\n".join(sections)
+
+    def _build_opinion_trajectory(self, policy_id=None):
+        """Compact string of past survey responses for a given policy."""
+        if policy_id is not None:
+            history = self.opinion_history.get(policy_id, [])
+            if not history:
+                return ""
+            return ", ".join(f"Day {d}: {NUMERIC_TO_LETTER.get(v, '?')}" for d, v in history)
+        # No policy specified — show all
+        lines = []
+        for pid, history in self.opinion_history.items():
+            if not history:
+                continue
+            entries = ", ".join(f"Day {d}: {NUMERIC_TO_LETTER.get(v, '?')}" for d, v in history)
+            policy_name = SURVEY_QUESTIONS.get(pid, str(pid))[:60]
+            lines.append(f"{policy_name}: {entries}")
+        return "\n".join(lines)
+
+    def compress_memories(self, memories, api_key=None, model="gpt-4o-mini", provider="openai"):
+
+        user_prompt = "Concisely summarise the following in 2 sentences from a 1st person perspective: {}".format(memories)
+        system_prompt = "You are a concise summariser."
+
+        summary = send_chat(system_prompt, user_prompt, api_key=api_key, model=model, provider=provider, temperature=0.7)
+
+        return summary
+
+    def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai"):
+        """Summarise all reflections from a given day and policy into 2-3 sentences."""
+        day_reflections = [r for r in self.reflections
+                          if r["day"] == day and r.get("policy_id") == policy_id]
+        if not day_reflections:
+            return ""
+        reflection_texts = "\n".join(f"- {r['text']}" for r in day_reflections)
+        summary = self.compress_memories(reflection_texts, api_key=api_key, model=model, provider=provider)
+        self.daily_summaries[(day, policy_id)] = summary
+        return summary
+
+    def manage_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai"):
+        """Called at the end of each simulation day to compress old memories."""
+        # Compress day d-2 into a daily summary (keep d-1 and d as full reflections)
+        if day > 2:
+            compress_day = day - 2
+            if (compress_day, policy_id) not in self.daily_summaries:
+                self.compress_daily_memory(compress_day, policy_id, api_key=api_key, model=model, provider=provider)
+
+    def get_user_prompt(self, policy_id, day=0) -> str:
+        if day == 0:
+            policy_question = SURVEY_QUESTIONS.get(policy_id)
+            response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
+            return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
+        else:   
+            framing = "Based on everything you've experienced today, please answer the following survey question."
+
+            policy_question = SURVEY_QUESTIONS.get(policy_id)
+
+            response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
+
+            previous_numeric = self.opinion_history.get(policy_id, [(None, None)])[-1][1]
+            previous_letter = NUMERIC_TO_LETTER.get(previous_numeric, "N/A")
+            previous_label = RESPONSE_LABELS.get(previous_letter, "N/A")
+            previous_response_text = f"Your previous response was: {previous_letter} ({previous_label})"
+
+            question = "Respond with only a single letter (A-G)."
+            user_prompt = "\n\n".join([framing, policy_question, response_options, previous_response_text, question])
+            return user_prompt
+
+    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
         
-        system_prompt = self.get_system_prompt()
-        user_prompt = self.get_user_prompt(policy_id)
+        system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
+        user_prompt = self.get_user_prompt(policy_id, day=day)
 
         llm_response = send_chat(system_prompt, user_prompt, api_key=api_key, model=model,
               provider=provider, temperature=temperature)
         letter_response = parse_letter_response(llm_response)
         opinion_value = RESPONSE_SCALE.get(letter_response)
-        # Store the opinion value and history    
+
+        # Store in opinion_history (append, don't overwrite)
+        if policy_id not in self.opinion_history:
+            self.opinion_history[policy_id] = []
+        self.opinion_history[policy_id].append((day, opinion_value))
+
         return letter_response, opinion_value
 
     def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai") -> dict:
 
         results = {}
         for policy_id in SURVEY_QUESTIONS.keys():
-            letter_response, opinion_value = self.administer_survey(policy_id, model=model, provider=provider, api_key=api_key)
-            self.opinion_history[policy_id] = [(0, opinion_value)]
+            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key)
             results[policy_id] = (letter_response, opinion_value)
         return results
     
     def receive_political_message(self, message, policy_id, phase, day,
                                     api_key=None, model="gpt-4o-mini",
                                     provider="openai", temperature=0.7) -> str:
-        system_prompt = self.get_system_prompt()
+        system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         user_prompt = (
             f'You just received the following message:\n'
@@ -218,15 +332,16 @@ class SurveyedCitizen():
         self.reflections.append({
             "day": day,
             "phase": phase,
+            "policy_id": policy_id,
             "text": reflection_text,
             "messages_received": [message],
         })
         return reflection_text
 
-    def generate_peer_message(self, policy_id, api_key=None,
+    def generate_peer_message(self, policy_id, day=0, api_key=None,
                               model="gpt-4o-mini", provider="openai",
                               temperature=0.7) -> str:
-        system_prompt = self.get_system_prompt()
+        system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         user_prompt = (
             f"Express your current thinking on the following policy in "
@@ -240,7 +355,7 @@ class SurveyedCitizen():
     def receive_peer_messages(self, messages, policy_id, day,
                               api_key=None, model="gpt-4o-mini",
                               provider="openai", temperature=0.7) -> str:
-        system_prompt = self.get_system_prompt()
+        system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         numbered = "\n".join(
             f'{i+1}. "{m}"' for i, m in enumerate(messages)
@@ -260,6 +375,7 @@ class SurveyedCitizen():
         self.reflections.append({
             "day": day,
             "phase": "C",
+            "policy_id": policy_id,
             "text": reflection_text,
             "messages_received": list(messages),
         })

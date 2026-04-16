@@ -183,6 +183,44 @@ class SurveyedNation(Nation):
             print(f"Policy {policy_id} - Exact: {row['match']:.1%}, Ordinal: {row['ordinal_score']:.3f}")
 
         return df
+    
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai"):
+
+        endofday_rows = []
+        agents = list(self.agents_active.values())
+        logging.info(f"Running end-of-day survey for {len(agents)} agents, policy {policy_id}, day {day}")
+
+        for agent in agents:
+            # Get previous opinion (last entry in history)
+            history = agent.opinion_history.get(policy_id, [])
+            previous_numeric = history[-1][1] if history else None
+
+            letter, numeric = agent.administer_survey(
+                policy_id=policy_id, day=day, api_key=api_key,
+                model=model, provider=provider)
+
+            shift = numeric - previous_numeric if previous_numeric is not None else 0
+            logging.info(f"Agent {agent.id}: {letter} ({numeric:+d}), previous={previous_numeric}, shift={shift:+d}")
+
+            endofday_rows.append({
+                "agent_id": agent.id,
+                "policy_id": str(policy_id),
+                "day": day,
+                "raw_letter": letter,
+                "raw_numeric": numeric,
+                "previous_numeric": previous_numeric,
+                "shift": shift,
+            })
+
+        df = pd.DataFrame(endofday_rows)
+        mean_shift = df["shift"].mean()
+        logging.info(f"Mean shift: {mean_shift:+.2f}")
+
+        shift_counts = df["shift"].value_counts().sort_index()
+        logging.info(f"Shift distribution:\n{shift_counts.to_string()}")
+
+        return df
+
 
     def assign_political_exposure(self):
         """
@@ -400,7 +438,7 @@ class SurveyedNation(Nation):
         for cid in selections:
             citizen = self.agents_active[cid]
             msg = citizen.generate_peer_message(
-                policy_id, api_key=api_key, model=model,
+                policy_id, day=day, api_key=api_key, model=model,
                 provider=provider, temperature=temperature,
             )
             generated_messages[cid] = msg
