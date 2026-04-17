@@ -184,7 +184,7 @@ class SurveyedNation(Nation):
 
         return df
     
-    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai"):
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
 
         endofday_rows = []
         agents = list(self.agents_active.values())
@@ -197,7 +197,7 @@ class SurveyedNation(Nation):
 
             letter, numeric = agent.administer_survey(
                 policy_id=policy_id, day=day, api_key=api_key,
-                model=model, provider=provider)
+                model=model, provider=provider, temperature=temperature)
 
             shift = numeric - previous_numeric if previous_numeric is not None else 0
             logging.info(f"Agent {agent.id}: {letter} ({numeric:+d}), previous={previous_numeric}, shift={shift:+d}")
@@ -224,16 +224,38 @@ class SurveyedNation(Nation):
 
     def assign_political_exposure(self):
         """
-        Assign political exposure categories to all citizens based on voting history.
+        Assign political exposure categories to all citizens based on voting
+        history and political self-placement.
+
+        The guiding principle is that **any directional political signal**
+        means the citizen is exposed to political communication.  Only
+        citizens with *zero* signal across Brexit vote, GE2019 vote, and
+        left-right self-placement are assigned "neither".
+
+        Literature reference: true political-information isolates comprise
+        roughly 5-12 % of a UK sample (Prior 2007; Fletcher & Nielsen 2017).
 
         Priority rules (checked in order):
-        1. Leave + Conservative/Brexit → "B-only"
-        2. Remain + Labour/Green/LibDem → "A-only"
-        3. Leave + Labour/Green/LibDem (mixed) → "both"
-        4. Remain + Conservative (mixed) → "both"
-        5. Centre politics (any votes) → "both"
-        6. Unknown/DontKnow both votes → "neither"
-        7. Fallback → "neither"
+
+        CLEAR ECHO CHAMBER (both votes known, consistent):
+         1. Leave + Conservative/Brexit             → "B-only"
+         2. Remain + Labour/Green/LibDem            → "A-only"
+
+        CROSS-PRESSURED (both votes known, contradictory):
+         3. Leave + Labour/Green/LibDem             → "both"
+         4. Remain + Conservative/Brexit            → "both"
+
+        ONE KNOWN VOTE (partial signal):
+         5. Leave + (DK/Other/Unknown GE)           → "both"
+         6. Remain + (DK/Other/Unknown GE)          → "both"
+         7. (DK/Unknown Brexit) + left party        → "both"
+         8. (DK/Unknown Brexit) + right party       → "both"
+
+        POLITICS-ONLY SIGNAL (no usable vote data):
+         9. Any left-right self-placement (1-7)     → "both"
+
+        TRULY DISENGAGED (zero directional signal):
+        10. DK/Unknown across all three dimensions  → "neither"
 
         Also populates political_agent_a.connected_citizens and
         political_agent_b.connected_citizens.
@@ -242,7 +264,9 @@ class SurveyedNation(Nation):
                         UKGE2019VoteID.LIBERAL_DEMOCRATS}
         right_parties = {UKGE2019VoteID.CONSERVATIVE, UKGE2019VoteID.BREXIT}
         unknown_brexit = {BrexitVoteID.UNKNOWN, BrexitVoteID.DONT_KNOW}
-        unknown_ge = {UKGE2019VoteID.UNKNOWN, UKGE2019VoteID.DONT_KNOW}
+        unknown_ge = {UKGE2019VoteID.UNKNOWN, UKGE2019VoteID.DONT_KNOW,
+                      UKGE2019VoteID.OTHER}
+        no_politics = {PoliticsID.UNKNOWN, PoliticsID.DONT_KNOW}
 
         a_citizens = []
         b_citizens = []
@@ -252,18 +276,30 @@ class SurveyedNation(Nation):
             ge = citizen.ukge2019_vote_id
             politics = citizen.politics_id
 
+            # --- Rules 1-2: clear echo chamber ---
             if brexit == BrexitVoteID.LEAVE and ge in right_parties:
                 exposure = "B-only"
             elif brexit == BrexitVoteID.REMAIN and ge in left_parties:
                 exposure = "A-only"
+            # --- Rules 3-4: cross-pressured ---
             elif brexit == BrexitVoteID.LEAVE and ge in left_parties:
                 exposure = "both"
             elif brexit == BrexitVoteID.REMAIN and ge in right_parties:
                 exposure = "both"
-            elif politics == PoliticsID.CENTRE:
+            # --- Rules 5-6: one known Brexit vote, GE unknown ---
+            elif brexit == BrexitVoteID.LEAVE and ge in unknown_ge:
                 exposure = "both"
-            elif brexit in unknown_brexit and ge in unknown_ge:
-                exposure = "neither"
+            elif brexit == BrexitVoteID.REMAIN and ge in unknown_ge:
+                exposure = "both"
+            # --- Rules 7-8: Brexit unknown, one known party vote ---
+            elif brexit in unknown_brexit and ge in left_parties:
+                exposure = "both"
+            elif brexit in unknown_brexit and ge in right_parties:
+                exposure = "both"
+            # --- Rule 9: politics-only signal ---
+            elif politics not in no_politics:
+                exposure = "both"
+            # --- Rule 10: truly disengaged ---
             else:
                 exposure = "neither"
 

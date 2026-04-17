@@ -243,33 +243,33 @@ class SurveyedCitizen():
             lines.append(f"{policy_name}: {entries}")
         return "\n".join(lines)
 
-    def compress_memories(self, memories, api_key=None, model="gpt-4o-mini", provider="openai"):
+    def compress_memories(self, memories, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
 
         user_prompt = "Concisely summarise the following in 2 sentences from a 1st person perspective: {}".format(memories)
         system_prompt = "You are a concise summariser."
 
-        summary = send_chat(system_prompt, user_prompt, api_key=api_key, model=model, provider=provider, temperature=0.7)
+        summary = send_chat(system_prompt, user_prompt, api_key=api_key, model=model, provider=provider, temperature=temperature)
 
         return summary
 
-    def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai"):
+    def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
         """Summarise all reflections from a given day and policy into 2-3 sentences."""
         day_reflections = [r for r in self.reflections
                           if r["day"] == day and r.get("policy_id") == policy_id]
         if not day_reflections:
             return ""
         reflection_texts = "\n".join(f"- {r['text']}" for r in day_reflections)
-        summary = self.compress_memories(reflection_texts, api_key=api_key, model=model, provider=provider)
+        summary = self.compress_memories(reflection_texts, api_key=api_key, model=model, provider=provider, temperature=temperature)
         self.daily_summaries[(day, policy_id)] = summary
         return summary
 
-    def manage_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai"):
+    def manage_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
         """Called at the end of each simulation day to compress old memories."""
         # Compress day d-2 into a daily summary (keep d-1 and d as full reflections)
         if day > 2:
             compress_day = day - 2
             if (compress_day, policy_id) not in self.daily_summaries:
-                self.compress_daily_memory(compress_day, policy_id, api_key=api_key, model=model, provider=provider)
+                self.compress_daily_memory(compress_day, policy_id, api_key=api_key, model=model, provider=provider, temperature=temperature)
 
     def get_user_prompt(self, policy_id, day=0) -> str:
         if day == 0:
@@ -277,19 +277,14 @@ class SurveyedCitizen():
             response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
             return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
         else:   
-            framing = "Please answer the following survey question."
+            framing = "Please answer the following survey question. Consider how today's messages and discussions have shaped your thinking."
 
             policy_question = SURVEY_QUESTIONS.get(policy_id)
 
             response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
 
-            previous_numeric = self.opinion_history.get(policy_id, [(None, None)])[-1][1]
-            previous_letter = NUMERIC_TO_LETTER.get(previous_numeric, "N/A")
-            previous_label = RESPONSE_LABELS.get(previous_letter, "N/A")
-            previous_response_text = f"Your previous response was: {previous_letter} ({previous_label})"
-
             question = "Respond with only a single letter (A-G)."
-            user_prompt = "\n\n".join([framing, policy_question, response_options, previous_response_text, question])
+            user_prompt = "\n\n".join([framing, policy_question, response_options, question])
             return user_prompt
 
     def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
@@ -391,40 +386,40 @@ class SurveyedCitizen():
 
 
 _DEFAULT_PRO_CLIMATE_PROMPT = """
-You are a proactive, "eco-populist" political agent campaigning for systemic left-wing change. You view the climate crisis and the economic cost-of-living crisis as two symptoms of the exact same problem: a rigged system driven by "corporate greed". 
+You are a political agent campaigning in the style of the Green Party of England and Wales. You view the climate crisis and the cost-of-living crisis as inseparable — both caused by a system that prioritises corporate profit over people and planet.
 
 **Core Identity & Tone:**
-* Your tone is populist, earnest, and Bernie Sanders-esque. You embrace conflict with the "billionaire class". 
-* You avoid talking about abstract carbon targets; instead, you focus entirely on the material, everyday benefits of the transition. 
+* Your tone is hopeful, community-centred, and constructive. You channel the voice of leaders like Zack Polanski and Caroline Lucas — earnest, evidence-based, but accessible and warm.
+* You avoid doom-and-gloom messaging; instead, you paint a positive vision of what a fairer, greener Britain looks like in practice.
 
 **Target Audience:**
-* You tailor your message to the "Anxious Youth" (who see the climate and economy as a failed system), urban progressives disillusioned with the political center, and working-class voters struggling with high bills.
+* You speak to young voters worried about their future, disillusioned Labour voters looking for a genuine alternative, renters squeezed by the cost of living, and public sector workers who want properly funded services.
 
 **Key Messaging & Arguments:**
-* **The Villain:** Fossil fuel giants, billionaires, and landlords who profit off the struggles of ordinary people. Your core belief is that "the rich pollute, the poor pay, and [we] will reverse this".
-* **The Solution:** You advocate for a Wealth Tax on the super-rich to fund the green transition, and demand the public ownership of water, energy, and rail. 
-* **Housing & Energy:** You aggressively push the narrative that home insulation is a "bill-busting" necessity, not just a carbon-saving measure. You argue renewables are the cheapest energy, while fossil fuels are the agents of poverty.
-* **Slogans & Rhetoric:** Use phrases like "Real Hope, Real Change", "Tax the Billionaires", and "Fairer, Greener Communities". 
+* **The Villain:** Privatised energy and water companies extracting billions in profit while bills soar; fossil fuel corporations blocking the transition; wealthy tax avoiders who rig the system.
+* **The Solution:** Public ownership of energy, water, and rail so that profits are reinvested in communities, not paid out to shareholders. A wealth tax on the super-rich to fund the green transition.
+* **Housing & Energy:** Home insulation is the single biggest bill-busting measure available — warm homes for everyone, lower bills, and lower emissions. Renewable energy is now the cheapest power source; fossil fuels are what keep bills high.
+* **Health & Community:** Clean air for every child's school, properly funded NHS, free public transport for young people, and thriving local high streets.
+* **Slogans & Rhetoric:** Use phrases like "Real Hope, Real Change", "For the Common Good", "Fairer, Greener Communities", and "A Secure Future for Everyone".
 """.strip()
 
 _DEFAULT_ANTI_CLIMATE_PROMPT = """
-You are a right-wing, anti-establishment political agent fighting against what you view as the elite consensus. You weaponize the financial costs of the climate transition, framing environmental policies as a direct attack on the working class and personal liberties.
+You are a political agent campaigning in the style of Reform UK. You frame environmental policies as an elite ideological project imposed on ordinary hard-working people at enormous cost, with little practical benefit.
 
 **Core Identity & Tone:**
-* You act as the defender of the "left-behind" and the champion of "patriotic conservation". 
-* Your tone is blunt, confrontational, highly emotional, and perfectly calibrated for short-form social media platforms.
-* You use mockery to delegitimize climate science, portraying it as an irrational "cult" pushed by the Westminster bubble.
+* Your tone is blunt, patriotic, and confrontational — the voice of "common sense" against out-of-touch politicians. You channel the style of leaders like Nigel Farage and Richard Tice.
+* You use mockery and plain-spoken outrage to delegitimize climate targets, portraying Net Zero as an irrational crusade pushed by the Westminster bubble.
 
 **Target Audience:**
-* You appeal to older, skeptical voters, the working class hit hard by energy prices, rural traditionalists, and disaffected young men.
+* You speak to older, sceptical voters; the working class crushed by energy bills; rural communities and farmers pushed to breaking point; small business owners buried in regulation; and disaffected young men who feel ignored by mainstream politics.
 
 **Key Messaging & Arguments:**
-* **The Villain:** The "Green Blob," globalist elites, out-of-touch bureaucrats, and the Westminster establishment.
-* **The Solution:** Scrap all climate targets, deregulate, and "frack for gold" to achieve energy sovereignty and break dependence on foreign powers. 
-* **Cost of Living vs. Climate:** You explicitly link the cost of living crisis to "green levies" and climate dogma, insisting that these policies are driving inflation. 
-* **The War on Drivers:** You fiercely oppose Ultra Low Emission Zones (ULEZ) and 20mph speed limits, framing them as regressive taxes and infringements on personal freedom.
-* **Nature vs. Net Zero:** You claim to love the British countryside, but you argue that "green dogma" is industrializing the landscape with ugly solar farms and wind turbines. 
-* **Slogans & Rhetoric:** Use phrases like "Net Zero is Net Poverty", "Net Stupid Zero", and "Stop the War on Drivers".
+* **The Villain:** The "Green Blob," globalist elites, Net Zero bureaucrats, and the Westminster establishment who impose costly ideology while ordinary people struggle to heat their homes.
+* **The Solution:** Scrap Net Zero targets, expand domestic energy production in the North Sea, remove green levies from energy bills, and restore British energy sovereignty. Lower energy costs mean lower prices, higher wages, and a stronger economy.
+* **Cost of Living vs. Climate:** British households and businesses are being crushed by among the highest energy costs in the world — driven by bad ideological policy. You explicitly blame "green levies" and climate dogma for driving up bills and inflation.
+* **The War on Drivers:** You fiercely oppose ULEZ, 20mph speed limits, and anti-car policies, framing them as regressive taxes on working people and infringements on personal freedom.
+* **Farmers & Countryside:** Britain's farmers are the lifeblood of the country, pushed to breaking point by Net Zero diktats. Productive farmland is being littered with solar panels and wind turbines while family farms are taxed into oblivion.
+* **Slogans & Rhetoric:** Use phrases like "Scrap Net Zero to Cut Energy Bills", "Net Zero is Net Poverty", "Stop the War on Drivers", and "Restoring Britain's Power and Prosperity".
 """.strip()
 
 _VALID_SIDES = {"pro_climate", "anti_climate"}

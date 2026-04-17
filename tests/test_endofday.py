@@ -89,12 +89,20 @@ class TestEndOfDayPrompts:
         assert "carbon tax idea seems fair" in system_prompt
 
     @mock.patch("cag.abm.agent.send_chat", return_value="D")
-    def test_day1_user_prompt_includes_previous_response(self, mock_send):
+    def test_day1_user_prompt_excludes_previous_response(self, mock_send):
         citizen = _make_citizen()
         citizen.opinion_history[ClimatePolicyID.CARBON_TAX] = [(0, 1)]
         citizen.administer_survey(ClimatePolicyID.CARBON_TAX, day=1)
         user_prompt = mock_send.call_args[0][1]
-        assert "previous response" in user_prompt.lower()
+        assert "previous response" not in user_prompt.lower()
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="D")
+    def test_day1_user_prompt_includes_reflection_bridge(self, mock_send):
+        citizen = _make_citizen()
+        citizen.opinion_history[ClimatePolicyID.CARBON_TAX] = [(0, 1)]
+        citizen.administer_survey(ClimatePolicyID.CARBON_TAX, day=1)
+        user_prompt = mock_send.call_args[0][1]
+        assert "shaped your thinking" in user_prompt.lower()
 
     @mock.patch("cag.abm.agent.send_chat", return_value="D")
     def test_day0_prompt_does_not_include_reflections(self, mock_send):

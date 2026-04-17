@@ -27,7 +27,7 @@ SIM_CONFIG = {
     "block_sizes": None,        # defaults to equal split
     "llm_model": "gpt-4o-mini",
     "llm_provider": "openai",
-    "llm_temperature": 0.7,
+    "llm_temperature": 0.5,
     "random_seed": 42,
     "output_dir": "data/output/experiments",
 }
@@ -111,6 +111,7 @@ def run_simulation(config, nation):
         nation.run_end_of_day_survey(
             policy, day,
             api_key=api_key, model=model, provider=provider,
+            temperature=temperature,
         )
 
         # Memory management
@@ -118,6 +119,7 @@ def run_simulation(config, nation):
             agent.manage_memory(
                 day, policy,
                 api_key=api_key, model=model, provider=provider,
+                temperature=temperature,
             )
 
         # Log progress

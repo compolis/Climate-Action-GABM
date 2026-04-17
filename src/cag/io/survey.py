@@ -88,13 +88,17 @@ def load(file_path: str | Path, required_columns: list[str] = None) -> 'pd.DataF
         df3['ID'] = df3['ID'].astype(int)
     except Exception as e:
         logging.warning(f"Could not convert 'ID' column to int: {e}")
-    # Filter out rows based on specified conditions (skipped or invalid responses)
+    # Filter out rows with unmapped attribute values (would crash on map lookup).
+    # Education 19="Don't know", 20="Prefer not to say" → no SurveyEducationMap entry.
+    # Ethnicity 6="Other" (codebook) → no SurveyEthnicityMap entry.
+    # pastvote_EURef 4="Can't remember" → no BrexitVoteID entry.
+    # Political_Left_Right: all values 1-8 are mapped (incl. 8="Don't know").
+    # Education 18="Other technical…" IS mapped; ethnicity 5="Refused" IS mapped.
     try:
         df4 = df3[
-            (df3['profile_education_level'] < 18) &
-            (df3['ethnicity_R'] < 5) &
-            (df3['pastvote_EURef'] < 4) &
-            (df3['Political_Left_Right'] < 8)
+            (df3['profile_education_level'] <= 18) &
+            (df3['ethnicity_R'] <= 5) &
+            (df3['pastvote_EURef'] < 4)
         ]
     except Exception as e:
         logging.warning(f"Error filtering survey data rows: {e}")
