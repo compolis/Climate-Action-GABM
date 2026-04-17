@@ -192,9 +192,10 @@ class SurveyedCitizen():
         sections = []
         persona = self.get_persona()
         narrative = self.get_narrative()
+        sections.append(persona + "\n" + narrative)
 
         if day == 0:
-            return persona + "\n" + narrative
+            return "\n\n".join(sections)
 
         # 2. Daily summaries (everything older than d-1)
         daily_parts = []
@@ -214,13 +215,14 @@ class SurveyedCitizen():
             ref_lines = [f"- [{r['phase']}] {r['text']}" for r in recent_reflections]
             sections.append("Your recent reflections following received messages:\n" + "\n".join(ref_lines))
 
-        persona = self.get_persona()
-        narrative = self.get_narrative()
-        sections.append(persona + "\n" + narrative)
+    
 
         trajectory = self._build_opinion_trajectory(policy_id=policy_id)
         if trajectory:
             sections.append("Your opinion trajectory so far:\n" + trajectory)
+
+        # remind about their persona:
+        sections.append("Remember your persona: " + persona)
 
         return "\n\n".join(sections)
 
@@ -275,7 +277,7 @@ class SurveyedCitizen():
             response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
             return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
         else:   
-            framing = "Based on everything you've experienced today, please answer the following survey question."
+            framing = "Please answer the following survey question."
 
             policy_question = SURVEY_QUESTIONS.get(policy_id)
 
