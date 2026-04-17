@@ -192,9 +192,6 @@ class SurveyedCitizen():
         sections = []
         persona = self.get_persona()
         narrative = self.get_narrative()
-
-        persona = self.get_persona()
-        narrative = self.get_narrative()
         sections.append(persona + "\n" + narrative)
 
         if day == 0:
