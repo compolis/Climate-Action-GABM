@@ -44,25 +44,33 @@ def _make_nation_with_citizens(profiles):
 
 # Reusable test profiles covering all exposure categories
 _PROFILES = [
-    # A-only: Remain + Labour
+    # 0 — A-only: Remain + Labour (rule 2)
     {"brexit_vote_id": BrexitVoteID.REMAIN, "ukge2019_vote_id": UKGE2019VoteID.LABOUR, "politics_id": PoliticsID.FAIRLY_LEFT_WING},
-    # A-only: Remain + Green
+    # 1 — A-only: Remain + Green (rule 2)
     {"brexit_vote_id": BrexitVoteID.REMAIN, "ukge2019_vote_id": UKGE2019VoteID.GREEN, "politics_id": PoliticsID.VERY_LEFT_WING},
-    # A-only: Remain + LibDem
+    # 2 — A-only: Remain + LibDem (rule 2)
     {"brexit_vote_id": BrexitVoteID.REMAIN, "ukge2019_vote_id": UKGE2019VoteID.LIBERAL_DEMOCRATS, "politics_id": PoliticsID.SLIGHTLY_LEFT_OF_CENTRE},
-    # B-only: Leave + Conservative
+    # 3 — B-only: Leave + Conservative (rule 1)
     {"brexit_vote_id": BrexitVoteID.LEAVE, "ukge2019_vote_id": UKGE2019VoteID.CONSERVATIVE, "politics_id": PoliticsID.FAIRLY_RIGHT_WING},
-    # B-only: Leave + Brexit
+    # 4 — B-only: Leave + Brexit (rule 1)
     {"brexit_vote_id": BrexitVoteID.LEAVE, "ukge2019_vote_id": UKGE2019VoteID.BREXIT, "politics_id": PoliticsID.VERY_RIGHT_WING},
-    # both: Leave + Labour (mixed)
+    # 5 — both: Leave + Labour, cross-pressured (rule 3)
     {"brexit_vote_id": BrexitVoteID.LEAVE, "ukge2019_vote_id": UKGE2019VoteID.LABOUR, "politics_id": PoliticsID.CENTRE},
-    # both: Remain + Conservative (mixed)
+    # 6 — both: Remain + Conservative, cross-pressured (rule 4)
     {"brexit_vote_id": BrexitVoteID.REMAIN, "ukge2019_vote_id": UKGE2019VoteID.CONSERVATIVE, "politics_id": PoliticsID.SLIGHTLY_RIGHT_OF_CENTRE},
-    # both: Centre politics, Other vote
+    # 7 — both: Leave + Other GE, partial signal (rule 5)
     {"brexit_vote_id": BrexitVoteID.LEAVE, "ukge2019_vote_id": UKGE2019VoteID.OTHER, "politics_id": PoliticsID.CENTRE},
-    # neither: Unknown both
+    # 8 — both: Remain + DK GE, partial signal (rule 6)
+    {"brexit_vote_id": BrexitVoteID.REMAIN, "ukge2019_vote_id": UKGE2019VoteID.DONT_KNOW, "politics_id": PoliticsID.FAIRLY_LEFT_WING},
+    # 9 — both: DK Brexit + Labour, partial signal (rule 7)
+    {"brexit_vote_id": BrexitVoteID.DONT_KNOW, "ukge2019_vote_id": UKGE2019VoteID.LABOUR, "politics_id": PoliticsID.FAIRLY_LEFT_WING},
+    # 10 — both: DK Brexit + Conservative, partial signal (rule 8)
+    {"brexit_vote_id": BrexitVoteID.DONT_KNOW, "ukge2019_vote_id": UKGE2019VoteID.CONSERVATIVE, "politics_id": PoliticsID.FAIRLY_RIGHT_WING},
+    # 11 — both: DK both votes, but has politics signal (rule 9)
+    {"brexit_vote_id": BrexitVoteID.UNKNOWN, "ukge2019_vote_id": UKGE2019VoteID.UNKNOWN, "politics_id": PoliticsID.FAIRLY_RIGHT_WING},
+    # 12 — neither: truly disengaged, all DK/Unknown (rule 10)
     {"brexit_vote_id": BrexitVoteID.UNKNOWN, "ukge2019_vote_id": UKGE2019VoteID.UNKNOWN, "politics_id": PoliticsID.DONT_KNOW},
-    # neither: DontKnow both
+    # 13 — neither: truly disengaged, all DK/Unknown (rule 10)
     {"brexit_vote_id": BrexitVoteID.DONT_KNOW, "ukge2019_vote_id": UKGE2019VoteID.DONT_KNOW, "politics_id": PoliticsID.UNKNOWN},
 ]
 
@@ -100,6 +108,8 @@ class TestAssignPoliticalExposure(unittest.TestCase):
         self.sn = _make_nation_with_citizens(_PROFILES)
         self.sn.assign_political_exposure()
 
+    # --- Rules 1-2: echo chamber ---
+
     def test_remain_labour_is_a_only(self):
         self.assertEqual(self.sn.agents_active[0].political_exposure, "A-only")
 
@@ -115,32 +125,56 @@ class TestAssignPoliticalExposure(unittest.TestCase):
     def test_leave_brexit_is_b_only(self):
         self.assertEqual(self.sn.agents_active[4].political_exposure, "B-only")
 
+    # --- Rules 3-4: cross-pressured ---
+
     def test_leave_labour_mixed_is_both(self):
         self.assertEqual(self.sn.agents_active[5].political_exposure, "both")
 
     def test_remain_conservative_mixed_is_both(self):
         self.assertEqual(self.sn.agents_active[6].political_exposure, "both")
 
-    def test_centre_politics_is_both(self):
+    # --- Rules 5-6: one known Brexit vote, GE unknown ---
+
+    def test_leave_other_ge_is_both(self):
         self.assertEqual(self.sn.agents_active[7].political_exposure, "both")
 
-    def test_unknown_both_is_neither(self):
-        self.assertEqual(self.sn.agents_active[8].political_exposure, "neither")
+    def test_remain_dk_ge_is_both(self):
+        self.assertEqual(self.sn.agents_active[8].political_exposure, "both")
 
-    def test_dont_know_both_is_neither(self):
-        self.assertEqual(self.sn.agents_active[9].political_exposure, "neither")
+    # --- Rules 7-8: Brexit unknown, one known party vote ---
+
+    def test_dk_brexit_labour_is_both(self):
+        self.assertEqual(self.sn.agents_active[9].political_exposure, "both")
+
+    def test_dk_brexit_conservative_is_both(self):
+        self.assertEqual(self.sn.agents_active[10].political_exposure, "both")
+
+    # --- Rule 9: politics-only signal ---
+
+    def test_dk_both_votes_with_politics_is_both(self):
+        self.assertEqual(self.sn.agents_active[11].political_exposure, "both")
+
+    # --- Rule 10: truly disengaged ---
+
+    def test_unknown_all_is_neither(self):
+        self.assertEqual(self.sn.agents_active[12].political_exposure, "neither")
+
+    def test_dont_know_all_is_neither(self):
+        self.assertEqual(self.sn.agents_active[13].political_exposure, "neither")
+
+    # --- Connected citizens lists ---
 
     def test_agent_a_connected_citizens(self):
         """Agent A gets A-only and both citizens."""
         ids = {c.id for c in self.sn.political_agent_a.connected_citizens}
-        # A-only: 0, 1, 2; both: 5, 6, 7
-        self.assertEqual(ids, {0, 1, 2, 5, 6, 7})
+        # A-only: 0, 1, 2; both: 5, 6, 7, 8, 9, 10, 11
+        self.assertEqual(ids, {0, 1, 2, 5, 6, 7, 8, 9, 10, 11})
 
     def test_agent_b_connected_citizens(self):
         """Agent B gets B-only and both citizens."""
         ids = {c.id for c in self.sn.political_agent_b.connected_citizens}
-        # B-only: 3, 4; both: 5, 6, 7
-        self.assertEqual(ids, {3, 4, 5, 6, 7})
+        # B-only: 3, 4; both: 5, 6, 7, 8, 9, 10, 11
+        self.assertEqual(ids, {3, 4, 5, 6, 7, 8, 9, 10, 11})
 
     def test_no_overlap_a_only_b_only(self):
         """No citizen is both A-only and B-only."""
@@ -162,7 +196,7 @@ class TestCreateNetwork(unittest.TestCase):
 
     def setUp(self):
         # Create a larger population for meaningful network stats
-        self.profiles = _PROFILES * 20  # 200 agents
+        self.profiles = _PROFILES * 15  # 210 agents
         self.sn = _make_nation_with_citizens(self.profiles)
         self.sn.assign_political_exposure()
         self.sn.create_network(seed=42)
@@ -221,7 +255,7 @@ class TestCreateNetwork(unittest.TestCase):
 class TestAssignNetworkBlocks(unittest.TestCase):
 
     def setUp(self):
-        self.profiles = _PROFILES * 20  # 200 agents
+        self.profiles = _PROFILES * 15  # 210 agents
         self.sn = _make_nation_with_citizens(self.profiles)
         self.sn.assign_political_exposure()
         self.sn.create_network(seed=42)

@@ -129,13 +129,13 @@ class TestSendChat:
     def test_openai_dispatch(self, mock_openai):
         result = send_chat("sys", "usr", api_key="key", model="gpt-4o-mini", provider="openai")
         assert result == "Hello!"
-        mock_openai.assert_called_once_with("sys", "usr", "key", "gpt-4o-mini", 0.7)
+        mock_openai.assert_called_once_with("sys", "usr", "key", "gpt-4o-mini", 0.5)
 
     @mock.patch("cag.io.llm._send_genai", return_value="Hi from Gemini!")
     def test_genai_dispatch(self, mock_genai):
         result = send_chat("sys", "usr", api_key="key", model="gemini-2.0-flash", provider="genai")
         assert result == "Hi from Gemini!"
-        mock_genai.assert_called_once_with("sys", "usr", "key", "gemini-2.0-flash", 0.7)
+        mock_genai.assert_called_once_with("sys", "usr", "key", "gemini-2.0-flash", 0.5)
 
     @mock.patch("cag.io.llm._send_openai", return_value="warm")
     def test_temperature_passed(self, mock_openai):
@@ -153,4 +153,4 @@ class TestSendChat:
         result = send_chat("sys", "usr", model="model", provider="openai")
         assert result == "auto key works"
         mock_load_key.assert_called_once_with("openai")
-        mock_openai.assert_called_once_with("sys", "usr", "auto-loaded-key", "model", 0.7)
+        mock_openai.assert_called_once_with("sys", "usr", "auto-loaded-key", "model", 0.5)

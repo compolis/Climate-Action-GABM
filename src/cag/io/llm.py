@@ -21,7 +21,7 @@ _DEFAULT_KEY_CSV = _REPO_ROOT / "data" / "api_key.csv"
 # ---------------------------------------------------------------------------
 
 def send_chat(system_prompt, user_prompt, api_key=None, model="gpt-4o-mini",
-              provider="openai", temperature=0.7):
+              provider="openai", temperature=0.5):
     """Send a chat completion request and return the assistant's text.
 
     Parameters
