@@ -243,7 +243,7 @@ class SurveyedCitizen():
             lines.append(f"{policy_name}: {entries}")
         return "\n".join(lines)
 
-    def compress_memories(self, memories, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
+    def compress_memories(self, memories, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
 
         user_prompt = "Concisely summarise the following in 2 sentences from a 1st person perspective: {}".format(memories)
         system_prompt = "You are a concise summariser."
@@ -252,7 +252,7 @@ class SurveyedCitizen():
 
         return summary
 
-    def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
+    def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
         """Summarise all reflections from a given day and policy into 2-3 sentences."""
         day_reflections = [r for r in self.reflections
                           if r["day"] == day and r.get("policy_id") == policy_id]
@@ -263,7 +263,7 @@ class SurveyedCitizen():
         self.daily_summaries[(day, policy_id)] = summary
         return summary
 
-    def manage_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
+    def manage_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
         """Called at the end of each simulation day to compress old memories."""
         # Compress day d-2 into a daily summary (keep d-1 and d as full reflections)
         if day > 2:
@@ -287,7 +287,7 @@ class SurveyedCitizen():
             user_prompt = "\n\n".join([framing, policy_question, response_options, question])
             return user_prompt
 
-    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.7) -> tuple[str, int]:
+    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.5) -> tuple[str, int]:
         
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         user_prompt = self.get_user_prompt(policy_id, day=day)
@@ -314,7 +314,7 @@ class SurveyedCitizen():
     
     def receive_political_message(self, message, policy_id, phase, day,
                                     api_key=None, model="gpt-4o-mini",
-                                    provider="openai", temperature=0.7) -> str:
+                                    provider="openai", temperature=0.5) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         user_prompt = (
@@ -337,7 +337,7 @@ class SurveyedCitizen():
 
     def generate_peer_message(self, policy_id, day=0, api_key=None,
                               model="gpt-4o-mini", provider="openai",
-                              temperature=0.7) -> str:
+                              temperature=0.5) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         user_prompt = (
@@ -351,7 +351,7 @@ class SurveyedCitizen():
 
     def receive_peer_messages(self, messages, policy_id, day,
                               api_key=None, model="gpt-4o-mini",
-                              provider="openai", temperature=0.7) -> str:
+                              provider="openai", temperature=0.5) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         numbered = "\n".join(
@@ -441,7 +441,7 @@ class PoliticalAgent:
         self.connected_citizens: list = []
 
     def generate_message(self, policy_id, api_key=None, model="gpt-4o-mini",
-                         provider="openai", temperature=0.7) -> str:
+                         provider="openai", temperature=0.5) -> str:
         verb = "supporting" if self.side == "pro_climate" else "opposing"
         user_prompt = (
             f"Generate a persuasive message (150–200 words) {verb} "

@@ -184,7 +184,7 @@ class SurveyedNation(Nation):
 
         return df
     
-    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.7):
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
 
         endofday_rows = []
         agents = list(self.agents_active.values())
@@ -385,7 +385,7 @@ class SurveyedNation(Nation):
 
     def run_political_broadcast(self, phase, policy_id, day, api_key=None,
                                 model="gpt-4o-mini", provider="openai",
-                                temperature=0.7):
+                                temperature=0.5):
         """
         Run a political broadcast phase (P-A or P-B).
 
@@ -440,7 +440,7 @@ class SurveyedNation(Nation):
 
     def run_peer_messaging(self, policy_id, day, k_peers=3, api_key=None,
                            model="gpt-4o-mini", provider="openai",
-                           temperature=0.7):
+                           temperature=0.5):
         """
         Run the peer messaging phase (C) with simultaneous update.
 
