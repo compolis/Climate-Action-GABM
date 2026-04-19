@@ -283,3 +283,73 @@ class TestResilientCall:
         ))
         with pytest.raises(RuntimeError, match="Test API call failed"):
             _resilient_call(fn, {"a": 1}, "Test")
+
+
+# ===================================================================
+# GenAI error patterns & resilient call
+# ===================================================================
+
+class TestExtractRejectedParamGenAI:
+    """GenAI-specific error-message parser tests."""
+
+    def test_genai_parameter_keyword(self):
+        msg = "400 Unsupported parameter 'temperature' for model gemini-1.0-pro"
+        assert _extract_rejected_param(msg) == "temperature"
+
+    def test_genai_field_keyword(self):
+        msg = "400 Unsupported field 'thinking_config' in GenerateContentConfig"
+        assert _extract_rejected_param(msg) == "thinking_config"
+
+    def test_genai_thinking_budget_maps_to_thinking_config(self):
+        msg = "400 Unsupported field 'thinking_budget' for this model"
+        assert _extract_rejected_param(msg) == "thinking_config"
+
+    def test_genai_include_thoughts_maps_to_thinking_config(self):
+        msg = "400 Unsupported field 'include_thoughts' for this model"
+        assert _extract_rejected_param(msg) == "thinking_config"
+
+
+class TestGenAIResilientCall:
+    """Verify _send_genai routes through _resilient_call for auto-stripping."""
+
+    @mock.patch("cag.io.llm._resilient_call")
+    def test_send_genai_uses_resilient_call(self, mock_resilient):
+        """_send_genai delegates to _resilient_call, not a bare try/except."""
+        mock_response = mock.Mock()
+        mock_response.text = "Hello from Gemini!"
+        mock_resilient.return_value = mock_response
+
+        from cag.io.llm import _send_genai
+        result = _send_genai("sys", "usr", "fake-key", "gemini-2.0-flash", 0.5, False)
+
+        assert result == "Hello from Gemini!"
+        mock_resilient.assert_called_once()
+        # Provider label should mention GenAI.
+        args = mock_resilient.call_args
+        assert args[0][2] == "Google GenAI"
+
+    @mock.patch("cag.io.llm._resilient_call")
+    def test_send_genai_thinking_enabled_omits_thinking_config(self, mock_resilient):
+        """When thinking=True, thinking_config should NOT be in config_kwargs."""
+        mock_response = mock.Mock()
+        mock_response.text = "thought about it"
+        mock_resilient.return_value = mock_response
+
+        from cag.io.llm import _send_genai
+        _send_genai("sys", "usr", "fake-key", "gemini-2.0-flash", 0.5, True)
+
+        config_kwargs = mock_resilient.call_args[0][1]
+        assert "thinking_config" not in config_kwargs
+
+    @mock.patch("cag.io.llm._resilient_call")
+    def test_send_genai_thinking_disabled_sets_budget_zero(self, mock_resilient):
+        """When thinking=False, thinking_config with budget=0 is passed."""
+        mock_response = mock.Mock()
+        mock_response.text = "no thinking"
+        mock_resilient.return_value = mock_response
+
+        from cag.io.llm import _send_genai
+        _send_genai("sys", "usr", "fake-key", "gemini-2.0-flash", 0.5, False)
+
+        config_kwargs = mock_resilient.call_args[0][1]
+        assert "thinking_config" in config_kwargs

@@ -88,8 +88,8 @@ _PARAM_PATTERNS = [
     re.compile(r"'(\w+)'\s+does not support"),
     # Anthropic: "thinking.adaptive.budget_tokens: ..." or "adaptive thinking is not supported"
     re.compile(r"^(\w+)[\.\[]", re.MULTILINE),
-    re.compile(r"(\w+)\s+(?:thinking\s+)?is not supported"),
-]
+    re.compile(r"(\w+)\s+(?:thinking\s+)?is not supported"),    # GenAI: "... parameter 'temperature' ..." or "... field 'thinking_config' ..."
+    re.compile(r"(?:parameter|field)\s+'(\w+)'"),]
 
 
 def _extract_rejected_param(error_msg):
@@ -105,6 +105,8 @@ def _extract_rejected_param(error_msg):
             param = m.group(1).lower()
             if param in ("adaptive", "budget_tokens"):
                 return "thinking"
+            if param in ("thinking_config", "thinking_budget", "include_thoughts"):
+                return "thinking_config"
             return param
     return None
 
@@ -211,17 +213,16 @@ def _send_genai(system_prompt, user_prompt, api_key, model, temperature, thinkin
     )
     if not thinking:
         config_kwargs["thinking_config"] = genai.types.ThinkingConfig(
-            thinking_budget=0,
+            include_thoughts=False,
         )
-    try:
-        response = client.models.generate_content(
-            model=model,
-            contents=user_prompt,
-            config=genai.types.GenerateContentConfig(**config_kwargs),
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Google GenAI API call failed: {exc}") from exc
 
+    def _call(**kw):
+        cfg = genai.types.GenerateContentConfig(**kw)
+        return client.models.generate_content(
+            model=model, contents=user_prompt, config=cfg,
+        )
+
+    response = _resilient_call(_call, config_kwargs, "Google GenAI")
     return response.text
 
 
@@ -276,7 +277,8 @@ def load_api_key(provider, csv_path=_DEFAULT_KEY_CSV):
     maps a provider name to its key.
 
     If the CSV cannot be read the function falls back to environment
-    variables: OPENAI_API_KEY for openai, GENAI_API_KEY for genai.
+    variables: OPENAI_API_KEY for openai, GENAI_API_KEY for genai,
+    ANTHROPIC_API_KEY for anthropic.
 
     Parameters
     ----------
