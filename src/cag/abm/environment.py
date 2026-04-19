@@ -150,7 +150,7 @@ class SurveyedNation(Nation):
         self.political_agent_a = None
         self.political_agent_b = None
 
-    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", max_agents=5):
+    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", max_agents=5, thinking=False):
        
         baseline_rows = []
        
@@ -158,7 +158,7 @@ class SurveyedNation(Nation):
         logging.info(f"Running baseline for {len(agents)} agents using model '{model}' and provider '{provider}'. If you want more agents then change max_agents in environment.run_baseline()")
 
         for agent in agents:
-            agent_result = agent.run_baseline(api_key=api_key, model=model, provider=provider)
+            agent_result = agent.run_baseline(api_key=api_key, model=model, provider=provider, thinking=thinking)
             for policy_id, (letter, numeric) in agent_result.items():
                 real_response = agent.get_real_survey_response(policy_id=policy_id)
                 logging.info(f"Agent {agent.id} - Policy {policy_id}: LLM response = {letter} ({numeric}), Real survey response = {real_response}")
@@ -184,7 +184,7 @@ class SurveyedNation(Nation):
 
         return df
     
-    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5, thinking=False):
 
         endofday_rows = []
         agents = list(self.agents_active.values())
@@ -197,7 +197,8 @@ class SurveyedNation(Nation):
 
             letter, numeric = agent.administer_survey(
                 policy_id=policy_id, day=day, api_key=api_key,
-                model=model, provider=provider, temperature=temperature)
+                model=model, provider=provider, temperature=temperature,
+                thinking=thinking)
 
             shift = numeric - previous_numeric if previous_numeric is not None else 0
             logging.info(f"Agent {agent.id}: {letter} ({numeric:+d}), previous={previous_numeric}, shift={shift:+d}")
@@ -385,7 +386,7 @@ class SurveyedNation(Nation):
 
     def run_political_broadcast(self, phase, policy_id, day, api_key=None,
                                 model="gpt-4o-mini", provider="openai",
-                                temperature=0.5):
+                                temperature=0.5, thinking=False):
         """
         Run a political broadcast phase (P-A or P-B).
 
@@ -413,14 +414,15 @@ class SurveyedNation(Nation):
             raise ValueError(f"phase must be 'P-A' or 'P-B', got '{phase}'")
 
         message = agent.generate_message(policy_id, api_key=api_key, model=model,
-                                         provider=provider, temperature=temperature)
+                                         provider=provider, temperature=temperature,
+                                         thinking=thinking)
 
         reflections = []
         for citizen in agent.connected_citizens:
             reflection = citizen.receive_political_message(
                 message, policy_id, phase, day,
                 api_key=api_key, model=model, provider=provider,
-                temperature=temperature,
+                temperature=temperature, thinking=thinking,
             )
             reflections.append(reflection)
 
@@ -440,7 +442,7 @@ class SurveyedNation(Nation):
 
     def run_peer_messaging(self, policy_id, day, k_peers=3, api_key=None,
                            model="gpt-4o-mini", provider="openai",
-                           temperature=0.5):
+                           temperature=0.5, thinking=False):
         """
         Run the peer messaging phase (C) with simultaneous update.
 
@@ -476,6 +478,7 @@ class SurveyedNation(Nation):
             msg = citizen.generate_peer_message(
                 policy_id, day=day, api_key=api_key, model=model,
                 provider=provider, temperature=temperature,
+                thinking=thinking,
             )
             generated_messages[cid] = msg
 
@@ -493,7 +496,7 @@ class SurveyedNation(Nation):
             reflection = citizen.receive_peer_messages(
                 messages, policy_id, day,
                 api_key=api_key, model=model, provider=provider,
-                temperature=temperature,
+                temperature=temperature, thinking=thinking,
             )
             reflections.append(reflection)
 

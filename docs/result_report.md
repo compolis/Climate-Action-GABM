@@ -5,6 +5,75 @@ Results are listed newest-first.
 
 ---
 
+## Baseline Bias Investigation (Notebooks 11–14)
+
+After Run 3 revealed a +2.0 baseline inflation above the real YouGov mean, a systematic investigation was conducted to understand and mitigate LLM pro-climate sycophancy.
+
+### NB 11: Model Comparison (2026-04-18)
+
+**Result files:** [`data/output/experiments/20260416_*/`](../data/output/experiments/)  
+**Notebook:** [`notebooks/11_model_baseline_comparison.ipynb`](../notebooks/11_model_baseline_comparison.ipynb)
+
+Compared 6 LLM models on the Ban Petrol Cars baseline task (N=30, seed=44). All models exhibit pro-climate bias.
+
+| Model | Mean Error | MAE | Spearman ρ |
+|---|---|---|---|
+| claude-sonnet-4-6 | +1.067 | 1.87 | 0.417 |
+| gemini-3.1-pro | +0.733 | 1.63 | 0.396 |
+| gpt-4.1-mini | +2.167 | 2.17 | 0.345 |
+
+**Finding:** All models show aggregate pro-climate bias (+0.7 to +2.2). Claude and Gemini have the best Spearman correlation. GPT-4.1-mini is worst on all metrics.
+
+### NB 12: Third-Person Perspective Shift (2026-04-18)
+
+**Result files:** [`data/output/experiments/20260418_223858_3p_experiment/`](../data/output/experiments/20260418_223858_3p_experiment/)  
+**Notebook:** [`notebooks/12_third_person_prompt_experiment.ipynb`](../notebooks/12_third_person_prompt_experiment.ipynb)
+
+Tested whether prompting Claude to reason "about this person" (3P) instead of "as this person" (1P) reduces sycophancy. N=30, Ban Petrol Cars.
+
+**Result: NEGATIVE.** 3P was slightly worse on all metrics (higher MAE, lower ρ). Hypothesis: 3P reduces personal identification without reducing social-desirability bias.
+
+### NB 13: Four-Condition Bias Mitigation (2026-04-19)
+
+**Result files:** [`data/output/experiments/20260419_002808_mitigation_experiment/`](../data/output/experiments/20260419_002808_mitigation_experiment/)  
+**Notebook:** [`notebooks/13_bias_mitigation_experiment.ipynb`](../notebooks/13_bias_mitigation_experiment.ipynb)
+
+Tested 4 conditions on Ban Petrol Cars (Claude, N=30, seed=44):
+
+| Condition | Description | Mean Error | MAE | Spearman ρ |
+|---|---|---|---|---|
+| **A** (control) | Single-step, A-G letter scale | +1.067 | 1.87 | 0.417 |
+| **B** | Two-step reasoning + anti-sycophancy | +0.233 | 1.83 | 0.424 |
+| **C** | Numeric scale (-3 to +3) + 50% reversal | +0.700 | 1.70 | 0.392 |
+| **D** (combined) | B + C combined | **+0.033** | 1.77 | 0.385 |
+
+**Key finding:** Condition D eliminates 97% of aggregate bias (+1.067 → +0.033) but does not improve individual-level MAE (~1.7–1.9 floor). Scale reversal analysis shows large primacy bias in C (Δ = -0.87) that is neutralized in D (Δ = -0.07) by the two-step reasoning.
+
+### NB 14: Multi-Policy Generalization (2026-04-19)
+
+**Result files:** [`data/output/experiments/20260419_020128_multi_policy_generalization/`](../data/output/experiments/20260419_020128_multi_policy_generalization/)  
+**Notebook:** [`notebooks/14_multi_policy_generalization.ipynb`](../notebooks/14_multi_policy_generalization.ipynb)
+
+Tested whether Condition D generalizes across 3 additional policies (Claude, N=30, seed=44):
+
+| Policy | GT Mean | A Mean Err | D Mean Err | Bias Reduction | Δ MAE | Wilcoxon p |
+|---|---|---|---|---|---|---|
+| Ban Petrol Cars (NB 13) | +0.07 | +1.067 | +0.033 | **+97%** | -0.10 | ns |
+| Carbon Tax | +0.73 | +1.300 | +0.167 | **+87%** | -0.27 | ns |
+| Climate Compensation | -0.07 | +1.500 | +0.400 | **+73%** | **-0.70** | **0.006** |
+| Renewable Energy | +2.23 | +0.300 | -0.433 | **-44%** ⚠️ | +0.33 | ns |
+
+**Key findings:**
+1. **D generalizes to 3 of 4 policies** (bias reduction +73% to +97%).
+2. **D overcorrects on Renewable Energy** — the most consensual policy (GT = +2.23). Anti-sycophancy pushes the LLM to find opposition where little exists.
+3. **Climate Compensation is the only policy with significant individual MAE improvement** (p=0.006, 18↑ 5↓ 7=).
+4. Scale reversal Δ is consistently negative (-0.40 to -1.00) across all policies, confirming positional bias is balanced by the 50/50 design.
+5. Condition A compresses responses to the positive end (Renewable Energy A = only 2s and 3s). D restores variance.
+
+**Decision:** Condition D meets the pre-registered success criterion (>50% bias reduction for ≥3 of 4 policies). Recommended for integration into `administer_survey()`, with the caveat that highly consensual policies (GT mean > +2.0) may overcorrect.
+
+---
+
 ## Run 3: 20260417_221156
 
 **Date:** 2026-04-17  
@@ -250,14 +319,81 @@ Before we can meaningfully study competing persuasion dynamics, we need to solve
 3. **Missing context** — real respondents think about cost, feasibility, and personal impact; the LLM persona may lack these grounding details
 4. **Scale interpretation** — the LLM may not calibrate "somewhat support" vs "strongly support" the same way humans do
 
+### Per-Agent Baseline Accuracy (Run 3, gpt-4.1-mini)
+
+Compared each agent's LLM Day 0 response against their real YouGov survey answer for Ban Petrol Cars. All 50 agents matched to their original survey row.
+
+**Aggregate metrics:**
+
+| Metric | Value |
+|---|---|
+| Mean signed error (LLM − Real) | **+2.16** |
+| SD of error | 1.98 |
+| Mean absolute error | 2.40 |
+| Exact matches | 7/50 (14.0%) |
+| LLM overestimates (pro-climate) | 38/50 (76.0%) |
+| LLM underestimates | 5/50 (10.0%) |
+
+**Error distribution (LLM − Real):**
+
+| Error | Count |
+|---|---|
+| -2 | 1 |
+| -1 | 4 |
+| 0 | 7 |
+| +1 | 6 |
+| +2 | 11 |
+| +3 | 6 |
+| +4 | 8 |
+| +5 | 6 |
+| +6 | 1 |
+
+**Bias by real survey response:**
+
+| Real | n | Mean LLM | Mean Error | Exact % |
+|---|---|---|---|---|
+| -3 (Strongly oppose) | 10 | +1.30 | **+4.30** | 0.0% |
+| -2 (Somewhat oppose) | 6 | +2.33 | **+4.33** | 0.0% |
+| -1 (Slightly oppose) | 7 | +1.71 | **+2.71** | 0.0% |
+| 0 (Neutral) | 10 | +1.60 | **+1.60** | 0.0% |
+| +1 (Slightly support) | 6 | +2.33 | +1.33 | 0.0% |
+| +3 (Strongly support) | 11 | +2.64 | -0.36 | 63.6% |
+
+**Key finding:** The LLM collapses almost every agent into the +1 to +3 range regardless of their real position. It has **zero exact matches for anyone below +3**. The error is worst for real opposers (error +4.3) and diminishes monotonically as the real position increases. Only strong supporters (+3) are matched accurately (63.6% exact). This confirms the LLM has a systematic pro-social/agreeableness bias on this policy question that cannot be overcome by persona demographics and psychological values alone.
+
 **Recommendations for Run 4:**
 
 | Priority | Change | Rationale |
 |---|---|---|
-| **A** | Fix baseline calibration | Investigate why LLM Day 0 responses don't match real survey answers. Options: (a) include the agent's *real* survey response in the persona, (b) add calibration instructions, (c) test whether the persona text itself biases responses. This is the #1 priority — all other findings are confounded until this is resolved. |
-| **B** | Compute per-agent baseline accuracy | Check whether each agent's real survey answer is available in the data. If so, compare LLM Day 0 response vs real response for each agent to quantify the inflation at the individual level. |
+| **A** | Test alternative LLM models | Compare baseline accuracy across models (e.g. Gemini Flash, GPT-4o, GPT-4.1, DeepSeek). If some models show lower bias, they may be better suited for the simulation. |
+| **B** | Fix baseline calibration | Options: (a) use real survey response as Day 0 baseline (skip LLM for Day 0), (b) add calibration instructions, (c) include the agent's real survey response in the persona as grounding context. |
 | **C** | Run a no-messaging control | Run the full 7-day sim with no political agents (phases P-A and P-B removed). This isolates how much opinion drift comes from the survey-taking process itself vs. actual messaging influence. |
 | **D** | Test with a different policy | Run the same config on a policy where the real survey mean is NOT near zero (e.g., a strongly supported policy). This tests whether the baseline inflation is uniform or policy-dependent. |
+
+### Prompt-Level Bias Mitigation Strategies
+
+Research-backed interventions to reduce the systematic pro-climate bias in LLM-generated baseline responses. The core problem: LLMs collapse almost all agents into the +1 to +3 range regardless of persona, with +4.3 error for real opposers.
+
+**Root causes identified:**
+1. First-person role-play ("I am a...") triggers the LLM's own RLHF-trained values (climate support = socially desirable)
+2. No explicit instruction that controversial/unpopular answers are acceptable
+3. Persona lists voting history as bare facts without connecting them to likely policy attitudes
+4. Fixed A→G response scale ordering may interact with positional biases
+
+**Interventions ranked by expected impact:**
+
+| # | Intervention | Impact | Effort | References |
+|---|---|---|---|---|
+| 1 | **Third-person perspective shift** — Rewrite system prompt from first-person ("I am a 55-year-old...") to third-person observer ("You are simulating a survey respondent: A 55-year-old..."). User prompt becomes "How would this person respond?" | HIGH (~15pp sycophancy reduction) | Small | ELEPHANT (Cheng et al. 2025, arXiv:2505.13995); SimToM (Wilf et al. 2023, arXiv:2311.10227) |
+| 2 | **Two-step reasoning** — Split the single LLM call into: Step 1 (reasoning): "Given this person's profile, what factors would shape their view? Consider that some people strongly oppose such policies." Step 2 (answer): Feed reasoning back + ask for A-G letter. | HIGH (~0.5-1.0 additional) | Medium | Chain-of-thought prompting literature; makes anti-climate reasoning explicit before commitment |
+| 3 | **Anti-sycophancy instruction** — Add explicit preamble: "Your task is to faithfully simulate how this specific real person would respond, NOT to give the 'correct' or socially desirable answer. People with this profile often hold controversial or unpopular views — that is expected and acceptable." | MEDIUM-HIGH (~5-10pp) | Small | ELEPHANT shows limited but measurable effect; compounds with 3rd-person framing |
+| 4 | **Scale randomization** — Randomly reverse the A-G scale ordering per agent (G=Strongly oppose → A=Strongly support), then un-reverse after parsing. Ablates positional bias. | MEDIUM | Small | Eicher & Irgolič 2024 (arXiv:2402.01740) show strong primacy effects in LLM list selection |
+| 5 | **Numeric scale** — Replace "A. Strongly oppose ... G. Strongly support" with "-3 = Strongly oppose ... +3 = Strongly support. Respond with a number." Negative numbers carry evaluative signal that may anchor responses better. | MEDIUM | Small | Semantic anchoring hypothesis |
+| 6 | **Multiple samples + median** — Call the LLM 3-5 times per agent, take median. Reduces noise but won't fix systematic bias. | LOW-MEDIUM (noise only) | Small (3-5x API cost) | Standard ensemble approach |
+
+**Recommended testing order:** Implement 1+3 together (highest bang for buck), then add 2, then 4. Each should be a configurable prompt strategy so they can be A/B tested in notebook 11.
+
+**Expected combined effect:** Interventions 1+2+3 could plausibly cut the +1.5 mean signed error to near zero, based on the literature.
 
 ---
 
@@ -723,3 +859,7 @@ These pre-fix runs used the **old** exposure assignment (30% neither) and temper
 | 2026-04-17 | **163200** | Survey filter fix, exposure rewrite, temp propagation | 30 agents, 7d, Ban Petrol Cars, temp=0.5 | 96.7% inertia, all shifts negative, DK agents most susceptible |
 | 2026-04-17 | **194417** | **Fix A (de-anchor), Fix B (reflection bridge), Fix C (Green Party UK / Reform UK prompts)** | 30 agents, 7d, Ban Petrol Cars, temp=0.5 | **81.9% inertia (-14.8pp), bidirectional shifts, 20/30 movers, Reform UK dominates** |
 | 2026-04-17 | **221156** | **Phase ordering alternation, gpt-4.1-mini, 50 agents** | 50 agents, 7d, Ban Petrol Cars, temp=0.5 | **84.9% inertia, 20/50 movers (40%), 19 neg / 1 pos. Key finding: LLM baseline (+1.96) is inflated +2.0 above real survey mean (-0.08); anti-climate shift is largely regression toward true mean** |
+| 2026-04-18 | NB 11 | Model comparison (6 models) | 30 agents, Ban Petrol Cars, seed=44 | All models show pro-climate bias (+0.7 to +2.2); Claude and Gemini best ρ |
+| 2026-04-18 | NB 12 | 3rd-person perspective shift | Claude, 30 agents, Ban Petrol Cars | **NEGATIVE result** — 3P slightly worse on all metrics |
+| 2026-04-19 | NB 13 | 4-condition bias mitigation (A/B/C/D) | Claude + Gemini, 30 agents, Ban Petrol Cars | **Condition D eliminates 97% of aggregate bias** (+1.067 → +0.033); MAE floor unchanged |
+| 2026-04-19 | NB 14 | Multi-policy generalization (A vs D) | Claude, 30 agents, 3 policies + NB 13 ref | **D generalizes to 3/4 policies** (+73–97% bias reduction); overcorrects on Renewable Energy (-44%) |

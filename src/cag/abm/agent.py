@@ -287,13 +287,13 @@ class SurveyedCitizen():
             user_prompt = "\n\n".join([framing, policy_question, response_options, question])
             return user_prompt
 
-    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.5) -> tuple[str, int]:
+    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.5, thinking=False) -> tuple[str, int]:
         
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         user_prompt = self.get_user_prompt(policy_id, day=day)
 
         llm_response = send_chat(system_prompt, user_prompt, api_key=api_key, model=model,
-              provider=provider, temperature=temperature)
+              provider=provider, temperature=temperature, thinking=thinking)
         letter_response = parse_letter_response(llm_response)
         opinion_value = RESPONSE_SCALE.get(letter_response)
 
@@ -304,17 +304,18 @@ class SurveyedCitizen():
 
         return letter_response, opinion_value
 
-    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai") -> dict:
+    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", thinking=False) -> dict:
 
         results = {}
         for policy_id in SURVEY_QUESTIONS.keys():
-            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key)
+            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key, thinking=thinking)
             results[policy_id] = (letter_response, opinion_value)
         return results
     
     def receive_political_message(self, message, policy_id, phase, day,
                                     api_key=None, model="gpt-4o-mini",
-                                    provider="openai", temperature=0.5) -> str:
+                                    provider="openai", temperature=0.5,
+                                    thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         user_prompt = (
@@ -325,7 +326,7 @@ class SurveyedCitizen():
         )
         reflection_text = send_chat(system_prompt, user_prompt, api_key=api_key,
                                     model=model, provider=provider,
-                                    temperature=temperature)
+                                    temperature=temperature, thinking=thinking)
         self.reflections.append({
             "day": day,
             "phase": phase,
@@ -337,21 +338,22 @@ class SurveyedCitizen():
 
     def generate_peer_message(self, policy_id, day=0, api_key=None,
                               model="gpt-4o-mini", provider="openai",
-                              temperature=0.5) -> str:
+                              temperature=0.5, thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         user_prompt = (
             f"Express your current thinking on the following policy in "
-            f"2–3 sentences. Be genuine and conversational: "
+            f"2\u20133 sentences. Be genuine and conversational: "
             f"{policy_description}"
         )
         return send_chat(system_prompt, user_prompt, api_key=api_key,
                          model=model, provider=provider,
-                         temperature=temperature)
+                         temperature=temperature, thinking=thinking)
 
     def receive_peer_messages(self, messages, policy_id, day,
                               api_key=None, model="gpt-4o-mini",
-                              provider="openai", temperature=0.5) -> str:
+                              provider="openai", temperature=0.5,
+                              thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
         numbered = "\n".join(
@@ -368,7 +370,7 @@ class SurveyedCitizen():
         )
         reflection_text = send_chat(system_prompt, user_prompt, api_key=api_key,
                                     model=model, provider=provider,
-                                    temperature=temperature)
+                                    temperature=temperature, thinking=thinking)
         self.reflections.append({
             "day": day,
             "phase": "C",
@@ -441,11 +443,12 @@ class PoliticalAgent:
         self.connected_citizens: list = []
 
     def generate_message(self, policy_id, api_key=None, model="gpt-4o-mini",
-                         provider="openai", temperature=0.5) -> str:
+                         provider="openai", temperature=0.5, thinking=False) -> str:
         verb = "supporting" if self.side == "pro_climate" else "opposing"
         user_prompt = (
-            f"Generate a persuasive message (150–200 words) {verb} "
+            f"Generate a persuasive message (150\u2013200 words) {verb} "
             f"the following policy: {SURVEY_QUESTIONS[policy_id]}"
         )
         return send_chat(self.system_prompt, user_prompt, api_key=api_key,
-                         model=model, provider=provider, temperature=temperature)
+                         model=model, provider=provider, temperature=temperature,
+                         thinking=thinking)
