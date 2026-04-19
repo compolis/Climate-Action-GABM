@@ -5,6 +5,184 @@ Results are listed newest-first.
 
 ---
 
+## Run 4: 20260419_204851 — NB 15 (Claude Sonnet + Debias + Thinking)
+
+**Date:** 2026-04-19  
+**Result files:** [`data/output/experiments/20260419_204851/`](../data/output/experiments/20260419_204851/)
+- [`config.json`](../data/output/experiments/20260419_204851/config.json)
+- [`opinion_trajectories.csv`](../data/output/experiments/20260419_204851/opinion_trajectories.csv) (180 rows = 30 agents × 6 days)
+- [`reflections.csv`](../data/output/experiments/20260419_204851/reflections.csv) (359 rows)
+- [`ground_truth.csv`](../data/output/experiments/20260419_204851/ground_truth.csv) (first run with GT saved)
+
+**Notebook:** [`notebooks/15_full_simulation_ground_truth.ipynb`](../notebooks/15_full_simulation_ground_truth.ipynb)
+
+### What Changed Since Run 3 / NB 14
+
+This run integrates all findings from the NB 11-14 bias investigation and several new features. It is the first run with (a) debiased surveys, (b) a separate survey model, (c) extended thinking, and (d) ground truth comparison.
+
+#### Code Changes (src/)
+
+| Change | Files | Description |
+|---|---|---|
+| **Condition B debias integration** | `agent.py`, `environment.py`, `sim.py` | NB 13-14 found Condition D (two-step reasoning + anti-sycophancy + numeric scale + 50% reversal) eliminated 97% aggregate bias. After review, **Condition B** (two-step reasoning + anti-sycophancy, letter scale preserved) was chosen for integration — it achieves similar bias reduction without the implementation complexity of scale reversal. Activated via `debias=True` in config. When enabled, `administer_survey()` makes 2 LLM calls: Step 1 generates reasoning about the persona's likely view, Step 2 uses that reasoning + an anti-sycophancy preamble to select the A-G letter. |
+| **Survey model override** | `sim.py` | New `survey_model` / `survey_provider` config keys allow using a different (typically more capable) model for baseline + end-of-day surveys while keeping broadcast, peer messaging, and memory on a cheaper model. Falls back to main `llm_model` / `llm_provider` when `None`. Separate API key loaded when providers differ. |
+| **Ground truth utility** | `sim.py` | New `collect_ground_truth(agents)` function extracts each agent's real YouGov survey response for all 6 climate policies. Returns a DataFrame with columns `agent_id`, `policy_id`, `ground_truth`. Called *before* the simulation to capture the pre-mutation state. |
+| **Thinking support** | `sim.py`, `llm.py` | `thinking=True` in config is passed to baseline and end-of-day survey LLM calls. For Anthropic models, this activates `{"type": "adaptive"}` extended thinking mode with `max_tokens=16000`. Thinking is NOT passed to broadcast, peer messaging, or memory calls (those use the cheap model). |
+| **Logging cleanup** | `notebooks/15_*` | Silenced `httpx` and `httpcore` loggers at WARNING level to suppress per-request HTTP noise from the Anthropic client. |
+
+#### Design Decisions
+
+- **Condition B over Condition D:** Condition D's scale reversal (50% numeric, 50% reversed) adds parsing complexity and the numeric scale is a departure from the real YouGov letter-based survey. Condition B achieves +78% bias reduction on Ban Petrol Cars (NB 13) using only prompt changes, preserving the original A-G letter format. The anti-sycophancy preamble and two-step reasoning are the key ingredients.
+- **Claude Sonnet for surveys:** NB 11 showed Claude had the best Spearman ρ (0.417) and second-lowest MAE among tested models. Extended thinking provides deeper persona reasoning at the cost of ~3× longer survey calls.
+- **gpt-4o-mini for other phases:** Broadcast message generation, peer messaging, and memory compression are less sensitive to calibration — they produce free text, not survey responses. Using a cheap fast model here keeps costs manageable.
+- **Fixed phase ordering:** NB 10 Run 3's alternating phase order was a sensible precaution, but analysis showed no measurable effect given the high inertia levels. NB 15 uses fixed P-A → P-B → C for simplicity.
+
+### Experiment Configuration
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 30 |
+| n_days | 5 |
+| policy | **Carbon Tax** (ClimatePolicyID 5) |
+| phases | P-A, P-B, C (fixed order, all days) |
+| llm_model (broadcast/peer/memory) | gpt-4o-mini |
+| llm_provider | openai |
+| survey_model | **claude-sonnet-4-6** |
+| survey_provider | **anthropic** |
+| thinking | **True** |
+| debias | **True** |
+| llm_temperature | 0.5 |
+| k_peers_per_day | 3 |
+| p_intra / p_inter | 0.15 / 0.02 |
+| random_seed | 42 |
+
+**New policy.** Switched from Ban Petrol Cars (Runs 1-3) to Carbon Tax for two reasons: (1) Carbon Tax has a moderate GT mean (+0.50), avoiding the near-zero GT that made Runs 1-3 baseline bias analysis ambiguous; (2) tests debias generalization to a policy not used in the NB 13-14 calibration experiments.
+
+### Ground Truth (Carbon Tax, N=30)
+
+| Metric | Value |
+|---|---|
+| GT mean | **+0.50** |
+| GT SD | 1.66 |
+| GT range | −3 to +3 |
+
+**GT distribution:**
+
+| Opinion | Count | % |
+|---|---|---|
+| −3 | 1 | 3.3% |
+| −2 | 3 | 10.0% |
+| −1 | 3 | 10.0% |
+| 0 | 9 | 30.0% |
+| +1 | 6 | 20.0% |
+| +2 | 3 | 10.0% |
+| +3 | 5 | 16.7% |
+
+The real sample is center-right with a large neutral cluster (30% at 0). Support slightly outweighs opposition.
+
+### Per-Day Opinion Statistics
+
+| Day | Mean | SD |
+|---|---|---|
+| 0 (baseline) | **+1.37** | 1.50 |
+| 1 | +1.00 | — |
+| 2 | +1.10 | — |
+| 3 | +0.47 | — |
+| 4 | +0.77 | — |
+| 5 (final) | **+0.97** | 1.47 |
+
+Trajectory: starts at +1.37, dips to +0.47 on Day 3 (nearly matching GT!), then drifts back to +0.97 by Day 5. This oscillation is consistent with competing political agents creating genuine push-pull dynamics.
+
+### Baseline Bias (Day 0 vs Ground Truth)
+
+| Metric | Value |
+|---|---|
+| Day 0 LLM mean | +1.37 |
+| Ground truth mean | +0.50 |
+| **Day 0 bias** | **+0.87** |
+| Day 0 MAE | 1.73 |
+
+**Day 0 LLM distribution:**
+
+| Opinion | Count |
+|---|---|
+| −2 | 2 |
+| −1 | 4 |
+| 0 | 1 |
+| +1 | 1 |
+| +2 | **18** |
+| +3 | 4 |
+
+The LLM still clusters heavily at +2 (18/30 = 60%). However, the aggregate bias (+0.87) is substantially lower than previous runs.
+
+**Comparison of Day 0 bias across runs:**
+
+| Run | Policy | Model | Debias | Day 0 Bias |
+|---|---|---|---|---|
+| Run 1 (NB 08) | Ban Petrol Cars | gpt-4o-mini | No | +1.38 |
+| Run 2 (NB 08) | Ban Petrol Cars | gpt-4o-mini | No | +1.38 |
+| Run 3 (NB 10) | Ban Petrol Cars | gpt-4.1-mini | No | +2.04 |
+| **Run 4 (NB 15)** | **Carbon Tax** | **Claude Sonnet** | **Yes** | **+0.87** |
+
+Run 4's +0.87 bias is a **37–57% reduction** compared to Runs 1-3, depending on the comparison. Different policies make a direct comparison imperfect, but the debias mechanism is clearly contributing.
+
+### Bias Trajectory Over Simulation
+
+| Day | LLM Mean | GT Mean | Bias | Change from Day 0 |
+|---|---|---|---|---|
+| 0 | +1.37 | +0.50 | +0.87 | — |
+| 3 | +0.47 | +0.50 | −0.03 | −0.90 (97% reduction) |
+| 5 | +0.97 | +0.50 | +0.47 | −0.40 (46% reduction) |
+
+Day 3 briefly reaches near-perfect calibration (bias = −0.03). The rebound to +0.47 by Day 5 suggests the pro-climate pull from Agent A / peer messaging partially counteracts the initial correction.
+
+### Dynamics
+
+| Metric | Run 2 (NB 08) | **Run 4 (NB 15)** |
+|---|---|---|
+| Inertia | 81.9% | **69.3%** |
+| Mean abs shift/day | 0.32 | **0.56** |
+| Mean shift direction | −0.12 | −0.08 |
+| Agents who moved ≥1 | 23/30 | 20/30 |
+| Final SD | 1.76 | 1.47 |
+
+Agents are more dynamic (69.3% vs 81.9% inertia, 0.56 vs 0.32 mean absolute shift). This is likely a combination of Claude Sonnet being more responsive than gpt-4o-mini for surveys and the two-step debias prompting encouraging more thoughtful re-evaluation each day.
+
+### Reflections
+
+| Metric | Run 2 (NB 08) | Run 4 (NB 15) |
+|---|---|---|
+| Total | 502 (7 days) | 359 (5 days) |
+| Per day | ~72 | ~72 |
+| Mean text length (P-A) | 1,024 chars | 1,074 chars |
+| Mean text length (P-B) | 1,212 chars | 1,235 chars |
+| Mean text length (C) | 987 chars | 957 chars |
+
+Reflection volume and length are consistent with prior runs (proportional to days). No obvious change in reflection quality from the model switch.
+
+### Key Findings
+
+1. **Debias is working.** Day 0 baseline bias of +0.87 is the lowest of any run. Previous runs had +1.38 to +2.04. The two-step reasoning + anti-sycophancy preamble reduces aggregate bias without changing the letter-scale survey format.
+
+2. **The +2 clustering problem persists.** Despite lower aggregate bias, 18/30 agents (60%) landed on +2 at Day 0. The debias mechanism shifts the *mean* down (fewer +3s, more −1s and −2s) but doesn't fix the modal clustering. The GT distribution is much more spread (SD=1.66 vs LLM SD=1.50).
+
+3. **Bias shrinks further during the simulation.** Day 0 bias = +0.87, Day 3 bias ≈ 0, Day 5 bias = +0.47. Political agents and peer messaging pull opinions toward GT. The 46% bias reduction over 5 days is encouraging, though the Day 3→5 rebound suggests the pro-climate agent partially counteracts corrections.
+
+4. **Lower inertia than all prior runs.** 69.3% zero-shift rate is the best achieved. Claude Sonnet + debias appears to produce agents that are more willing to reconsider on each survey.
+
+5. **Mean shift direction is near-neutral.** At −0.08 per day, this is the closest to zero of any run (Run 2: −0.12, Run 3: −0.12). The competing agents are more balanced now, likely because the lower starting bias leaves more room for both directions of movement.
+
+6. **First run with ground truth comparison.** The `collect_ground_truth()` utility and saved `ground_truth.csv` make this the first experiment where LLM-vs-real calibration can be precisely measured at both agent and aggregate level.
+
+### Remaining Issues
+
+- **+2 modal clustering:** The LLM's tendency to cluster at "Somewhat agree" is not solved by debias. May require scale reversal (Condition D) or alternative approaches.
+- **Day 3→5 rebound:** After briefly matching GT on Day 3, the mean drifts back up. Longer runs (10+ days) would test whether this oscillation stabilizes or continues.
+- **Single policy:** Carbon Tax only. Future runs should test across multiple policies simultaneously, especially the problematic Renewable Energy (high-consensus) and Climate Compensation (significant MAE improvement with debias).
+- **No exposure group breakdown:** NB 15 does not include per-exposure-group analysis. The NB 10-style spaghetti plots by exposure would reveal whether specific agent groups drive the Day 3 dip.
+
+---
+
 ## Baseline Bias Investigation (Notebooks 11–14)
 
 After Run 3 revealed a +2.0 baseline inflation above the real YouGov mean, a systematic investigation was conducted to understand and mitigate LLM pro-climate sycophancy.

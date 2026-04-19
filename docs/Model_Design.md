@@ -604,6 +604,22 @@ Vary `max_shift` (0.5, 1, 1.5, 2) and compare results to empirical benchmarks fr
 
 The implementation of this design spec is broken into 10 GitHub issues organised across 5 dependency phases. See [github_issues.md](github_issues.md) for the full issue breakdown, dependency graph, and acceptance criteria.
 
+### v0.2 — MVP Complete
+
+All 10 issues have been implemented and tested (226 tests across 14 test files). Notebooks 01–08 demonstrate each component. The core model architecture described in this specification is fully operational.
+
+### v0.3 — Bias Calibration & Validation
+
+Post-MVP work added the following capabilities without changing the model architecture:
+
+- **Condition B debias** — two-step reasoning + anti-sycophancy preamble in `administer_survey()`, activated via `debias=True`
+- **Survey model override** — `survey_model` / `survey_provider` config keys for dual-model runs
+- **Anthropic provider** — Claude models in `send_chat()` with extended thinking support
+- **Ground truth utility** — `collect_ground_truth()` extracts real YouGov responses for calibration
+- **Experiment Runs 1–4** — documented in [result_report.md](result_report.md)
+
+The design spec remains v1.0 — the model architecture is unchanged; v0.3 adds calibration tooling and validation infrastructure.
+
 ---
 
 *Specification version 1.0 — produced during iterative design session.*

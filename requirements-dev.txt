@@ -27,3 +27,4 @@ twine>=6.2.0,<7
 # For climate-action specific development
 pandas>=3.0.1,<4.0
 networkx>=3.6.1,<4.0
+anthropic>=0.90.0,<1.0

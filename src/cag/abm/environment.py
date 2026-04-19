@@ -184,7 +184,7 @@ class SurveyedNation(Nation):
 
         return df
     
-    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5, thinking=False):
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5, thinking=False, debias=False):
 
         endofday_rows = []
         agents = list(self.agents_active.values())
@@ -198,7 +198,7 @@ class SurveyedNation(Nation):
             letter, numeric = agent.administer_survey(
                 policy_id=policy_id, day=day, api_key=api_key,
                 model=model, provider=provider, temperature=temperature,
-                thinking=thinking)
+                thinking=thinking, debias=debias)
 
             shift = numeric - previous_numeric if previous_numeric is not None else 0
             logging.info(f"Agent {agent.id}: {letter} ({numeric:+d}), previous={previous_numeric}, shift={shift:+d}")

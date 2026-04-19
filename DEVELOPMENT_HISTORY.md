@@ -21,6 +21,10 @@ See [CONTRIBUTORS].
 
 
 ## Development Timeline
+- [2026-04-19] v0.3 — Bias calibration complete. Condition B debias integrated, Anthropic provider, ground truth utility, 276 tests, 4 experiment runs. See [result_report.md](docs/result_report.md).
+- [2026-04-14] Baseline bias investigation: 6-model comparison, 4-condition experiment, multi-policy generalization (NB 11–14).
+- [2026-04-10] v0.2 MVP complete — all 10 issues done, 226 tests, 8 demo notebooks (01–08).
+- [2026-04-02] 10-issue implementation sprint begun (Issues 1–10 from [github_issues.md](docs/github_issues.md)).
 - [2026-03-30] Dependency update to [GABM==0.2.18](https://pypi.org/project/gabm/0.2.18/).
 - [2026-03-12] Dependency update to [GABM==0.2.17](https://pypi.org/project/gabm/0.2.17/).
 - [2026-03-05] Dependency update to [GABM==0.2.16](https://pypi.org/project/gabm/0.2.16/).

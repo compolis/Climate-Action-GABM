@@ -3,7 +3,8 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
+3. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
+4. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
 
 ## Overview
@@ -11,6 +12,29 @@ This file outlines planned next steps and future goals.
 
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
+Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
+
+
+## 0.3 — Bias Calibration & Validation
+
+Post-MVP work investigating and mitigating LLM baseline bias, adding multi-provider
+support, and establishing ground truth comparison tooling. Research documented in
+notebooks 11–15 and `docs/result_report.md`.
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | Baseline bias investigation — 6-model comparison (NB 11) | ✅ Done |
+| 2 | Third-person prompt experiment — sycophancy reduction test (NB 12) | ✅ Done |
+| 3 | 4-condition bias mitigation experiment (NB 13) | ✅ Done |
+| 4 | Multi-policy generalization of Condition D (NB 14) | ✅ Done |
+| 5 | Condition B debias integration into `administer_survey()` | ✅ Done |
+| 6 | Survey model override — `survey_model` / `survey_provider` config | ✅ Done |
+| 7 | Anthropic provider support in `send_chat()` | ✅ Done |
+| 8 | Extended thinking support (`thinking=True`) | ✅ Done |
+| 9 | Ground truth utility — `collect_ground_truth()` in `sim.py` | ✅ Done |
+| 10 | Experiment Runs 1–4 documented in `docs/result_report.md` | ✅ Done |
+
+**276 tests passing across 15 test files.**
 
 
 ## 0.2 — MVP: Competing-Minority Climate Opinion Model
@@ -38,17 +62,17 @@ exchange peer messages, and re-surveyed daily.
 |---|-------|--------|
 | 6 | Political Broadcast (Phases P-A, P-B) — broadcast → reflection cycle | ✅ Done |
 | 7 | Peer Messaging (Phase C) — simultaneous neighbour exchange | ✅ Done |
-| 8 | End-of-Day Survey + Clamping — re-survey with ±1/day opinion shift cap | ⬜ To do |
+| 8 | End-of-Day Survey + Clamping — re-survey with ±1/day opinion shift cap | ✅ Done |
 
 ### Phase 4 — Memory
 | # | Issue | Status |
 |---|-------|--------|
-| 9 | Tiered Memory Architecture — daily/weekly compression of reflections | ⬜ To do |
+| 9 | Tiered Memory Architecture — daily/weekly compression of reflections | ✅ Done |
 
 ### Phase 5 — Loop & Output
 | # | Issue | Status |
 |---|-------|--------|
-| 10 | Simulation Loop + Phase Ordering + Output — `SimulationConfig`, CSV, plots | ⬜ To do |
+| 10 | Simulation Loop + Phase Ordering + Output — `SimulationConfig`, CSV, plots | ✅ Done |
 
 ### Dependency Graph
 ```
@@ -63,11 +87,15 @@ Issues 1, 2  (independent)
     └── Issue 10  (depends on all)
 ```
 
+**All 10 issues complete. 226 tests passing across 14 test files.**
+
 
 ## 1.0
-- Multi-day simulation campaigns with configurable parameters
+- Longer simulation campaigns (10+ days) to study equilibrium and oscillation
+- Multi-policy simultaneous simulation (6 policies in a single run)
+- Per-exposure-group analysis tooling and visualisation
 - True peer-to-peer conversation (dialogue, not one-way messaging)
-- Extended policy set beyond the initial 6 questions
+- Dynamic network rewiring based on opinion distance
 - Calibration against longitudinal survey panel data
 - Additional LLM providers and model comparisons
 - Publication-ready analysis and visualisation pipeline
