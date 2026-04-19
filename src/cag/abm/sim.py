@@ -205,7 +205,7 @@ def collect_ground_truth(agents, policy_ids=None):
                 "policy_id": str(pid),
                 "ground_truth": agent.get_real_survey_response(pid),
             })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=["agent_id", "policy_id", "ground_truth"])
 
 
 # ── Output ──────────────────────────────────────────────────────
