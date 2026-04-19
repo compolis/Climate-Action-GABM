@@ -129,7 +129,6 @@ class TestDebiasedSurvey(unittest.TestCase):
     """Tests for the debias=True path in administer_survey()."""
 
     def _make_citizen(self):
-        from unittest import mock
         env = mock.MagicMock()
         citizen = SurveyedCitizen(
             agent_id=42, environment=env, year_of_birth=1985,
