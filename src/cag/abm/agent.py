@@ -5,7 +5,7 @@ from __future__ import annotations
 Agent module for Climate-Action-GABM.
 """
 __author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 from datetime import date
@@ -14,6 +14,34 @@ from cag.io.llm import send_chat, parse_letter_response
 from cag.abm.attributes.opinion import SURVEY_QUESTIONS, RESPONSE_LABELS, RESPONSE_SCALE, SURVEY_COLUMN_MAP
 
 NUMERIC_TO_LETTER = {-3: "A", -2: "B", -1: "C", 0: "D", 1: "E", 2: "F", 3: "G"}
+
+# ── Debias prompt templates (Condition B from NB 13) ────────────────────────
+
+_ANTI_SYCOPHANCY = (
+    "Your task is to faithfully simulate how this specific person would respond, "
+    "NOT to give the 'correct' or socially desirable answer. "
+    "Real people with this profile hold a WIDE range of views on climate policy, "
+    "including strong opposition. That is expected and acceptable."
+)
+
+_DEBIAS_STEP1_TEMPLATE = (
+    "{anti_sycophancy}\n\n"
+    "Given this person's demographic profile, political history, and psychological values, "
+    "what factors would shape their view on the following policy?\n\n"
+    "{policy_question}\n\n"
+    "Consider factors that might lead them to SUPPORT this policy AND factors that might "
+    "lead them to OPPOSE it. Think about their voting history, their values, their life "
+    "circumstances, and how these might interact.\n\n"
+    "Provide your reasoning in 2-3 sentences."
+)
+
+_DEBIAS_STEP2_TEMPLATE = (
+    "Based on the reasoning above, how would this person respond to the following "
+    "survey question?\n\n"
+    "{policy_question}\n\n"
+    "{response_options}\n\n"
+    "Respond with a single letter A-G."
+)
 
 class SurveyedCitizen():
     
@@ -69,6 +97,7 @@ class SurveyedCitizen():
         self.network_neighbors = []
         self.reflections = []
         self.daily_summaries = {}   # {(day, policy_id): summary_text}
+        self.survey_reasoning = {}  # {policy_id: [(day, reasoning_text)]}
 
     def __str__(self):
         """
@@ -287,13 +316,47 @@ class SurveyedCitizen():
             user_prompt = "\n\n".join([framing, policy_question, response_options, question])
             return user_prompt
 
-    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.5, thinking=False) -> tuple[str, int]:
+    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, debias=False) -> tuple[str, int]:
         
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
-        user_prompt = self.get_user_prompt(policy_id, day=day)
 
-        llm_response = send_chat(system_prompt, user_prompt, api_key=api_key, model=model,
-              provider=provider, temperature=temperature, thinking=thinking)
+        if debias:
+            # Step 1: Elicit reasoning with anti-sycophancy preamble
+            policy_question = SURVEY_QUESTIONS.get(policy_id)
+            step1_prompt = _DEBIAS_STEP1_TEMPLATE.format(
+                anti_sycophancy=_ANTI_SYCOPHANCY,
+                policy_question=policy_question,
+            )
+            reasoning = send_chat(
+                system_prompt, step1_prompt, api_key=api_key, model=model,
+                provider=provider, temperature=temperature, thinking=thinking,
+            )
+
+            # Store reasoning for post-hoc analysis (not fed back into agent context)
+            if policy_id not in self.survey_reasoning:
+                self.survey_reasoning[policy_id] = []
+            self.survey_reasoning[policy_id].append((day, reasoning))
+
+            # Step 2: Get answer with reasoning appended to system prompt
+            response_options = "\n".join(
+                f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()
+            )
+            step2_system = system_prompt + "\n\nYour reasoning about this policy:\n" + reasoning
+            step2_prompt = _DEBIAS_STEP2_TEMPLATE.format(
+                policy_question=policy_question,
+                response_options=response_options,
+            )
+            llm_response = send_chat(
+                step2_system, step2_prompt, api_key=api_key, model=model,
+                provider=provider, temperature=temperature, thinking=thinking,
+            )
+        else:
+            user_prompt = self.get_user_prompt(policy_id, day=day)
+            llm_response = send_chat(
+                system_prompt, user_prompt, api_key=api_key, model=model,
+                provider=provider, temperature=temperature, thinking=thinking,
+            )
+
         letter_response = parse_letter_response(llm_response)
         opinion_value = RESPONSE_SCALE.get(letter_response)
 
@@ -304,11 +367,11 @@ class SurveyedCitizen():
 
         return letter_response, opinion_value
 
-    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", thinking=False) -> dict:
+    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", thinking=False, debias=False) -> dict:
 
         results = {}
         for policy_id in SURVEY_QUESTIONS.keys():
-            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key, thinking=thinking)
+            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key, thinking=thinking, debias=debias)
             results[policy_id] = (letter_response, opinion_value)
         return results
     

@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from cag.abm.agent import PoliticalAgent
-from cag.abm.attributes.opinion import ClimatePolicyID, SURVEY_QUESTIONS
+from cag.abm.attributes.opinion import ClimatePolicyID, SURVEY_COLUMN_MAP, SURVEY_QUESTIONS
 from cag.io.llm import load_api_key
 
 
@@ -28,6 +28,10 @@ SIM_CONFIG = {
     "llm_model": "gpt-4o-mini",
     "llm_provider": "openai",
     "llm_temperature": 0.5,
+    "survey_model": None,       # override model for surveys (None → use llm_model)
+    "survey_provider": None,    # override provider for surveys (None → use llm_provider)
+    "thinking": False,
+    "debias": False,
     "random_seed": 42,
     "output_dir": "data/output/experiments",
 }
@@ -53,7 +57,16 @@ def run_simulation(config, nation):
     model = cfg["llm_model"]
     provider = cfg["llm_provider"]
     temperature = cfg["llm_temperature"]
+    thinking = cfg["thinking"]
+    debias = cfg["debias"]
     k_peers = cfg["k_peers_per_day"]
+
+    # Survey-specific model override (falls back to main model when None)
+    survey_model = cfg.get("survey_model") or model
+    survey_provider = cfg.get("survey_provider") or provider
+    survey_api_key = (
+        load_api_key(survey_provider) if survey_provider != provider else api_key
+    )
     days = cfg["days"]
     n_days = len(days)
 
@@ -80,8 +93,10 @@ def run_simulation(config, nation):
     logging.info(f"Running baseline survey (day 0), policy={baseline_policy}")
     for agent in nation.agents_active.values():
         agent.administer_survey(
-            baseline_policy, day=0, api_key=api_key, model=model,
-            provider=provider, temperature=temperature,
+            baseline_policy, day=0, api_key=survey_api_key,
+            model=survey_model, provider=survey_provider,
+            temperature=temperature,
+            thinking=thinking, debias=debias,
         )
 
     # Daily loop
@@ -110,8 +125,9 @@ def run_simulation(config, nation):
         # End-of-day survey
         nation.run_end_of_day_survey(
             policy, day,
-            api_key=api_key, model=model, provider=provider,
-            temperature=temperature,
+            api_key=survey_api_key, model=survey_model,
+            provider=survey_provider,
+            temperature=temperature, thinking=thinking, debias=debias,
         )
 
         # Memory management
@@ -166,6 +182,30 @@ def _collect_results(nation, config):
         "reflections": pd.DataFrame(ref_rows),
         "config": config,
     }
+
+
+def collect_ground_truth(agents, policy_ids=None):
+    """Extract real survey responses for agents into a DataFrame.
+
+    Args:
+        agents: iterable of SurveyedCitizen instances.
+        policy_ids: optional list of ClimatePolicyID.  If *None*, all
+            policies in SURVEY_COLUMN_MAP are included.
+
+    Returns:
+        DataFrame with columns ``agent_id``, ``policy_id``, ``ground_truth``.
+    """
+    if policy_ids is None:
+        policy_ids = list(SURVEY_COLUMN_MAP.keys())
+    rows = []
+    for agent in agents:
+        for pid in policy_ids:
+            rows.append({
+                "agent_id": agent.id,
+                "policy_id": str(pid),
+                "ground_truth": agent.get_real_survey_response(pid),
+            })
+    return pd.DataFrame(rows)
 
 
 # ── Output ──────────────────────────────────────────────────────

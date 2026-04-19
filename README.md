@@ -44,17 +44,18 @@ Citizen agents are constructed from real **YouGov survey data** (UK, April 2024)
 
 ## Current Status
 
-**MVP in progress — 7 of 10 issues complete.**
+**v0.3 — MVP complete, bias calibration integrated.**
 
 | Metric | Value |
 |--------|-------|
-| Tests | 171 passing |
-| Issues done | 1–7 of 10 |
-| Notebooks | 8 (01–08) |
-| Source files | 19 under `src/cag/` |
+| Tests | 276 passing |
+| Issues done | 10 of 10 |
+| Notebooks | 15 (01–15) |
+| Source files | 21 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
 See [docs/Model_Design.md](docs/Model_Design.md) for the design specification.
+See [docs/result_report.md](docs/result_report.md) for experiment results and analysis.
 
 
 ## Architecture
@@ -64,6 +65,7 @@ src/cag/
 ├── abm/
 │   ├── agent.py           # SurveyedCitizen, PoliticalAgent
 │   ├── environment.py     # SurveyedNation (network, broadcast, peer messaging)
+│   ├── sim.py             # run_simulation(), SIM_CONFIG, collect_ground_truth()
 │   ├── attributes/
 │   │   └── opinion.py     # ClimatePolicyID, survey constants, clamping
 │   └── democracy/         # Brexit & UKGE2019 vote enums (from gabm)
@@ -88,6 +90,13 @@ Interactive demos live in `notebooks/`. Each covers one simulation component:
 | 06 | End-of-Day Survey | Re-survey after daily phases |
 | 07 | Memory | Tiered memory compression |
 | 08 | Full Simulation | End-to-end multi-day simulation run |
+| 09 | YouGov Survey EDA | Exploratory analysis of source survey data |
+| 10 | Experiment Runner | Interactive simulation configuration and execution |
+| 11 | Model Baseline Comparison | 6-model comparison of survey reproduction fidelity |
+| 12 | Third-Person Prompt Experiment | Test perspective shift for sycophancy reduction |
+| 13 | Bias Mitigation Experiment | 4-condition experiment: reasoning, anti-sycophancy, scale |
+| 14 | Multi-Policy Generalization | Test bias mitigation across 4 climate policies |
+| 15 | Full Simulation + Ground Truth | Debias + thinking + dual-model + GT comparison |
 
 
 ## License

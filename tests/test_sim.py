@@ -19,6 +19,7 @@ from cag.abm.attributes.opinion import ClimatePolicyID
 from cag.abm.sim import (
     run_simulation,
     save_results,
+    collect_ground_truth,
     _collect_results,
     _serialise_config,
     SIM_CONFIG,
@@ -448,6 +449,149 @@ class TestSimConfig(unittest.TestCase):
             for phase in entry["phases"]:
                 self.assertIn(phase, ("P-A", "P-B", "C"),
                               f"Unexpected phase in SIM_CONFIG: {phase}")
+
+    def test_debias_default_false(self):
+        self.assertIn("debias", SIM_CONFIG)
+        self.assertIs(SIM_CONFIG["debias"], False)
+
+    def test_thinking_default_false(self):
+        self.assertIn("thinking", SIM_CONFIG)
+        self.assertIs(SIM_CONFIG["thinking"], False)
+
+    def test_survey_model_default_none(self):
+        self.assertIn("survey_model", SIM_CONFIG)
+        self.assertIsNone(SIM_CONFIG["survey_model"])
+
+    def test_survey_provider_default_none(self):
+        self.assertIn("survey_provider", SIM_CONFIG)
+        self.assertIsNone(SIM_CONFIG["survey_provider"])
+
+
+# ── Survey model override ───────────────────────────────────────
+
+class TestSurveyModelOverride(unittest.TestCase):
+    """Verify that survey_model/survey_provider are used for survey calls only."""
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_baseline_uses_survey_model(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+            "survey_model": "gpt-4o",
+            "survey_provider": "openai",
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            call_kw = agent.administer_survey.call_args_list[0][1]
+            self.assertEqual(call_kw["model"], "gpt-4o")
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_eod_survey_uses_survey_model(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]}],
+            "survey_model": "gpt-4o",
+            "survey_provider": "openai",
+        }
+        run_simulation(config, nation)
+        eod_kw = nation.run_end_of_day_survey.call_args[1]
+        self.assertEqual(eod_kw["model"], "gpt-4o")
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_fallback_to_main_model_when_none(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+            "survey_model": None,
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            call_kw = agent.administer_survey.call_args_list[0][1]
+            self.assertEqual(call_kw["model"], SIM_CONFIG["llm_model"])
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_broadcast_uses_main_model(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]}],
+            "survey_model": "gpt-4o",
+            "survey_provider": "openai",
+        }
+        run_simulation(config, nation)
+        bc_kw = nation.run_political_broadcast.call_args[1]
+        self.assertEqual(bc_kw["model"], SIM_CONFIG["llm_model"])
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_different_provider_loads_separate_key(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+            "survey_model": "claude-sonnet-4-20250514",
+            "survey_provider": "anthropic",
+        }
+        run_simulation(config, nation)
+        # load_api_key called twice: once for main ("openai"), once for survey ("anthropic")
+        providers_called = [c[0][0] for c in mock_api.call_args_list]
+        self.assertIn("openai", providers_called)
+        self.assertIn("anthropic", providers_called)
+
+
+# ── collect_ground_truth ────────────────────────────────────────
+
+class TestCollectGroundTruth(unittest.TestCase):
+
+    @staticmethod
+    def _make_gt_agent(agent_id, gt_values):
+        """Mock agent with get_real_survey_response returning gt_values dict."""
+        agent = MagicMock()
+        agent.id = agent_id
+        agent.get_real_survey_response = lambda pid: gt_values[pid]
+        return agent
+
+    def test_returns_correct_columns(self):
+        agent = self._make_gt_agent(1, {ClimatePolicyID.CARBON_TAX: 2})
+        df = collect_ground_truth([agent], policy_ids=[ClimatePolicyID.CARBON_TAX])
+        self.assertEqual(sorted(df.columns.tolist()),
+                         sorted(["agent_id", "policy_id", "ground_truth"]))
+
+    def test_correct_ground_truth_values(self):
+        gt = {ClimatePolicyID.CARBON_TAX: -1, ClimatePolicyID.GREEN_HOUSING: 3}
+        agent = self._make_gt_agent(42, gt)
+        df = collect_ground_truth([agent], policy_ids=list(gt.keys()))
+        row_ct = df[df["policy_id"] == str(ClimatePolicyID.CARBON_TAX)]
+        row_gh = df[df["policy_id"] == str(ClimatePolicyID.GREEN_HOUSING)]
+        self.assertEqual(row_ct.iloc[0]["ground_truth"], -1)
+        self.assertEqual(row_gh.iloc[0]["ground_truth"], 3)
+
+    def test_defaults_to_all_policies(self):
+        from cag.abm.attributes.opinion import SURVEY_COLUMN_MAP
+        all_gt = {pid: 0 for pid in SURVEY_COLUMN_MAP}
+        agent = self._make_gt_agent(1, all_gt)
+        df = collect_ground_truth([agent])
+        self.assertEqual(len(df), len(SURVEY_COLUMN_MAP))
+
+    def test_filters_to_specified_policies(self):
+        from cag.abm.attributes.opinion import SURVEY_COLUMN_MAP
+        all_gt = {pid: 0 for pid in SURVEY_COLUMN_MAP}
+        agent = self._make_gt_agent(1, all_gt)
+        subset = [ClimatePolicyID.CARBON_TAX]
+        df = collect_ground_truth([agent], policy_ids=subset)
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["policy_id"], str(ClimatePolicyID.CARBON_TAX))
+
+    def test_empty_agents_returns_empty_dataframe(self):
+        df = collect_ground_truth([])
+        self.assertTrue(df.empty)
+
+    def test_policy_id_uses_str(self):
+        agent = self._make_gt_agent(1, {ClimatePolicyID.CARBON_TAX: 0})
+        df = collect_ground_truth([agent], policy_ids=[ClimatePolicyID.CARBON_TAX])
+        self.assertIsInstance(df.iloc[0]["policy_id"], str)
 
 
 if __name__ == "__main__":

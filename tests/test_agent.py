@@ -2,6 +2,7 @@
 import sys
 import os
 import unittest
+from unittest import mock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 from cag.abm.agent import SurveyedCitizen
 from cag.abm.environment import SurveyedNation
@@ -122,6 +123,94 @@ class TestSurveyedCitizen(unittest.TestCase):
             self.fail("SurveyedCitizen.__str__ or get_persona() raised TypeError on None vote IDs")
         self.assertIn("Unknown", s)
         self.assertIn("Unknown", persona)
+
+
+class TestDebiasedSurvey(unittest.TestCase):
+    """Tests for the debias=True path in administer_survey()."""
+
+    def _make_citizen(self):
+        from unittest import mock
+        env = mock.MagicMock()
+        citizen = SurveyedCitizen(
+            agent_id=42, environment=env, year_of_birth=1985,
+            original_survey_data={"page5posttreatment6_5": 4.0},
+        )
+        citizen.get_persona = mock.MagicMock(return_value="I am a 41 year old engineer.")
+        citizen.get_narrative = mock.MagicMock(return_value="I value independence.")
+        return citizen
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="D")
+    def test_debias_false_single_call(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=False)
+        self.assertEqual(mock_send.call_count, 1)
+
+    @mock.patch("cag.abm.agent.send_chat", side_effect=["Some reasoning about factors.", "D"])
+    def test_debias_true_two_calls(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        self.assertEqual(mock_send.call_count, 2)
+
+    @mock.patch("cag.abm.agent.send_chat", side_effect=["Reasoning text.", "E"])
+    def test_debias_step1_has_anti_sycophancy(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        step1_user_prompt = mock_send.call_args_list[0][1].get("user_prompt",
+                            mock_send.call_args_list[0][0][1] if len(mock_send.call_args_list[0][0]) > 1 else "")
+        self.assertIn("faithfully simulate", step1_user_prompt)
+        self.assertIn("socially desirable", step1_user_prompt)
+
+    @mock.patch("cag.abm.agent.send_chat", side_effect=["Agent reasoning about policy.", "F"])
+    def test_debias_step2_has_reasoning(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        step2_system_prompt = mock_send.call_args_list[1][0][0]
+        self.assertIn("Agent reasoning about policy.", step2_system_prompt)
+        self.assertIn("Your reasoning about this policy:", step2_system_prompt)
+
+    @mock.patch("cag.abm.agent.send_chat", side_effect=["Reasoning.", "C"])
+    def test_debias_returns_same_type(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        result = citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        self.assertIsInstance(result[0], str)
+        self.assertIsInstance(result[1], int)
+        self.assertEqual(result[0], "C")
+        self.assertEqual(result[1], -1)
+
+    @mock.patch("cag.abm.agent.send_chat", side_effect=["Reasoning.", "B"])
+    def test_debias_appends_history(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen.administer_survey(policy, day=0, debias=True)
+        self.assertIn(policy, citizen.opinion_history)
+        self.assertEqual(citizen.opinion_history[policy], [(0, -2)])
+
+    @mock.patch("cag.abm.agent.send_chat", side_effect=["My reasoning text.", "G"])
+    def test_debias_stores_reasoning(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen.administer_survey(policy, day=0, debias=True)
+        self.assertIn(policy, citizen.survey_reasoning)
+        self.assertEqual(len(citizen.survey_reasoning[policy]), 1)
+        self.assertEqual(citizen.survey_reasoning[policy][0], (0, "My reasoning text."))
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="D")
+    def test_debias_false_no_reasoning_stored(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen.administer_survey(policy, day=0, debias=False)
+        self.assertEqual(citizen.survey_reasoning, {})
+
 
 if __name__ == "__main__":
     unittest.main()
