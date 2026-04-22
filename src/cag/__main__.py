@@ -43,7 +43,7 @@ from cag.abm.attributes.narratives import (
     SelftranscMap, SelfenhMap, OpennessMap, ConformTradMap,
     SDOMap, EDOMap, RWAMap, rescale_1_6, rescale_1_7,
 )
-from cag.abm.sim import run_simulation, save_results, plot_opinion_trajectories, SIM_CONFIG
+from cag.abm.sim import run_simulation, save_results, save_result_plots, SIM_CONFIG
 
 
 # ── Small-run config for `make run-local` ─────────────────────
@@ -143,9 +143,9 @@ def main():
     logging.info(f"Results saved to {out_path}")
 
     # Plot and save
-    plot_path = out_path / "opinion_trajectories.png"
-    plot_opinion_trajectories(results, output_path=plot_path)
-    logging.info(f"Plot saved to {plot_path}")
+    plot_paths = save_result_plots(results, out_path)
+    for plot_name, plot_path in plot_paths.items():
+        logging.info(f"Plot saved ({plot_name}) to {plot_path}")
 
     # Summary
     df = results["opinion_trajectories"]

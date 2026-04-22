@@ -15,11 +15,20 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from cag.abm.attributes.opinion import ClimatePolicyID
+from cag.abm.attributes.opinion import (
+    ALL_CLIMATE_POLICIES,
+    ClimatePolicyID,
+    PACKAGE_SCOPE,
+    PRO_CLIMATE_INDEX_COLUMN,
+)
 from cag.abm.sim import (
     run_simulation,
     save_results,
+    save_result_plots,
+    build_opinion_shares,
+    build_package_index_shares,
     collect_ground_truth,
+    collect_package_ground_truth,
     _collect_results,
     _serialise_config,
     SIM_CONFIG,
@@ -36,16 +45,26 @@ def _make_mock_agent(agent_id, exposure="A-only"):
     agent.network_neighbors = []
     agent.opinion_history = {}
     agent.reflections = []
+    agent.daily_summaries = {}
+    agent.survey_reasoning = {}
+    agent.get_real_package_index = MagicMock(return_value=0.5)
+
+    def fake_get_real_survey_response(policy_id):
+        return 0
 
     def fake_survey(policy_id, day=0, **kwargs):
         history = agent.opinion_history.setdefault(policy_id, [])
         history.append((day, 1))  # always returns opinion=1
+        if kwargs.get("debias"):
+            reasoning = agent.survey_reasoning.setdefault(policy_id, [])
+            reasoning.append((day, f"Reasoning for day {day}"))
 
     def fake_manage_memory(day, policy, **kwargs):
-        pass
+        agent.daily_summaries[(day, policy)] = f"Summary for day {day}"
 
     agent.administer_survey = MagicMock(side_effect=fake_survey)
     agent.manage_memory = MagicMock(side_effect=fake_manage_memory)
+    agent.get_real_survey_response = MagicMock(side_effect=fake_get_real_survey_response)
     return agent
 
 
@@ -62,8 +81,24 @@ def _make_mock_nation(n_agents=3):
     nation.political_agent_b = MagicMock()
     nation.political_agent_a.connected_citizens = []
     nation.political_agent_b.connected_citizens = []
+    nation.message_log = []
 
     def fake_broadcast(phase, policy_id, day, **kwargs):
+        for agent in agents.values():
+            nation.message_log.append({
+                "day": day,
+                "phase": phase,
+                "message_type": "political_broadcast",
+                "sender_type": "political_agent",
+                "sender_id": phase,
+                "sender_side": "pro_climate" if phase == "P-A" else "anti_climate",
+                "recipient_id": agent.id,
+                "recipient_scope": "broadcast",
+                "policy_id": policy_id,
+                "package_scope": "",
+                "policy_ids": [],
+                "message_text": f"Broadcast {phase} day {day}",
+            })
         for agent in agents.values():
             agent.reflections.append({
                 "day": day, "phase": phase, "policy_id": policy_id,
@@ -73,10 +108,74 @@ def _make_mock_nation(n_agents=3):
 
     def fake_peer_messaging(policy_id, day, **kwargs):
         for agent in agents.values():
+            nation.message_log.append({
+                "day": day,
+                "phase": "C",
+                "message_type": "peer_message",
+                "sender_type": "citizen",
+                "sender_id": agent.id,
+                "sender_side": "",
+                "recipient_id": agent.id,
+                "recipient_scope": "direct",
+                "policy_id": policy_id,
+                "package_scope": "",
+                "policy_ids": [],
+                "message_text": f"Peer message day {day}",
+            })
             agent.reflections.append({
                 "day": day, "phase": "C", "policy_id": policy_id,
                 "text": f"Peer reflection day {day}",
                 "messages_received": ["peer_msg"],
+            })
+
+    def fake_package_broadcast(phase, policy_ids, day, **kwargs):
+        for agent in agents.values():
+            nation.message_log.append({
+                "day": day,
+                "phase": phase,
+                "message_type": "political_broadcast",
+                "sender_type": "political_agent",
+                "sender_id": phase,
+                "sender_side": "pro_climate" if phase == "P-A" else "anti_climate",
+                "recipient_id": agent.id,
+                "recipient_scope": "broadcast",
+                "policy_id": "",
+                "package_scope": PACKAGE_SCOPE,
+                "policy_ids": list(policy_ids),
+                "message_text": f"Package broadcast {phase} day {day}",
+            })
+            agent.reflections.append({
+                "day": day,
+                "phase": phase,
+                "policy_id": PACKAGE_SCOPE,
+                "policy_ids": list(policy_ids),
+                "text": f"Package reflection on {phase} day {day}",
+                "messages_received": ["package_msg"],
+            })
+
+    def fake_package_peer_messaging(policy_ids, day, **kwargs):
+        for agent in agents.values():
+            nation.message_log.append({
+                "day": day,
+                "phase": "C",
+                "message_type": "peer_message",
+                "sender_type": "citizen",
+                "sender_id": agent.id,
+                "sender_side": "",
+                "recipient_id": agent.id,
+                "recipient_scope": "direct",
+                "policy_id": "",
+                "package_scope": PACKAGE_SCOPE,
+                "policy_ids": list(policy_ids),
+                "message_text": f"Package peer message day {day}",
+            })
+            agent.reflections.append({
+                "day": day,
+                "phase": "C",
+                "policy_id": PACKAGE_SCOPE,
+                "policy_ids": list(policy_ids),
+                "text": f"Package peer reflection day {day}",
+                "messages_received": ["package_peer_msg"],
             })
 
     def fake_eod_survey(policy_id, day, **kwargs):
@@ -86,6 +185,8 @@ def _make_mock_nation(n_agents=3):
 
     nation.run_political_broadcast = MagicMock(side_effect=fake_broadcast)
     nation.run_peer_messaging = MagicMock(side_effect=fake_peer_messaging)
+    nation.run_package_broadcast = MagicMock(side_effect=fake_package_broadcast)
+    nation.run_package_peer_messaging = MagicMock(side_effect=fake_package_peer_messaging)
     nation.run_end_of_day_survey = MagicMock(side_effect=fake_eod_survey)
     return nation
 
@@ -121,6 +222,13 @@ class TestSerialiseConfig(unittest.TestCase):
         config = {"k_peers_per_day": 3, "p_intra": 0.15, "random_seed": 42}
         result = _serialise_config(config)
         self.assertEqual(result, config)
+
+    def test_package_policies_list_enums_converted(self):
+        config = {"package_policies": list(ALL_CLIMATE_POLICIES)}
+        result = _serialise_config(config)
+        self.assertEqual(len(result["package_policies"]), len(ALL_CLIMATE_POLICIES))
+        for policy_id in result["package_policies"]:
+            self.assertIsInstance(policy_id, str)
 
     def test_result_is_json_serialisable(self):
         config = {
@@ -163,13 +271,29 @@ class TestCollectResults(unittest.TestCase):
         policy = ClimatePolicyID.CARBON_TAX
         for agent in nation.agents_active.values():
             agent.reflections = [
-                {"day": 1, "phase": "P-A", "policy_id": policy, "text": "hello"},
+                {
+                    "day": 1,
+                    "phase": "P-A",
+                    "policy_id": policy,
+                    "text": "hello",
+                    "messages_received": ["msg"],
+                },
             ]
         results = _collect_results(nation, {})
         df = results["reflections"]
         self.assertEqual(
             sorted(df.columns.tolist()),
-            sorted(["agent_id", "day", "phase", "policy_id", "text"]),
+            sorted([
+                "agent_id",
+                "day",
+                "phase",
+                "policy_id",
+                "package_scope",
+                "policy_ids_json",
+                "messages_received_json",
+                "messages_received_count",
+                "text",
+            ]),
         )
         self.assertEqual(len(df), 2)
 
@@ -200,6 +324,207 @@ class TestCollectResults(unittest.TestCase):
         results = _collect_results(nation, my_config)
         self.assertEqual(results["config"]["random_seed"], 99)
 
+    def test_package_index_schema(self):
+        nation = _make_mock_nation(1)
+        agent = list(nation.agents_active.values())[0]
+        agent.opinion_history = {
+            policy_id: [(0, index), (1, index + 1)]
+            for index, policy_id in enumerate(ALL_CLIMATE_POLICIES)
+        }
+        results = _collect_results(
+            nation,
+            {"communication_mode": "package", "package_policies": list(ALL_CLIMATE_POLICIES)},
+        )
+        df = results["package_index_trajectories"]
+        self.assertEqual(
+            sorted(df.columns.tolist()),
+            sorted([
+                "agent_id", "day", "index_name", "package_index",
+                "package_scope",
+            ]),
+        )
+        self.assertEqual(df.iloc[0]["index_name"], PRO_CLIMATE_INDEX_COLUMN)
+        self.assertEqual(df.iloc[0]["package_scope"], PACKAGE_SCOPE)
+
+    def test_collects_messages_reasoning_summaries_and_ground_truth(self):
+        nation = _make_mock_nation(1)
+        agent = list(nation.agents_active.values())[0]
+        policy = ClimatePolicyID.CARBON_TAX
+        agent.opinion_history = {policy: [(0, 1)]}
+        agent.reflections = [{
+            "day": 1,
+            "phase": "P-A",
+            "policy_id": policy,
+            "text": "hello",
+            "messages_received": ["msg"],
+        }]
+        agent.survey_reasoning = {policy: [(0, "reasoning")]}
+        agent.daily_summaries = {(1, policy): "summary"}
+        nation.message_log = [{
+            "day": 1,
+            "phase": "P-A",
+            "message_type": "political_broadcast",
+            "sender_type": "political_agent",
+            "sender_id": "agent_a",
+            "sender_side": "pro_climate",
+            "recipient_id": agent.id,
+            "recipient_scope": "broadcast",
+            "policy_id": policy,
+            "package_scope": "",
+            "policy_ids": [],
+            "message_text": "message",
+        }]
+
+        results = _collect_results(nation, {})
+
+        self.assertEqual(len(results["messages"]), 1)
+        self.assertEqual(len(results["survey_reasoning"]), 1)
+        self.assertEqual(len(results["daily_summaries"]), 1)
+        self.assertEqual(len(results["ground_truth"]), len(results["ground_truth"]))
+        self.assertEqual(len(results["package_ground_truth"]), 1)
+
+
+class TestBuildOpinionShares(unittest.TestCase):
+
+    def test_bins_and_percentages_correct(self):
+        import pandas as pd
+
+        results = {
+            "opinion_trajectories": pd.DataFrame([
+                {"agent_id": 1, "day": 0, "policy_id": "CARBON_TAX", "numeric": -3},
+                {"agent_id": 2, "day": 0, "policy_id": "CARBON_TAX", "numeric": -1},
+                {"agent_id": 3, "day": 0, "policy_id": "CARBON_TAX", "numeric": 0},
+                {"agent_id": 4, "day": 0, "policy_id": "CARBON_TAX", "numeric": 1},
+                {"agent_id": 5, "day": 0, "policy_id": "CARBON_TAX", "numeric": 3},
+            ]),
+        }
+
+        share_df = build_opinion_shares(results)
+        row = share_df.iloc[0]
+
+        self.assertEqual(row["n_support"], 2)
+        self.assertEqual(row["n_neutral"], 1)
+        self.assertEqual(row["n_against"], 2)
+        self.assertEqual(row["support_pct"], 40.0)
+        self.assertEqual(row["neutral_pct"], 20.0)
+        self.assertEqual(row["against_pct"], 40.0)
+
+    def test_percentages_sum_to_one_hundred(self):
+        import pandas as pd
+        import numpy as np
+
+        results = {
+            "opinion_trajectories": pd.DataFrame([
+                {"agent_id": 1, "day": 0, "policy_id": "CARBON_TAX", "numeric": -1},
+                {"agent_id": 2, "day": 0, "policy_id": "CARBON_TAX", "numeric": 0},
+                {"agent_id": 3, "day": 0, "policy_id": "CARBON_TAX", "numeric": 1},
+                {"agent_id": 1, "day": 1, "policy_id": "CARBON_TAX", "numeric": 1},
+                {"agent_id": 2, "day": 1, "policy_id": "CARBON_TAX", "numeric": 1},
+                {"agent_id": 3, "day": 1, "policy_id": "CARBON_TAX", "numeric": -1},
+            ]),
+        }
+
+        share_df = build_opinion_shares(results)
+        totals = share_df[["support_pct", "neutral_pct", "against_pct"]].sum(axis=1)
+        self.assertTrue(np.allclose(totals, 100.0))
+
+
+class TestBuildPackageIndexShares(unittest.TestCase):
+
+    def test_bins_and_percentages_correct(self):
+        import pandas as pd
+
+        results = {
+            "package_index_trajectories": pd.DataFrame([
+                {
+                    "agent_id": 1,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": -1.0,
+                },
+                {
+                    "agent_id": 2,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 0.0,
+                },
+                {
+                    "agent_id": 3,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 1.0,
+                },
+            ]),
+        }
+
+        share_df = build_package_index_shares(results)
+        row = share_df.iloc[0]
+
+        self.assertEqual(row["n_support"], 1)
+        self.assertEqual(row["n_neutral"], 1)
+        self.assertEqual(row["n_against"], 1)
+        self.assertAlmostEqual(row["support_pct"], 100.0 / 3.0)
+        self.assertAlmostEqual(row["neutral_pct"], 100.0 / 3.0)
+        self.assertAlmostEqual(row["against_pct"], 100.0 / 3.0)
+
+    def test_percentages_sum_to_one_hundred(self):
+        import numpy as np
+        import pandas as pd
+
+        results = {
+            "package_index_trajectories": pd.DataFrame([
+                {
+                    "agent_id": 1,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": -0.5,
+                },
+                {
+                    "agent_id": 2,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 0.0,
+                },
+                {
+                    "agent_id": 3,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 0.5,
+                },
+                {
+                    "agent_id": 1,
+                    "day": 1,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 1.0,
+                },
+                {
+                    "agent_id": 2,
+                    "day": 1,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 1.0,
+                },
+                {
+                    "agent_id": 3,
+                    "day": 1,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": -1.0,
+                },
+            ]),
+        }
+
+        share_df = build_package_index_shares(results)
+        totals = share_df[["support_pct", "neutral_pct", "against_pct"]].sum(axis=1)
+        self.assertTrue(np.allclose(totals, 100.0))
+
 
 # ── save_results ────────────────────────────────────────────────
 
@@ -213,16 +538,141 @@ class TestSaveResults(unittest.TestCase):
                 {"agent_id": 1, "day": 0, "policy_id": "CARBON_TAX", "numeric": 1},
             ]),
             "reflections": pd.DataFrame([
-                {"agent_id": 1, "day": 1, "phase": "P-A",
-                 "policy_id": "CARBON_TAX", "text": "hi"},
+                {
+                    "agent_id": 1,
+                    "day": 1,
+                    "phase": "P-A",
+                    "policy_id": "CARBON_TAX",
+                    "package_scope": "",
+                    "policy_ids_json": "[]",
+                    "messages_received_json": "[\"msg\"]",
+                    "messages_received_count": 1,
+                    "text": "hi",
+                },
+            ]),
+            "messages": pd.DataFrame([
+                {
+                    "day": 1,
+                    "phase": "P-A",
+                    "message_type": "political_broadcast",
+                    "sender_type": "political_agent",
+                    "sender_id": "agent_a",
+                    "sender_side": "pro_climate",
+                    "recipient_id": 1,
+                    "recipient_scope": "broadcast",
+                    "policy_id": "CARBON_TAX",
+                    "package_scope": "",
+                    "policy_ids_json": "[]",
+                    "message_text": "hello",
+                },
+            ]),
+            "survey_reasoning": pd.DataFrame([
+                {"agent_id": 1, "day": 0, "policy_id": "CARBON_TAX", "reasoning": "why"},
+            ]),
+            "daily_summaries": pd.DataFrame([
+                {"agent_id": 1, "day": 1, "policy_id": "CARBON_TAX", "package_scope": "", "summary": "sum"},
+            ]),
+            "ground_truth": pd.DataFrame([
+                {"agent_id": 1, "policy_id": "CARBON_TAX", "ground_truth": 1},
+            ]),
+            "package_ground_truth": pd.DataFrame([
+                {"agent_id": 1, "index_name": PRO_CLIMATE_INDEX_COLUMN, "ground_truth": 0.5},
+            ]),
+            "package_index_trajectories": pd.DataFrame([
+                {
+                    "agent_id": 1,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 0.5,
+                },
             ]),
             "config": {"days": [], "random_seed": 42},
         }
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = save_results(results, output_dir=tmpdir)
             self.assertTrue((out_path / "opinion_trajectories.csv").exists())
+            self.assertTrue((out_path / "opinion_shares.csv").exists())
+            self.assertTrue((out_path / "package_index_shares.csv").exists())
             self.assertTrue((out_path / "reflections.csv").exists())
+            self.assertTrue((out_path / "messages.csv").exists())
+            self.assertTrue((out_path / "survey_reasoning.csv").exists())
+            self.assertTrue((out_path / "daily_summaries.csv").exists())
+            self.assertTrue((out_path / "ground_truth.csv").exists())
+            self.assertTrue((out_path / "package_ground_truth.csv").exists())
             self.assertTrue((out_path / "config.json").exists())
+
+
+class TestSaveResultPlots(unittest.TestCase):
+
+    def test_plot_files_created(self):
+        import matplotlib
+        import pandas as pd
+
+        matplotlib.use("Agg")
+
+        results = {
+            "opinion_trajectories": pd.DataFrame([
+                {"agent_id": 1, "day": 0, "policy_id": str(ClimatePolicyID.CARBON_TAX), "numeric": -1},
+                {"agent_id": 2, "day": 0, "policy_id": str(ClimatePolicyID.CARBON_TAX), "numeric": 1},
+                {"agent_id": 1, "day": 1, "policy_id": str(ClimatePolicyID.CARBON_TAX), "numeric": 0},
+                {"agent_id": 2, "day": 1, "policy_id": str(ClimatePolicyID.CARBON_TAX), "numeric": 2},
+            ]),
+            "package_index_trajectories": pd.DataFrame([
+                {
+                    "agent_id": 1,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": -0.5,
+                },
+                {
+                    "agent_id": 2,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 0.5,
+                },
+                {
+                    "agent_id": 1,
+                    "day": 1,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 0.0,
+                },
+                {
+                    "agent_id": 2,
+                    "day": 1,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 1.0,
+                },
+            ]),
+            "package_ground_truth": pd.DataFrame([
+                {
+                    "agent_id": 1,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "ground_truth": 0.25,
+                },
+                {
+                    "agent_id": 2,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "ground_truth": 0.25,
+                },
+            ]),
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = save_results({**results, "config": {"days": []}}, output_dir=tmpdir)
+            plot_paths = save_result_plots(results, out_path)
+            self.assertTrue((out_path / "opinion_trajectories.png").exists())
+            self.assertTrue((out_path / "opinion_shares.png").exists())
+            self.assertTrue((out_path / "package_index_trajectories.png").exists())
+            self.assertTrue((out_path / "package_index_shares.png").exists())
+            self.assertIn("opinion_trajectories", plot_paths)
+            self.assertIn("opinion_shares", plot_paths)
+            self.assertIn("package_index_trajectories", plot_paths)
+            self.assertIn("package_index_shares", plot_paths)
 
     def test_config_json_valid(self):
         import pandas as pd
@@ -251,6 +701,27 @@ class TestSaveResults(unittest.TestCase):
             # Should be a subdirectory with a timestamp name
             self.assertNotEqual(str(out_path), tmpdir)
             self.assertTrue(out_path.name.replace("_", "").isdigit())
+
+    def test_package_index_file_created_when_present(self):
+        import pandas as pd
+
+        results = {
+            "opinion_trajectories": pd.DataFrame(),
+            "package_index_trajectories": pd.DataFrame([
+                {
+                    "agent_id": 1,
+                    "day": 0,
+                    "index_name": PRO_CLIMATE_INDEX_COLUMN,
+                    "package_scope": PACKAGE_SCOPE,
+                    "package_index": 0.5,
+                },
+            ]),
+            "reflections": pd.DataFrame(),
+            "config": {"days": []},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = save_results(results, output_dir=tmpdir)
+            self.assertTrue((out_path / "package_index_trajectories.csv").exists())
 
 
 # ── run_simulation ──────────────────────────────────────────────
@@ -382,6 +853,93 @@ class TestRunSimulation(unittest.TestCase):
         days_called = [c[0][2] for c in broadcast_calls]  # 3rd positional arg = day
         self.assertEqual(days_called, [1, 2])
 
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_package_mode_baseline_surveys_all_policies(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "communication_mode": "package",
+            "package_policies": list(ALL_CLIMATE_POLICIES),
+            "days": [{"phases": []}],
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            self.assertEqual(agent.administer_survey.call_count, len(ALL_CLIMATE_POLICIES))
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_package_mode_uses_bundled_phase_methods(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "communication_mode": "package",
+            "package_policies": list(ALL_CLIMATE_POLICIES),
+            "days": [{"phases": ["P-A", "P-B", "C"]}],
+        }
+        run_simulation(config, nation)
+        self.assertEqual(nation.run_package_broadcast.call_count, 2)
+        nation.run_package_peer_messaging.assert_called_once()
+        nation.run_political_broadcast.assert_not_called()
+        nation.run_peer_messaging.assert_not_called()
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_package_mode_surveys_all_policies_each_day(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "communication_mode": "package",
+            "package_policies": list(ALL_CLIMATE_POLICIES),
+            "days": [{"phases": []}],
+        }
+        run_simulation(config, nation)
+        self.assertEqual(nation.run_end_of_day_survey.call_count, len(ALL_CLIMATE_POLICIES))
+        called_policies = {call.args[0] for call in nation.run_end_of_day_survey.call_args_list}
+        self.assertEqual(called_policies, set(ALL_CLIMATE_POLICIES))
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_package_mode_memory_uses_package_scope(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "communication_mode": "package",
+            "package_policies": list(ALL_CLIMATE_POLICIES),
+            "days": [{"phases": []}],
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            self.assertEqual(agent.manage_memory.call_args[0][1], PACKAGE_SCOPE)
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_package_mode_results_include_index_trajectories(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "communication_mode": "package",
+            "package_policies": list(ALL_CLIMATE_POLICIES),
+            "days": [{"phases": []}],
+        }
+        results = run_simulation(config, nation)
+        self.assertIn("package_index_trajectories", results)
+        self.assertFalse(results["package_index_trajectories"].empty)
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_results_include_research_artifacts(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A", "C"]}],
+            "debias": True,
+        }
+        results = run_simulation(config, nation)
+        self.assertIn("messages", results)
+        self.assertIn("survey_reasoning", results)
+        self.assertIn("daily_summaries", results)
+        self.assertIn("ground_truth", results)
+        self.assertIn("package_ground_truth", results)
+        self.assertFalse(results["messages"].empty)
+        self.assertFalse(results["survey_reasoning"].empty)
+        self.assertFalse(results["daily_summaries"].empty)
+        self.assertFalse(results["ground_truth"].empty)
+
 
 # ── Phase ordering acceptance ─────────────────────────────────
 
@@ -465,6 +1023,12 @@ class TestSimConfig(unittest.TestCase):
     def test_survey_provider_default_none(self):
         self.assertIn("survey_provider", SIM_CONFIG)
         self.assertIsNone(SIM_CONFIG["survey_provider"])
+
+    def test_communication_mode_default_single_policy(self):
+        self.assertEqual(SIM_CONFIG["communication_mode"], "single_policy")
+
+    def test_package_policies_default_all_climate_policies(self):
+        self.assertEqual(SIM_CONFIG["package_policies"], ALL_CLIMATE_POLICIES)
 
 
 # ── Survey model override ───────────────────────────────────────
@@ -592,6 +1156,15 @@ class TestCollectGroundTruth(unittest.TestCase):
         agent = self._make_gt_agent(1, {ClimatePolicyID.CARBON_TAX: 0})
         df = collect_ground_truth([agent], policy_ids=[ClimatePolicyID.CARBON_TAX])
         self.assertIsInstance(df.iloc[0]["policy_id"], str)
+
+    def test_collect_package_ground_truth(self):
+        agent = MagicMock()
+        agent.id = 1
+        agent.get_real_package_index.return_value = 0.5
+        df = collect_package_ground_truth([agent])
+        self.assertEqual(sorted(df.columns.tolist()), ["agent_id", "ground_truth", "index_name"])
+        self.assertEqual(df.iloc[0]["index_name"], PRO_CLIMATE_INDEX_COLUMN)
+        self.assertEqual(df.iloc[0]["ground_truth"], 0.5)
 
 
 if __name__ == "__main__":
