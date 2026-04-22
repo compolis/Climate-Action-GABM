@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 from cag.abm.agent import SurveyedCitizen, PoliticalAgent
 from cag.abm.environment import SurveyedNation
-from cag.abm.attributes.opinion import ClimatePolicyID, SURVEY_QUESTIONS
+from cag.abm.attributes.opinion import ClimatePolicyID, PACKAGE_SCOPE, SURVEY_QUESTIONS
 from cag.abm.democracy.elections.brexit import BrexitVoteID
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID
 from gabm.abm.attributes.politics import PoliticsID
@@ -347,6 +347,36 @@ class TestRunPeerMessaging(unittest.TestCase):
             if len(c.network_neighbors) > 0
         )
         self.assertEqual(result["messages_generated"], n_with_neighbors)
+
+    @patch("cag.abm.environment.random.sample", side_effect=lambda seq, k: list(seq)[:k])
+    @patch("cag.abm.agent.SurveyedCitizen.get_system_prompt", return_value="Test persona.")
+    @patch("cag.abm.agent.send_chat", return_value=_MOCK_PEER_MESSAGE)
+    def test_logs_one_row_per_peer_delivery(self, mock_send, mock_prompt, mock_sample):
+        self.sn.run_peer_messaging(ClimatePolicyID.CARBON_TAX, day=1, k_peers=2)
+        expected_deliveries = sum(
+            min(2, len(c.network_neighbors))
+            for c in self.sn.agents_active.values()
+            if c.network_neighbors
+        )
+        self.assertEqual(len(self.sn.message_log), expected_deliveries)
+        self.assertTrue(all(row["message_type"] == "peer_message" for row in self.sn.message_log))
+        self.assertTrue(all(row["recipient_scope"] == "direct" for row in self.sn.message_log))
+
+
+class TestRunPackagePeerMessagingLogging(unittest.TestCase):
+
+    def setUp(self):
+        self.sn = _make_nation()
+
+    @patch("cag.abm.environment.random.sample", side_effect=lambda seq, k: list(seq)[:k])
+    @patch("cag.abm.agent.SurveyedCitizen.get_system_prompt", return_value="Test persona.")
+    @patch("cag.abm.agent.send_chat", return_value=_MOCK_PEER_MESSAGE)
+    def test_logs_package_scope_and_policy_ids(self, mock_send, mock_prompt, mock_sample):
+        policy_ids = [ClimatePolicyID.CARBON_TAX, ClimatePolicyID.GREEN_HOUSING]
+        self.sn.run_package_peer_messaging(policy_ids, day=1, k_peers=2)
+        self.assertGreater(len(self.sn.message_log), 0)
+        self.assertTrue(all(row["package_scope"] == PACKAGE_SCOPE for row in self.sn.message_log))
+        self.assertTrue(all(row["policy_ids"] == policy_ids for row in self.sn.message_log))
 
 
 if __name__ == "__main__":

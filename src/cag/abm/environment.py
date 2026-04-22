@@ -30,7 +30,7 @@ from cag.abm.attributes.family import SurveyFamilyMap
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteMap
 from cag.abm.democracy.elections.brexit import BrexitVoteMap
 from cag.abm.attributes.narratives import SelftranscMap, SelfenhMap, OpennessMap, ConformTradMap, SDOMap, EDOMap, RWAMap
-from cag.abm.attributes.opinion import ordinal_score
+from cag.abm.attributes.opinion import PACKAGE_SCOPE, ordinal_score
 
 class SurveyedNation(Nation):
     """
@@ -146,9 +146,14 @@ class SurveyedNation(Nation):
         self.sdo_map = sdo_map
         self.edo_map = edo_map
         self.rwa_map = rwa_map
+        self.message_log = []
         self.network = None
         self.political_agent_a = None
         self.political_agent_b = None
+
+    def _log_message_event(self, **event):
+        """Append a structured message event to the research log."""
+        self.message_log.append(event)
 
     def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", max_agents=5, thinking=False):
        
@@ -419,6 +424,20 @@ class SurveyedNation(Nation):
 
         reflections = []
         for citizen in agent.connected_citizens:
+            self._log_message_event(
+                day=day,
+                phase=phase,
+                message_type="political_broadcast",
+                sender_type="political_agent",
+                sender_id=agent.id,
+                sender_side=agent.side,
+                recipient_id=citizen.id,
+                recipient_scope="broadcast",
+                policy_id=policy_id,
+                package_scope="",
+                policy_ids=[],
+                message_text=message,
+            )
             reflection = citizen.receive_political_message(
                 message, policy_id, phase, day,
                 api_key=api_key, model=model, provider=provider,
@@ -433,6 +452,60 @@ class SurveyedNation(Nation):
         )
         if reflections:
             logging.info(f"[{phase}] Sample reflection: {reflections[0][:200]}...")
+
+        return {
+            "message": message,
+            "reflections_count": len(reflections),
+            "sample_reflections": reflections[:2],
+        }
+
+    def run_package_broadcast(self, phase, policy_ids, day, api_key=None,
+                              model="gpt-4o-mini", provider="openai",
+                              temperature=0.5, thinking=False):
+        """Run a bundled political broadcast over a package of policies."""
+        if phase == "P-A":
+            agent = self.political_agent_a
+        elif phase == "P-B":
+            agent = self.political_agent_b
+        else:
+            raise ValueError(f"phase must be 'P-A' or 'P-B', got '{phase}'")
+
+        message = agent.generate_package_message(
+            policy_ids, api_key=api_key, model=model,
+            provider=provider, temperature=temperature,
+            thinking=thinking,
+        )
+
+        reflections = []
+        for citizen in agent.connected_citizens:
+            self._log_message_event(
+                day=day,
+                phase=phase,
+                message_type="political_broadcast",
+                sender_type="political_agent",
+                sender_id=agent.id,
+                sender_side=agent.side,
+                recipient_id=citizen.id,
+                recipient_scope="broadcast",
+                policy_id="",
+                package_scope=PACKAGE_SCOPE,
+                policy_ids=list(policy_ids),
+                message_text=message,
+            )
+            reflection = citizen.receive_package_political_message(
+                message, policy_ids, phase, day,
+                api_key=api_key, model=model, provider=provider,
+                temperature=temperature, thinking=thinking,
+            )
+            reflections.append(reflection)
+
+        logging.info(
+            f"[{phase}] Day {day}: delivered package message to "
+            f"{len(reflections)} citizens. Message (first 120 chars): "
+            f"{message[:120]}..."
+        )
+        if reflections:
+            logging.info(f"[{phase}] Sample package reflection: {reflections[0][:200]}...")
 
         return {
             "message": message,
@@ -486,6 +559,20 @@ class SurveyedNation(Nation):
         inbox = {}  # citizen_id -> list of message strings
         for sender_id, neighbors in selections.items():
             for neighbor in neighbors:
+                self._log_message_event(
+                    day=day,
+                    phase="C",
+                    message_type="peer_message",
+                    sender_type="citizen",
+                    sender_id=sender_id,
+                    sender_side="",
+                    recipient_id=neighbor.id,
+                    recipient_scope="direct",
+                    policy_id=policy_id,
+                    package_scope="",
+                    policy_ids=[],
+                    message_text=generated_messages[sender_id],
+                )
                 inbox.setdefault(neighbor.id, []).append(
                     generated_messages[sender_id]
                 )
@@ -507,6 +594,72 @@ class SurveyedNation(Nation):
         )
         if sample_msgs:
             logging.info(f"[C] Sample message: {sample_msgs[0][:200]}...")
+
+        return {
+            "messages_generated": len(generated_messages),
+            "reflections_count": len(reflections),
+            "sample_messages": sample_msgs,
+            "sample_reflections": reflections[:2],
+        }
+
+    def run_package_peer_messaging(self, policy_ids, day, k_peers=3,
+                                   api_key=None, model="gpt-4o-mini",
+                                   provider="openai", temperature=0.5,
+                                   thinking=False):
+        """Run simultaneous peer messaging about a bundled policy package."""
+        selections = {}
+        for citizen in self.agents_active.values():
+            if not citizen.network_neighbors:
+                continue
+            k = min(k_peers, len(citizen.network_neighbors))
+            selections[citizen.id] = random.sample(citizen.network_neighbors, k)
+
+        generated_messages = {}
+        for cid in selections:
+            citizen = self.agents_active[cid]
+            msg = citizen.generate_package_peer_message(
+                policy_ids, day=day, api_key=api_key, model=model,
+                provider=provider, temperature=temperature,
+                thinking=thinking,
+            )
+            generated_messages[cid] = msg
+
+        inbox = {}
+        for sender_id, neighbors in selections.items():
+            for neighbor in neighbors:
+                self._log_message_event(
+                    day=day,
+                    phase="C",
+                    message_type="peer_message",
+                    sender_type="citizen",
+                    sender_id=sender_id,
+                    sender_side="",
+                    recipient_id=neighbor.id,
+                    recipient_scope="direct",
+                    policy_id="",
+                    package_scope=PACKAGE_SCOPE,
+                    policy_ids=list(policy_ids),
+                    message_text=generated_messages[sender_id],
+                )
+                inbox.setdefault(neighbor.id, []).append(generated_messages[sender_id])
+
+        reflections = []
+        for recipient_id, messages in inbox.items():
+            citizen = self.agents_active[recipient_id]
+            reflection = citizen.receive_package_peer_messages(
+                messages, policy_ids, day,
+                api_key=api_key, model=model, provider=provider,
+                temperature=temperature, thinking=thinking,
+            )
+            reflections.append(reflection)
+
+        sample_msgs = list(generated_messages.values())[:2]
+        logging.info(
+            f"[C] Day {day}: {len(generated_messages)} citizens generated "
+            f"package messages, {len(reflections)} citizens reflected."
+        )
+        if sample_msgs:
+            logging.info(f"[C] Sample package message: {sample_msgs[0][:200]}...")
 
         return {
             "messages_generated": len(generated_messages),

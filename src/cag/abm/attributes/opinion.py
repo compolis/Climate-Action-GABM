@@ -41,6 +41,9 @@ ALL_CLIMATE_POLICIES = [
     ClimatePolicyID.CLIMATE_COMPENSATION,
 ]
 
+PRO_CLIMATE_INDEX_COLUMN = "ProClimatePolSupp"
+PACKAGE_SCOPE = "climate_policy_package"
+
 SURVEY_COLUMN_MAP: dict[ClimatePolicyID, str] = {
     ClimatePolicyID.RENEWABLE_ENERGY: "page5posttreatment6_1",
     ClimatePolicyID.BAN_FOSSIL_FUEL: "page5posttreatment6_4",
@@ -92,6 +95,38 @@ RESPONSE_LABELS: dict[str, str] = {
     "F": "Somewhat support",
     "G": "Strongly support",
 }
+
+
+def survey_to_numeric(raw_value: int) -> int:
+    """Convert the survey's 1-7 scale to the model's centered -3 to +3 scale."""
+    return raw_value - 4
+
+
+def numeric_to_survey(numeric_value: int) -> int:
+    """Convert the model's centered -3 to +3 scale back to the survey's 1-7 scale."""
+    return numeric_value + 4
+
+
+def compute_package_index(numeric_values: list[int], centered: bool = True) -> float:
+    """Average six policy responses into a package-level support index.
+
+    Args:
+        numeric_values: Climate policy responses on the model's -3..+3 scale.
+        centered: When True, return the centered -3..+3 average.
+            When False, return the survey-aligned 1..7 average.
+
+    Returns:
+        Arithmetic mean of the supplied policy responses.
+
+    Raises:
+        ValueError: If no values are supplied.
+    """
+    if not numeric_values:
+        raise ValueError("numeric_values must contain at least one response")
+    if centered:
+        return sum(numeric_values) / len(numeric_values)
+    survey_values = [numeric_to_survey(value) for value in numeric_values]
+    return sum(survey_values) / len(survey_values)
 
 
 def clamp_opinion_shift(previous: int, new: int, max_shift: int = 1) -> int:

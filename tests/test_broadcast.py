@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 from cag.abm.agent import SurveyedCitizen, PoliticalAgent
 from cag.abm.environment import SurveyedNation
-from cag.abm.attributes.opinion import ClimatePolicyID, SURVEY_QUESTIONS
+from cag.abm.attributes.opinion import ClimatePolicyID, PACKAGE_SCOPE, SURVEY_QUESTIONS
 from cag.abm.democracy.elections.brexit import BrexitVoteID
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID
 from gabm.abm.attributes.politics import PoliticsID
@@ -293,6 +293,47 @@ class TestRunPoliticalBroadcast(unittest.TestCase):
             for ref in citizen.reflections:
                 self.assertEqual(ref["phase"], "P-A")
                 self.assertEqual(ref["day"], 2)
+
+    @patch("cag.abm.agent.SurveyedCitizen.get_system_prompt", return_value="Test persona.")
+    @patch("cag.abm.agent.send_chat", return_value=_MOCK_REFLECTION)
+    def test_logs_one_delivery_per_connected_citizen(self, mock_send, mock_prompt):
+        self.sn.run_political_broadcast("P-A", ClimatePolicyID.CARBON_TAX, day=1)
+        self.assertEqual(
+            len(self.sn.message_log),
+            len(self.sn.political_agent_a.connected_citizens),
+        )
+
+    @patch("cag.abm.agent.SurveyedCitizen.get_system_prompt", return_value="Test persona.")
+    @patch("cag.abm.agent.send_chat", return_value=_MOCK_REFLECTION)
+    def test_message_log_contains_broadcast_metadata(self, mock_send, mock_prompt):
+        self.sn.run_political_broadcast("P-B", ClimatePolicyID.CARBON_TAX, day=2)
+        log_entry = self.sn.message_log[0]
+        self.assertEqual(log_entry["message_type"], "political_broadcast")
+        self.assertEqual(log_entry["sender_type"], "political_agent")
+        self.assertEqual(log_entry["recipient_scope"], "broadcast")
+        self.assertEqual(log_entry["policy_id"], ClimatePolicyID.CARBON_TAX)
+        self.assertEqual(log_entry["package_scope"], "")
+        self.assertIn(log_entry["recipient_id"], self.sn.agents_active)
+
+
+class TestRunPackageBroadcastLogging(unittest.TestCase):
+
+    def setUp(self):
+        self.sn = _make_nation()
+
+    @patch("cag.abm.agent.SurveyedCitizen.get_system_prompt", return_value="Test persona.")
+    @patch("cag.abm.agent.send_chat", return_value=_MOCK_REFLECTION)
+    def test_logs_package_delivery_rows(self, mock_send, mock_prompt):
+        policy_ids = [ClimatePolicyID.CARBON_TAX, ClimatePolicyID.GREEN_HOUSING]
+        self.sn.run_package_broadcast("P-A", policy_ids, day=1)
+        self.assertEqual(
+            len(self.sn.message_log),
+            len(self.sn.political_agent_a.connected_citizens),
+        )
+        log_entry = self.sn.message_log[0]
+        self.assertEqual(log_entry["message_type"], "political_broadcast")
+        self.assertEqual(log_entry["package_scope"], PACKAGE_SCOPE)
+        self.assertEqual(log_entry["policy_ids"], policy_ids)
 
 
 if __name__ == "__main__":

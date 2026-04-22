@@ -11,7 +11,15 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 from datetime import date
 
 from cag.io.llm import send_chat, parse_letter_response
-from cag.abm.attributes.opinion import SURVEY_QUESTIONS, RESPONSE_LABELS, RESPONSE_SCALE, SURVEY_COLUMN_MAP
+from cag.abm.attributes.opinion import (
+    PACKAGE_SCOPE,
+    PRO_CLIMATE_INDEX_COLUMN,
+    RESPONSE_LABELS,
+    RESPONSE_SCALE,
+    SURVEY_COLUMN_MAP,
+    SURVEY_QUESTIONS,
+    survey_to_numeric,
+)
 
 NUMERIC_TO_LETTER = {-3: "A", -2: "B", -1: "C", 0: "D", 1: "E", 2: "F", 3: "G"}
 
@@ -42,6 +50,12 @@ _DEBIAS_STEP2_TEMPLATE = (
     "{response_options}\n\n"
     "Respond with a single letter A-G."
 )
+
+
+def _format_policy_package(policy_ids) -> str:
+    return "\n".join(
+        f"- {SURVEY_QUESTIONS[policy_id]}" for policy_id in policy_ids
+    )
 
 class SurveyedCitizen():
     
@@ -246,7 +260,8 @@ class SurveyedCitizen():
 
     
 
-        trajectory = self._build_opinion_trajectory(policy_id=policy_id)
+        trajectory_policy = None if policy_id == PACKAGE_SCOPE else policy_id
+        trajectory = self._build_opinion_trajectory(policy_id=trajectory_policy)
         if trajectory:
             sections.append("Your opinion trajectory so far:\n" + trajectory)
 
@@ -449,6 +464,90 @@ class SurveyedCitizen():
         raw_value = int(self.original_survey_data.get(column_name))
         return raw_value - 4
 
+    def get_real_package_index(self) -> float:
+        raw_value = self.original_survey_data.get(PRO_CLIMATE_INDEX_COLUMN)
+        return survey_to_numeric(float(raw_value))
+
+    def receive_package_political_message(self, message, policy_ids, phase, day,
+                                          api_key=None, model="gpt-4o-mini",
+                                          provider="openai", temperature=0.5,
+                                          thinking=False) -> str:
+        system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE)
+        package_description = _format_policy_package(policy_ids)
+        user_prompt = (
+            "You just received the following political message about a package "
+            f"of climate policies:\n\"{message}\"\n\n"
+            "The package includes:\n"
+            f"{package_description}\n\n"
+            "In a few sentences, reflect on how this affects your thinking "
+            "about the overall package. You may mention which parts feel more "
+            "or less convincing. Do not state a final position — just think "
+            "out loud."
+        )
+        reflection_text = send_chat(
+            system_prompt, user_prompt, api_key=api_key, model=model,
+            provider=provider, temperature=temperature, thinking=thinking,
+        )
+        self.reflections.append({
+            "day": day,
+            "phase": phase,
+            "policy_id": PACKAGE_SCOPE,
+            "policy_ids": list(policy_ids),
+            "text": reflection_text,
+            "messages_received": [message],
+        })
+        return reflection_text
+
+    def generate_package_peer_message(self, policy_ids, day=0, api_key=None,
+                                      model="gpt-4o-mini", provider="openai",
+                                      temperature=0.5, thinking=False) -> str:
+        system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE)
+        package_description = _format_policy_package(policy_ids)
+        user_prompt = (
+            "Express your current thinking about the following climate-policy "
+            "package in 2-3 sentences. Be genuine and conversational, and feel "
+            "free to mention if some parts appeal to you more than others:\n"
+            f"{package_description}"
+        )
+        return send_chat(
+            system_prompt, user_prompt, api_key=api_key,
+            model=model, provider=provider,
+            temperature=temperature, thinking=thinking,
+        )
+
+    def receive_package_peer_messages(self, messages, policy_ids, day,
+                                      api_key=None, model="gpt-4o-mini",
+                                      provider="openai", temperature=0.5,
+                                      thinking=False) -> str:
+        system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE)
+        package_description = _format_policy_package(policy_ids)
+        numbered = "\n".join(
+            f'{i+1}. "{message}"' for i, message in enumerate(messages)
+        )
+        user_prompt = (
+            "You just received peer messages about a package of climate "
+            f"policies. The package includes:\n{package_description}\n\n"
+            "Here is what they said:\n\n"
+            f"{numbered}\n\n"
+            "In a few sentences, reflect on how these peer messages affect "
+            "your thinking about the overall package. Do not state a final "
+            "position — just think out loud."
+        )
+        reflection_text = send_chat(
+            system_prompt, user_prompt, api_key=api_key,
+            model=model, provider=provider,
+            temperature=temperature, thinking=thinking,
+        )
+        self.reflections.append({
+            "day": day,
+            "phase": "C",
+            "policy_id": PACKAGE_SCOPE,
+            "policy_ids": list(policy_ids),
+            "text": reflection_text,
+            "messages_received": list(messages),
+        })
+        return reflection_text
+
 
 _DEFAULT_PRO_CLIMATE_PROMPT = """
 You are a political agent campaigning in the style of the Green Party of England and Wales. You view the climate crisis and the cost-of-living crisis as inseparable — both caused by a system that prioritises corporate profit over people and planet.
@@ -515,3 +614,21 @@ class PoliticalAgent:
         return send_chat(self.system_prompt, user_prompt, api_key=api_key,
                          model=model, provider=provider, temperature=temperature,
                          thinking=thinking)
+
+    def generate_package_message(self, policy_ids, api_key=None,
+                                 model="gpt-4o-mini", provider="openai",
+                                 temperature=0.5, thinking=False) -> str:
+        verb = "supporting" if self.side == "pro_climate" else "opposing"
+        package_description = _format_policy_package(policy_ids)
+        user_prompt = (
+            f"Generate a persuasive message (180-240 words) {verb} the "
+            "following package of climate policies as one coherent political "
+            f"platform:\n{package_description}\n\n"
+            "Make the message feel like one joined-up argument rather than six "
+            "separate mini-messages."
+        )
+        return send_chat(
+            self.system_prompt, user_prompt, api_key=api_key,
+            model=model, provider=provider, temperature=temperature,
+            thinking=thinking,
+        )
