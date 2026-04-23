@@ -300,7 +300,7 @@ class SurveyedCitizen():
             lines.append(f"- {policy_name}: {text}")
         return "\n".join(lines)
 
-    def compress_memories(self, memories, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
+    def compress_memories(self, memories, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
 
         user_prompt = "Concisely summarise the following in 2 sentences from a 1st person perspective: {}".format(memories)
         system_prompt = "You are a concise summariser."
@@ -309,7 +309,7 @@ class SurveyedCitizen():
 
         return summary
 
-    def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
+    def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
         """Summarise all reflections from a given day and policy into 2-3 sentences."""
         day_reflections = [r for r in self.reflections
                           if r["day"] == day and r.get("policy_id") == policy_id]
@@ -320,7 +320,7 @@ class SurveyedCitizen():
         self.daily_summaries[(day, policy_id)] = summary
         return summary
 
-    def manage_memory(self, day, policy_id, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
+    def manage_memory(self, day, policy_id, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
         """Called at the end of each simulation day to compress old memories."""
         # Compress day d-2 into a daily summary (keep d-1 and d as full reflections)
         if day > 2:
@@ -344,7 +344,7 @@ class SurveyedCitizen():
             user_prompt = "\n\n".join([framing, policy_question, response_options, question])
             return user_prompt
 
-    def administer_survey(self, policy_id, day=0, model="gpt-4o-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, debias=False) -> tuple[str, int]:
+    def administer_survey(self, policy_id, day=0, model="gpt-5-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, debias=False) -> tuple[str, int]:
         
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
 
@@ -395,7 +395,7 @@ class SurveyedCitizen():
 
         return letter_response, opinion_value
 
-    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", thinking=False, debias=False) -> dict:
+    def run_baseline(self, api_key=None, model="gpt-5-mini", provider="openai", thinking=False, debias=False) -> dict:
 
         results = {}
         for policy_id in SURVEY_QUESTIONS.keys():
@@ -404,7 +404,7 @@ class SurveyedCitizen():
         return results
     
     def receive_political_message(self, message, policy_id, phase, day,
-                                    api_key=None, model="gpt-4o-mini",
+                                    api_key=None, model="gpt-5-mini",
                                     provider="openai", temperature=0.5,
                                     thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
@@ -428,7 +428,7 @@ class SurveyedCitizen():
         return reflection_text
 
     def generate_peer_message(self, policy_id, day=0, api_key=None,
-                              model="gpt-4o-mini", provider="openai",
+                              model="gpt-5-mini", provider="openai",
                               temperature=0.5, thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
         policy_description = SURVEY_QUESTIONS[policy_id]
@@ -442,7 +442,7 @@ class SurveyedCitizen():
                          temperature=temperature, thinking=thinking)
 
     def receive_peer_messages(self, messages, policy_id, day,
-                              api_key=None, model="gpt-4o-mini",
+                              api_key=None, model="gpt-5-mini",
                               provider="openai", temperature=0.5,
                               thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
@@ -495,7 +495,7 @@ class SurveyedCitizen():
         return gt_value
 
     def seed_opinion_with_rationale(self, policy_id, day=0,
-                                    api_key=None, model="gpt-4o-mini",
+                                    api_key=None, model="gpt-5-mini",
                                     provider="openai", temperature=0.5,
                                     thinking=False) -> tuple[int, str]:
         """Seed Day 0 opinion from ground truth and generate a rationale.
@@ -528,7 +528,7 @@ class SurveyedCitizen():
         return gt_value, rationale
 
     def receive_package_political_message(self, message, policy_ids, phase, day,
-                                          api_key=None, model="gpt-4o-mini",
+                                          api_key=None, model="gpt-5-mini",
                                           provider="openai", temperature=0.5,
                                           thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE)
@@ -558,7 +558,7 @@ class SurveyedCitizen():
         return reflection_text
 
     def generate_package_peer_message(self, policy_ids, day=0, api_key=None,
-                                      model="gpt-4o-mini", provider="openai",
+                                      model="gpt-5-mini", provider="openai",
                                       temperature=0.5, thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE)
         package_description = _format_policy_package(policy_ids)
@@ -575,7 +575,7 @@ class SurveyedCitizen():
         )
 
     def receive_package_peer_messages(self, messages, policy_ids, day,
-                                      api_key=None, model="gpt-4o-mini",
+                                      api_key=None, model="gpt-5-mini",
                                       provider="openai", temperature=0.5,
                                       thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE)
@@ -663,7 +663,7 @@ class PoliticalAgent:
             self.system_prompt = _DEFAULT_ANTI_CLIMATE_PROMPT
         self.connected_citizens: list = []
 
-    def generate_message(self, policy_id, api_key=None, model="gpt-4o-mini",
+    def generate_message(self, policy_id, api_key=None, model="gpt-5-mini",
                          provider="openai", temperature=0.5, thinking=False) -> str:
         verb = "supporting" if self.side == "pro_climate" else "opposing"
         user_prompt = (
@@ -675,7 +675,7 @@ class PoliticalAgent:
                          thinking=thinking)
 
     def generate_package_message(self, policy_ids, api_key=None,
-                                 model="gpt-4o-mini", provider="openai",
+                                 model="gpt-5-mini", provider="openai",
                                  temperature=0.5, thinking=False) -> str:
         verb = "supporting" if self.side == "pro_climate" else "opposing"
         package_description = _format_policy_package(policy_ids)

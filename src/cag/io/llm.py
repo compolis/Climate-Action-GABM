@@ -21,7 +21,7 @@ _DEFAULT_KEY_CSV = _REPO_ROOT / "data" / "api_key.csv"
 # send_chat
 # ---------------------------------------------------------------------------
 
-def send_chat(system_prompt, user_prompt, api_key=None, model="gpt-4o-mini",
+def send_chat(system_prompt, user_prompt, api_key=None, model="gpt-5-mini",
               provider="openai", temperature=0.5, thinking=False):
     """Send a chat completion request and return the assistant's text.
 
@@ -34,7 +34,7 @@ def send_chat(system_prompt, user_prompt, api_key=None, model="gpt-4o-mini",
     api_key : str
         API key for the provider.
     model : str
-        Model identifier (e.g. "gpt-4o-mini", "gemini-2.0-flash").
+        Model identifier (e.g. "gpt-5-mini", "gemini-2.0-flash").
     provider : str
         "openai", "genai", or "anthropic".  Raises ValueError for anything else.
     temperature : float
@@ -92,6 +92,13 @@ _PARAM_PATTERNS = [
     re.compile(r"(?:parameter|field)\s+'(\w+)'"),]
 
 
+# Cache of params known to be unsupported for a given (provider, model).
+# Populated lazily on the first 400 from each model and consulted on every
+# subsequent call so the offending param is stripped before the request is
+# sent — saves a round-trip and stops the warning re-firing every call.
+_KNOWN_UNSUPPORTED: dict[tuple[str, str], set[str]] = {}
+
+
 def _extract_rejected_param(error_msg):
     """Try to extract the offending parameter name from a 400 error message.
 
@@ -136,6 +143,14 @@ def _resilient_call(api_fn, kwargs, provider_label, max_retries=3,
         Anthropic: when "thinking" is stripped, re-add temperature).
     """
     last_exc = None
+    cache_key = (provider_label, kwargs.get("model"))
+    # Pre-emptively strip params already known to be unsupported for this
+    # (provider, model). Silent: the warning fired on the first encounter.
+    for cached_param in tuple(_KNOWN_UNSUPPORTED.get(cache_key, ())):
+        if cached_param in kwargs:
+            del kwargs[cached_param]
+            if on_strip:
+                on_strip(kwargs, cached_param)
     for _ in range(1 + max_retries):
         try:
             return api_fn(**kwargs)
@@ -154,6 +169,7 @@ def _resilient_call(api_fn, kwargs, provider_label, max_retries=3,
                     provider_label, param,
                 )
                 del kwargs[param]
+                _KNOWN_UNSUPPORTED.setdefault(cache_key, set()).add(param)
                 if on_strip:
                     on_strip(kwargs, param)
                 last_exc = exc
@@ -190,6 +206,11 @@ def _send_openai(system_prompt, user_prompt, api_key, model, temperature, thinki
     )
     if thinking:
         kwargs["reasoning_effort"] = "medium"
+    elif model.startswith(("gpt-5", "o1", "o3", "o4")):
+        # Reasoning models default to medium effort, which adds 5-15s/call.
+        # When extended thinking is off, force minimal effort for low latency.
+        # If a future model rejects this kwarg, _resilient_call will strip it.
+        kwargs["reasoning_effort"] = "minimal"
 
     response = _resilient_call(
         client.chat.completions.create, kwargs, "OpenAI",
@@ -397,7 +418,7 @@ def parse_letter_response(response):
 
 if __name__ == "__main__":
     provider = "openai"
-    model = "gpt-4o-mini"
+    model = "gpt-5-mini"
     try:
         api_key = load_api_key(provider)
         print(f"API key for {provider}: {api_key}")

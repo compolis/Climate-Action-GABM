@@ -34,7 +34,7 @@ SIM_CONFIG = {
     "p_intra": 0.15,
     "p_inter": 0.02,
     "block_sizes": None,        # defaults to equal split
-    "llm_model": "gpt-4o-mini",
+    "llm_model": "gpt-5-mini",
     "llm_provider": "openai",
     "llm_temperature": 0.5,
     "survey_model": None,       # override model for surveys (None → use llm_model)
