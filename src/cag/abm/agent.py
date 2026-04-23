@@ -229,7 +229,7 @@ class SurveyedCitizen():
         1. Persona + narrative (always)
         2. Daily summaries (older than d-1)
         3. Full reflections (days d-1 and d)
-        4. Opinion trajectory
+        4. Day-0 rationales (when seeded via ``ground_truth_with_rationale``)
         5. Persona reminder
         """
         sections = []
@@ -258,33 +258,46 @@ class SurveyedCitizen():
             ref_lines = [f"- [{r['phase']}] {r['text']}" for r in recent_reflections]
             sections.append("Your recent reflections following received messages:\n" + "\n".join(ref_lines))
 
-    
-
-        trajectory_policy = None if policy_id == PACKAGE_SCOPE else policy_id
-        trajectory = self._build_opinion_trajectory(policy_id=trajectory_policy)
-        if trajectory:
-            sections.append("Your opinion trajectory so far:\n" + trajectory)
+        rationale_policy = None if policy_id == PACKAGE_SCOPE else policy_id
+        rationales = self._build_day0_rationales(policy_id=rationale_policy)
+        if rationales:
+            sections.append("Your earlier reasoning on these policies:\n" + rationales)
 
         # remind about their persona:
         sections.append("Remember your persona: " + persona)
 
         return "\n\n".join(sections)
 
-    def _build_opinion_trajectory(self, policy_id=None):
-        """Compact string of past survey responses for a given policy."""
+    def _build_day0_rationales(self, policy_id=None):
+        """Bulleted Day-0 rationales from ``survey_reasoning``.
+
+        Returns the agent's first-person Day-0 rationale (one bullet per
+        policy) so the LLM has access to *why* the agent held its initial
+        position, without surfacing the numeric answer label itself.
+        Only Day-0 entries are included; later survey reasoning is not
+        replayed into the prompt.
+        """
+        def _day0_text(history):
+            for d, text in history:
+                if d == 0:
+                    return text
+            return None
+
         if policy_id is not None:
-            history = self.opinion_history.get(policy_id, [])
-            if not history:
+            history = self.survey_reasoning.get(policy_id, [])
+            text = _day0_text(history)
+            if text is None:
                 return ""
-            return ", ".join(f"Day {d}: {NUMERIC_TO_LETTER.get(v, '?')}" for d, v in history)
-        # No policy specified — show all
+            policy_name = SURVEY_QUESTIONS.get(policy_id, str(policy_id))[:60]
+            return f"- {policy_name}: {text}"
+
         lines = []
-        for pid, history in self.opinion_history.items():
-            if not history:
+        for pid, history in self.survey_reasoning.items():
+            text = _day0_text(history)
+            if text is None:
                 continue
-            entries = ", ".join(f"Day {d}: {NUMERIC_TO_LETTER.get(v, '?')}" for d, v in history)
             policy_name = SURVEY_QUESTIONS.get(pid, str(pid))[:60]
-            lines.append(f"{policy_name}: {entries}")
+            lines.append(f"- {policy_name}: {text}")
         return "\n".join(lines)
 
     def compress_memories(self, memories, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5):
@@ -467,6 +480,52 @@ class SurveyedCitizen():
     def get_real_package_index(self) -> float:
         raw_value = self.original_survey_data.get(PRO_CLIMATE_INDEX_COLUMN)
         return survey_to_numeric(float(raw_value))
+
+    def seed_opinion_from_ground_truth(self, policy_id, day=0) -> int:
+        """Seed Day 0 opinion from real survey ground truth (no LLM call).
+
+        Appends ``(day, gt_value)`` to ``opinion_history[policy_id]`` using the
+        agent's real centered -3..+3 survey response. Used by the
+        ``day0_anchor="ground_truth"`` simulation mode.
+        """
+        gt_value = self.get_real_survey_response(policy_id)
+        if policy_id not in self.opinion_history:
+            self.opinion_history[policy_id] = []
+        self.opinion_history[policy_id].append((day, gt_value))
+        return gt_value
+
+    def seed_opinion_with_rationale(self, policy_id, day=0,
+                                    api_key=None, model="gpt-4o-mini",
+                                    provider="openai", temperature=0.5,
+                                    thinking=False) -> tuple[int, str]:
+        """Seed Day 0 opinion from ground truth and generate a rationale.
+
+        Seeds ``opinion_history`` with the real survey response, then makes a
+        single LLM call asking the agent to rationalise that position in
+        character. The rationale is stored in ``survey_reasoning[policy_id]``
+        so Day 1 memory can reference it.
+        """
+        gt_value = self.seed_opinion_from_ground_truth(policy_id, day=day)
+        letter = NUMERIC_TO_LETTER[gt_value]
+        response_label = RESPONSE_LABELS[letter]
+        policy_question = SURVEY_QUESTIONS.get(policy_id)
+
+        system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
+        user_prompt = (
+            f"Your considered position on the following policy is "
+            f"\"{response_label}\":\n\n{policy_question}\n\n"
+            "In 2-3 sentences, explain why someone with your background and "
+            "values might genuinely hold this position. Speak in the first "
+            "person."
+        )
+        rationale = send_chat(
+            system_prompt, user_prompt, api_key=api_key, model=model,
+            provider=provider, temperature=temperature, thinking=thinking,
+        )
+        if policy_id not in self.survey_reasoning:
+            self.survey_reasoning[policy_id] = []
+        self.survey_reasoning[policy_id].append((day, rationale))
+        return gt_value, rationale
 
     def receive_package_political_message(self, message, policy_ids, phase, day,
                                           api_key=None, model="gpt-4o-mini",

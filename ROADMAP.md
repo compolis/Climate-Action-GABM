@@ -3,8 +3,9 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
-4. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
+3. [0.4 — Package Mode, Day-0 Anchoring, Memory Refactor](#04--package-mode-day-0-anchoring-memory-refactor)
+4. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
+5. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
 
 ## Overview
@@ -13,6 +14,26 @@ This file outlines planned next steps and future goals.
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
 Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
+
+
+## 0.4 — Package Mode, Day-0 Anchoring, Memory Refactor
+
+Post-v0.3 work focused on a single composite headline-experiment configuration:
+the full six-policy package, with Day-0 opinions anchored to the real YouGov
+response so that subsequent drift is unambiguously simulation-driven, and
+without the numeric self-consistency cue that anchored agents on their own
+prior survey answers. New notebooks (NB16, NB17) exercise the combination
+end-to-end with a timing harness for scaling estimates.
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | Package communication mode (`communication_mode="package"`, `compute_package_index()`, `package_index_trajectories`, `collect_package_ground_truth()`, `PACKAGE_SCOPE`) | ✅ Done |
+| 2 | Day-0 ground-truth anchoring (`day0_anchor` config: `llm_survey` / `ground_truth` / `ground_truth_with_rationale`; `seed_opinion_from_ground_truth()`, `seed_opinion_with_rationale()`, `_run_day0()` dispatcher) | ✅ Done |
+| 3 | Memory anchor refactor — numeric Day-0..N trajectory removed from `assemble_context()`, replaced with Day-0 rationale block via `_build_day0_rationales()` | ✅ Done |
+| 4 | NB16 — package mode sanity checks | ✅ Done |
+| 5 | NB17 — full-stack smoke test (package + anchor + debias + thinking + dual-model + timing harness) | ✅ Done |
+
+**315 tests passing across 16 test files.**
 
 
 ## 0.3 — Bias Calibration & Validation

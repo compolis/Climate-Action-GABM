@@ -3,6 +3,7 @@
 
 ## Table of Contents
 - [Overview](#overview)
+- [0.4](#04)
 - [0.3](#03)
 - [0.2](#02)
 - [0.1](#01)
@@ -10,6 +11,14 @@
 
 ## Overview
 Notable changes are to be documented in this file.
+
+
+## [0.4]
+- **Package Communication Mode** — `communication_mode="package"` collapses the per-day broadcast and peer-messaging passes into a single phase covering all six climate policies; `compute_package_index()` averages the six responses into a −3..+3 index; new `package_index_trajectories` results DataFrame; `collect_package_ground_truth()` companion to `collect_ground_truth()`; `PACKAGE_SCOPE` sentinel propagated through `assemble_context()` and the survey path
+- **Day-0 Ground-Truth Anchoring** — new `day0_anchor` config key with three modes (`llm_survey` | `ground_truth` | `ground_truth_with_rationale`); `seed_opinion_from_ground_truth()` and `seed_opinion_with_rationale()` on `SurveyedCitizen`; `_run_day0()` dispatcher in `sim.py`; `VALID_DAY0_ANCHORS` validation; aligns Day-0 cohort mean exactly with the YouGov sample mean so subsequent drift is attributable to simulation dynamics rather than baseline LLM bias
+- **Memory Anchor Refactor** — removed the numeric "Your opinion trajectory so far: Day 0: C, Day 1: E, …" block from `assemble_context()` (strongest LLM self-consistency cue on prior survey answers); replaced with "Your earlier reasoning on these policies:" Day-0 rationale block via new `_build_day0_rationales()` helper; `opinion_history` unchanged at the data layer
+- **Notebooks 16, 17** — `16_package_mode_sanity_checks.ipynb` (package-mode smoke test) and `17_day0_anchoring_smoke_test.ipynb` (full-stack smoke test with timing harness for scaling estimates)
+- **315 tests** across 16 test files
 
 
 ## [0.3]

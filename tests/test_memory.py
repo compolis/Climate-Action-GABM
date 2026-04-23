@@ -93,13 +93,47 @@ class TestAssembleContext:
         # Day 4 is d-1, so it should be in recent reflections not summaries
         assert "Should not appear as summary" not in ctx
 
-    def test_opinion_trajectory_included(self):
+    def test_day0_rationale_included(self):
         c = _make_citizen()
-        c.opinion_history[ClimatePolicyID.CARBON_TAX] = [(0, -1), (1, 1)]
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(0, "I support a carbon tax because polluters should pay.")]
+        _add_reflections(c, day=2)
+        ctx = c.assemble_context(day=2, policy_id=pid)
+        assert "earlier reasoning" in ctx.lower()
+        assert "polluters should pay" in ctx
+        # The numeric self-anchor must be gone.
+        assert "opinion trajectory so far" not in ctx.lower()
+        assert "Day 0: " not in ctx
+        assert "Day 1: " not in ctx
+
+    def test_day0_rationale_omitted_when_empty(self):
+        c = _make_citizen()
         _add_reflections(c, day=2)
         ctx = c.assemble_context(day=2)
-        assert "Day 0: C" in ctx
-        assert "Day 1: E" in ctx
+        assert "earlier reasoning" not in ctx.lower()
+
+    def test_day0_rationale_filtered_by_policy(self):
+        c = _make_citizen()
+        pid_a = ClimatePolicyID.CARBON_TAX
+        pid_b = ClimatePolicyID.RENEWABLE_ENERGY
+        c.survey_reasoning[pid_a] = [(0, "Carbon-tax rationale text.")]
+        c.survey_reasoning[pid_b] = [(0, "Renewable-energy rationale text.")]
+        _add_reflections(c, day=2, policy_id=pid_a)
+        ctx = c.assemble_context(day=2, policy_id=pid_a)
+        assert "Carbon-tax rationale text." in ctx
+        assert "Renewable-energy rationale text." not in ctx
+
+    def test_post_day0_rationale_not_shown(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [
+            (0, "Day 0 anchor rationale."),
+            (3, "Day 3 later rationale."),
+        ]
+        _add_reflections(c, day=4, policy_id=pid)
+        ctx = c.assemble_context(day=4, policy_id=pid)
+        assert "Day 0 anchor rationale." in ctx
+        assert "Day 3 later rationale." not in ctx
 
     def test_persona_included_at_end(self):
         c = _make_citizen()

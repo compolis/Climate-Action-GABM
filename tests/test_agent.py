@@ -211,5 +211,72 @@ class TestDebiasedSurvey(unittest.TestCase):
         self.assertEqual(citizen.survey_reasoning, {})
 
 
+class TestDay0Seeding(unittest.TestCase):
+    """Tests for seed_opinion_from_ground_truth and seed_opinion_with_rationale."""
+
+    def _make_citizen(self, raw_value=6.0):
+        env = mock.MagicMock()
+        citizen = SurveyedCitizen(
+            agent_id=42, environment=env, year_of_birth=1985,
+            original_survey_data={"page5posttreatment6_5": raw_value},
+        )
+        citizen.get_persona = mock.MagicMock(return_value="I am a 41 year old engineer.")
+        citizen.get_narrative = mock.MagicMock(return_value="I value independence.")
+        return citizen
+
+    @mock.patch("cag.abm.agent.send_chat")
+    def test_seed_from_ground_truth_no_llm_call(self, mock_send):
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        citizen = self._make_citizen(raw_value=6.0)
+        gt = citizen.seed_opinion_from_ground_truth(ClimatePolicyID.BAN_PETROL_CARS, day=0)
+        self.assertEqual(mock_send.call_count, 0)
+        self.assertEqual(gt, 2)
+
+    def test_seed_from_ground_truth_writes_history(self):
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen = self._make_citizen(raw_value=2.0)
+        citizen.seed_opinion_from_ground_truth(policy, day=0)
+        self.assertEqual(citizen.opinion_history[policy], [(0, -2)])
+
+    def test_seed_from_ground_truth_appends_no_overwrite(self):
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen = self._make_citizen(raw_value=5.0)
+        citizen.opinion_history[policy] = [(-1, 0)]  # pretend prior entry
+        citizen.seed_opinion_from_ground_truth(policy, day=0)
+        self.assertEqual(citizen.opinion_history[policy], [(-1, 0), (0, 1)])
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="My reasoning.")
+    def test_seed_with_rationale_one_llm_call(self, mock_send):
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        citizen = self._make_citizen(raw_value=6.0)
+        gt, rationale = citizen.seed_opinion_with_rationale(
+            ClimatePolicyID.BAN_PETROL_CARS, day=0,
+        )
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(gt, 2)
+        self.assertEqual(rationale, "My reasoning.")
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="My reasoning.")
+    def test_seed_with_rationale_writes_history_and_reasoning(self, mock_send):
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen = self._make_citizen(raw_value=7.0)
+        citizen.seed_opinion_with_rationale(policy, day=0)
+        self.assertEqual(citizen.opinion_history[policy], [(0, 3)])
+        self.assertEqual(citizen.survey_reasoning[policy], [(0, "My reasoning.")])
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="Reasoning text.")
+    def test_seed_with_rationale_prompt_mentions_response_label(self, mock_send):
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen = self._make_citizen(raw_value=6.0)  # numeric +2 → "Somewhat support"
+        citizen.seed_opinion_with_rationale(policy, day=0)
+        user_prompt = mock_send.call_args_list[0][0][1]
+        self.assertIn("Somewhat support", user_prompt)
+        self.assertIn("first person", user_prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

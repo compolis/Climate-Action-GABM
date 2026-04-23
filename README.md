@@ -44,13 +44,13 @@ Citizen agents are constructed from real **YouGov survey data** (UK, April 2024)
 
 ## Current Status
 
-**v0.3 — MVP complete, bias calibration integrated.**
+**v0.4 — Day-0 ground-truth anchoring and package communication mode.**
 
 | Metric | Value |
 |--------|-------|
-| Tests | 276 passing |
+| Tests | 315 passing |
 | Issues done | 10 of 10 |
-| Notebooks | 15 (01–15) |
+| Notebooks | 17 (01–17) |
 | Source files | 21 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
@@ -97,6 +97,8 @@ Interactive demos live in `notebooks/`. Each covers one simulation component:
 | 13 | Bias Mitigation Experiment | 4-condition experiment: reasoning, anti-sycophancy, scale |
 | 14 | Multi-Policy Generalization | Test bias mitigation across 4 climate policies |
 | 15 | Full Simulation + Ground Truth | Debias + thinking + dual-model + GT comparison |
+| 16 | Package Mode Sanity Checks | Single broadcast / peer pass covers all six policies per phase |
+| 17 | Full-Stack Smoke Test | Package + Day-0 anchor + debias + thinking + dual-model + timing harness |
 
 
 ## License
