@@ -620,6 +620,34 @@ Post-MVP work added the following capabilities without changing the model archit
 
 The design spec remains v1.0 — the model architecture is unchanged; v0.3 adds calibration tooling and validation infrastructure.
 
+### v0.4 — Package Communication Mode, Day-0 Anchoring, Memory Refactor
+
+v0.4 adds three changes that extend (and in one place, supersede) the v1.0 design above. Earlier sections of this document have **not** been edited; this entry is the authoritative description of what changed in v0.4.
+
+**1. Package communication mode (extends §4.1).** A new `communication_mode` config key supports `"per_policy"` (the original v1.0 behaviour, default) and `"package"`. In package mode each phase fires once per day rather than once per (day × policy): a single Phase P-A broadcast, single Phase P-B broadcast, and single Phase C peer-message pass each cover all six policies in the package together. Citizen reflections and end-of-day surveys still operate per-policy. New helpers: `compute_package_index()` averages the six policy responses into a single −3..+3 index; `package_index_trajectories` is a new output DataFrame; `collect_package_ground_truth()` mirrors `collect_ground_truth()` at the package level; `PACKAGE_SCOPE` is a sentinel used by `assemble_context()` and the survey path to signal package-level prompts. Package mode is the recommended setting when the research question is the climate-policy package as a whole rather than any individual policy.
+
+**2. Day-0 ground-truth anchoring (extends §3 and §4.3).** A new `day0_anchor` config key selects how Day-0 opinion is initialised, with three modes:
+
+- `"llm_survey"` — original v1.0 behaviour: Day 0 opinion is the LLM's response to the baseline survey.
+- `"ground_truth"` — Day 0 opinion is set to the agent's real YouGov response; no LLM call.
+- `"ground_truth_with_rationale"` — Day 0 opinion is set to the real YouGov response **and** the LLM is asked to rationalise that position; the rationale text is stored in `survey_reasoning` keyed by `(policy_id, day=0)`.
+
+The dispatcher `_run_day0()` in `sim.py` selects the path. New `SurveyedCitizen` methods `seed_opinion_from_ground_truth()` and `seed_opinion_with_rationale()` implement the two non-`llm_survey` modes. The `debias` flag is silently ignored on Day 0 when an anchor mode is chosen (it still applies to end-of-day surveys). Anchoring lets a Day-0 cohort mean equal the YouGov mean exactly, so any subsequent drift is unambiguously attributable to the simulation dynamics rather than to LLM baseline bias.
+
+**3. Memory anchor refactor (supersedes §6.2).** §6.2 above states that past end-of-day survey scores are concatenated into the prompt as a numeric trajectory (e.g. `"Day 1: C, Day 2: C, Day 3: D, …"`). **In v0.4 this block is removed from `assemble_context()`.** It was the strongest LLM self-consistency cue in the prompt and was anchoring the model on its own prior survey answers rather than letting it integrate the day's reflections. In its place, when `day0_anchor="ground_truth_with_rationale"`, a new block is injected:
+
+```
+Your earlier reasoning on these policies:
+- {policy short name}: {Day-0 rationale text}
+…
+```
+
+It is built by `_build_day0_rationales()` and uses only the Day-0 entries from `survey_reasoning`. Later-day rationales are intentionally not surfaced (they would re-introduce a self-consistency cue). When `day0_anchor="llm_survey"` (no rationale generated), the new block is silently empty — equivalent to v1.0 behaviour minus the numeric trajectory. `opinion_history` itself is unchanged on the agent and still drives the data layer / output CSVs / package-index computation; only the prompt-side surfacing is removed.
+
+**Notebooks added.** `notebooks/16_package_mode_sanity_checks.ipynb` exercises package mode at small scale; `notebooks/17_day0_anchoring_smoke_test.ipynb` is the full-stack smoke test combining package mode, `ground_truth_with_rationale` anchoring, debias, extended thinking, and dual-model surveys, with a per-block timing harness used to estimate scaling cost before the headline run.
+
+**Tests.** 315 passing (up from 276) across the new package-mode, anchoring, and memory-refactor test classes.
+
 ---
 
 *Specification version 1.0 — produced during iterative design session.*

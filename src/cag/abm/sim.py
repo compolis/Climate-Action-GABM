@@ -34,7 +34,7 @@ SIM_CONFIG = {
     "p_intra": 0.15,
     "p_inter": 0.02,
     "block_sizes": None,        # defaults to equal split
-    "llm_model": "gpt-4o-mini",
+    "llm_model": "gpt-5-mini",
     "llm_provider": "openai",
     "llm_temperature": 0.5,
     "survey_model": None,       # override model for surveys (None → use llm_model)
@@ -43,9 +43,13 @@ SIM_CONFIG = {
     "debias": False,
     "communication_mode": "single_policy",
     "package_policies": ALL_CLIMATE_POLICIES,
+    "day0_anchor": "llm_survey",
     "random_seed": 42,
     "output_dir": "data/output/experiments",
 }
+
+
+VALID_DAY0_ANCHORS = ("llm_survey", "ground_truth", "ground_truth_with_rationale")
 
 
 def _is_package_mode(config):
@@ -70,6 +74,42 @@ def _run_baseline_surveys(nation, policies, api_key, model, provider,
                 thinking=thinking,
                 debias=debias,
             )
+
+
+def _run_day0(nation, policies, anchor_mode, api_key, model, provider,
+              temperature, thinking, debias):
+    """Initialise Day 0 opinions according to the configured anchor mode.
+
+    - ``llm_survey``: existing behaviour (administer the survey via LLM).
+    - ``ground_truth``: seed opinion_history from the real survey response;
+      no LLM call.
+    - ``ground_truth_with_rationale``: seed from ground truth and ask the
+      LLM to rationalise the position; rationale stored in survey_reasoning.
+    """
+    if anchor_mode == "llm_survey":
+        _run_baseline_surveys(
+            nation, policies, api_key, model, provider,
+            temperature, thinking, debias,
+        )
+        return
+
+    if debias:
+        logging.info(
+            "day0_anchor=%s: debias flag is ignored on Day 0 "
+            "(still applies to end-of-day surveys).",
+            anchor_mode,
+        )
+
+    for agent in nation.agents_active.values():
+        for policy_id in policies:
+            if anchor_mode == "ground_truth":
+                agent.seed_opinion_from_ground_truth(policy_id, day=0)
+            else:  # ground_truth_with_rationale
+                agent.seed_opinion_with_rationale(
+                    policy_id, day=0,
+                    api_key=api_key, model=model, provider=provider,
+                    temperature=temperature, thinking=thinking,
+                )
 
 
 def _log_package_index(nation, policies, day):
@@ -123,6 +163,11 @@ def run_simulation(config, nation):
     n_days = len(days)
     package_mode = _is_package_mode(cfg)
     package_policies = _get_package_policies(cfg)
+    anchor_mode = cfg.get("day0_anchor", "llm_survey")
+    if anchor_mode not in VALID_DAY0_ANCHORS:
+        raise ValueError(
+            f"day0_anchor must be one of {VALID_DAY0_ANCHORS}, got {anchor_mode!r}"
+        )
 
     nation.message_log = []
 
@@ -146,20 +191,25 @@ def run_simulation(config, nation):
 
     if package_mode:
         logging.info(
-            "Running package baseline survey (day 0), policies=%s",
+            "Running package baseline survey (day 0), policies=%s, anchor=%s",
             [str(policy_id) for policy_id in package_policies],
+            anchor_mode,
         )
-        _run_baseline_surveys(
-            nation, package_policies, survey_api_key, survey_model,
-            survey_provider, temperature, thinking, debias,
+        _run_day0(
+            nation, package_policies, anchor_mode,
+            survey_api_key, survey_model, survey_provider,
+            temperature, thinking, debias,
         )
         _log_package_index(nation, package_policies, day=0)
     else:
         baseline_policy = days[0]["policy"]
-        logging.info(f"Running baseline survey (day 0), policy={baseline_policy}")
-        _run_baseline_surveys(
-            nation, [baseline_policy], survey_api_key, survey_model,
-            survey_provider, temperature, thinking, debias,
+        logging.info(
+            f"Running baseline survey (day 0), policy={baseline_policy}, anchor={anchor_mode}"
+        )
+        _run_day0(
+            nation, [baseline_policy], anchor_mode,
+            survey_api_key, survey_model, survey_provider,
+            temperature, thinking, debias,
         )
 
     # Daily loop

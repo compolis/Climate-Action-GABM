@@ -209,6 +209,14 @@ class TestExtractRejectedParam:
 class TestResilientCall:
     """Unit tests for the generic retry helper."""
 
+    @pytest.fixture(autouse=True)
+    def _clear_unsupported_cache(self):
+        """Reset the (provider, model) → unsupported-params cache between tests."""
+        from cag.io.llm import _KNOWN_UNSUPPORTED
+        _KNOWN_UNSUPPORTED.clear()
+        yield
+        _KNOWN_UNSUPPORTED.clear()
+
     def test_success_on_first_try(self):
         fn = mock.Mock(return_value="ok")
         result = _resilient_call(fn, {"a": 1}, "Test")

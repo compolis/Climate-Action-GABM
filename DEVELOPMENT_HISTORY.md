@@ -21,6 +21,7 @@ See [CONTRIBUTORS].
 
 
 ## Development Timeline
+- [2026-04-23] v0.4 — Package communication mode, Day-0 ground-truth anchoring (3 modes: `llm_survey` / `ground_truth` / `ground_truth_with_rationale`), memory anchor refactor (numeric Day-0..N trajectory replaced with Day-0 rationale block in `assemble_context()`), notebooks 16 and 17 added, 315 tests across 16 test files.
 - [2026-04-19] v0.3 — Bias calibration complete. Condition B debias integrated, Anthropic provider, ground truth utility, 276 tests, 4 experiment runs. See [result_report.md](docs/result_report.md).
 - [2026-04-14] Baseline bias investigation: 6-model comparison, 4-condition experiment, multi-policy generalization (NB 11–14).
 - [2026-04-10] v0.2 MVP complete — all 10 issues done, 226 tests, 8 demo notebooks (01–08).

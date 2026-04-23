@@ -59,12 +59,26 @@ def _make_mock_agent(agent_id, exposure="A-only"):
             reasoning = agent.survey_reasoning.setdefault(policy_id, [])
             reasoning.append((day, f"Reasoning for day {day}"))
 
+    def fake_seed_gt(policy_id, day=0):
+        history = agent.opinion_history.setdefault(policy_id, [])
+        history.append((day, 2))  # GT marker distinct from llm_survey value
+        return 2
+
+    def fake_seed_with_rationale(policy_id, day=0, **kwargs):
+        history = agent.opinion_history.setdefault(policy_id, [])
+        history.append((day, 2))
+        reasoning = agent.survey_reasoning.setdefault(policy_id, [])
+        reasoning.append((day, f"Rationale for day {day}"))
+        return 2, f"Rationale for day {day}"
+
     def fake_manage_memory(day, policy, **kwargs):
         agent.daily_summaries[(day, policy)] = f"Summary for day {day}"
 
     agent.administer_survey = MagicMock(side_effect=fake_survey)
     agent.manage_memory = MagicMock(side_effect=fake_manage_memory)
     agent.get_real_survey_response = MagicMock(side_effect=fake_get_real_survey_response)
+    agent.seed_opinion_from_ground_truth = MagicMock(side_effect=fake_seed_gt)
+    agent.seed_opinion_with_rationale = MagicMock(side_effect=fake_seed_with_rationale)
     return agent
 
 
@@ -1165,6 +1179,116 @@ class TestCollectGroundTruth(unittest.TestCase):
         self.assertEqual(sorted(df.columns.tolist()), ["agent_id", "ground_truth", "index_name"])
         self.assertEqual(df.iloc[0]["index_name"], PRO_CLIMATE_INDEX_COLUMN)
         self.assertEqual(df.iloc[0]["ground_truth"], 0.5)
+
+
+class TestDay0Anchor(unittest.TestCase):
+    """Tests for the day0_anchor config switch (llm_survey | ground_truth |
+    ground_truth_with_rationale)."""
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_default_is_llm_survey(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {"days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}]}
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            agent.administer_survey.assert_called_once()
+            agent.seed_opinion_from_ground_truth.assert_not_called()
+            agent.seed_opinion_with_rationale.assert_not_called()
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_ground_truth_seeds_no_llm_survey(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "day0_anchor": "ground_truth",
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            agent.administer_survey.assert_not_called()
+            agent.seed_opinion_from_ground_truth.assert_called_once_with(
+                ClimatePolicyID.CARBON_TAX, day=0,
+            )
+            agent.seed_opinion_with_rationale.assert_not_called()
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_ground_truth_with_rationale_calls_seed_with_rationale(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "day0_anchor": "ground_truth_with_rationale",
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            agent.administer_survey.assert_not_called()
+            agent.seed_opinion_from_ground_truth.assert_not_called()
+            agent.seed_opinion_with_rationale.assert_called_once()
+            kwargs = agent.seed_opinion_with_rationale.call_args.kwargs
+            self.assertIn("api_key", kwargs)
+            self.assertIn("model", kwargs)
+            self.assertIn("provider", kwargs)
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_ground_truth_writes_opinion_history(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "day0_anchor": "ground_truth",
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            history = agent.opinion_history[ClimatePolicyID.CARBON_TAX]
+            # First entry is the GT seed (value 2 in fake), second is end-of-day=1
+            self.assertEqual(history[0], (0, 2))
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_invalid_anchor_raises(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(1)
+        config = {
+            "day0_anchor": "nonsense_mode",
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+        }
+        with self.assertRaises(ValueError) as ctx:
+            run_simulation(config, nation)
+        self.assertIn("day0_anchor", str(ctx.exception))
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_debias_with_anchored_mode_logs_override(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(1)
+        config = {
+            "day0_anchor": "ground_truth",
+            "debias": True,
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+        }
+        with self.assertLogs(level="INFO") as captured:
+            run_simulation(config, nation)
+        self.assertTrue(
+            any("debias flag is ignored on Day 0" in msg for msg in captured.output),
+            f"Expected debias-ignored INFO log, got: {captured.output}",
+        )
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_package_mode_with_ground_truth_seeds_all_policies(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "communication_mode": "package",
+            "package_policies": list(ALL_CLIMATE_POLICIES),
+            "day0_anchor": "ground_truth",
+            "days": [{"phases": []}],
+        }
+        run_simulation(config, nation)
+        for agent in nation.agents_active.values():
+            agent.administer_survey.assert_not_called()
+            self.assertEqual(
+                agent.seed_opinion_from_ground_truth.call_count,
+                len(ALL_CLIMATE_POLICIES),
+            )
 
 
 if __name__ == "__main__":

@@ -155,7 +155,7 @@ class SurveyedNation(Nation):
         """Append a structured message event to the research log."""
         self.message_log.append(event)
 
-    def run_baseline(self, api_key=None, model="gpt-4o-mini", provider="openai", max_agents=5, thinking=False):
+    def run_baseline(self, api_key=None, model="gpt-5-mini", provider="openai", max_agents=5, thinking=False):
        
         baseline_rows = []
        
@@ -189,7 +189,7 @@ class SurveyedNation(Nation):
 
         return df
     
-    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-4o-mini", provider="openai", temperature=0.5, thinking=False, debias=False):
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5, thinking=False, debias=False):
 
         endofday_rows = []
         agents = list(self.agents_active.values())
@@ -390,7 +390,7 @@ class SurveyedNation(Nation):
             ]
 
     def run_political_broadcast(self, phase, policy_id, day, api_key=None,
-                                model="gpt-4o-mini", provider="openai",
+                                model="gpt-5-mini", provider="openai",
                                 temperature=0.5, thinking=False):
         """
         Run a political broadcast phase (P-A or P-B).
@@ -460,7 +460,7 @@ class SurveyedNation(Nation):
         }
 
     def run_package_broadcast(self, phase, policy_ids, day, api_key=None,
-                              model="gpt-4o-mini", provider="openai",
+                              model="gpt-5-mini", provider="openai",
                               temperature=0.5, thinking=False):
         """Run a bundled political broadcast over a package of policies."""
         if phase == "P-A":
@@ -514,7 +514,7 @@ class SurveyedNation(Nation):
         }
 
     def run_peer_messaging(self, policy_id, day, k_peers=3, api_key=None,
-                           model="gpt-4o-mini", provider="openai",
+                           model="gpt-5-mini", provider="openai",
                            temperature=0.5, thinking=False):
         """
         Run the peer messaging phase (C) with simultaneous update.
@@ -603,7 +603,7 @@ class SurveyedNation(Nation):
         }
 
     def run_package_peer_messaging(self, policy_ids, day, k_peers=3,
-                                   api_key=None, model="gpt-4o-mini",
+                                   api_key=None, model="gpt-5-mini",
                                    provider="openai", temperature=0.5,
                                    thinking=False):
         """Run simultaneous peer messaging about a bundled policy package."""
