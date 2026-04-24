@@ -228,6 +228,100 @@ class TestResume(unittest.TestCase):
             self.assertIn("agent set", str(ctx.exception))
 
 
+@patch("cag.abm.sim.load_api_key", return_value="mock-key")
+@patch("cag.abm.sim.PoliticalAgent")
+class TestResumeNaNHandling(unittest.TestCase):
+    """Round-trip resume must not turn empty CSV cells into the literal 'nan'."""
+
+    def _package_config(self, tmp_dir):
+        cfg = _base_config(tmp_dir)
+        cfg["communication_mode"] = "package"
+        cfg["package_policies"] = [
+            ClimatePolicyID.CARBON_TAX,
+            ClimatePolicyID.RENEWABLE_ENERGY,
+        ]
+        return cfg
+
+    def test_two_cycle_package_resume_does_not_propagate_nan(self, _pa, _key):
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt = Path(tmp) / "checkpoint"
+            cfg = self._package_config(tmp)
+            cfg["days"] = cfg["days"][:1]
+
+            # Cycle 1: run day 1 in package mode and checkpoint.
+            nation1 = _make_mock_nation(n_agents=3)
+            run_simulation(cfg, nation1, checkpoint_dir=ckpt,
+                           checkpoint_every_day=True)
+
+            # Cycle 2: resume into a fresh nation, run day 2, checkpoint again.
+            cfg2 = self._package_config(tmp)
+            cfg2["days"] = cfg2["days"][:2]
+            nation2 = _make_mock_nation(n_agents=3)
+            run_simulation(cfg2, nation2, checkpoint_dir=ckpt,
+                           resume=True, checkpoint_every_day=True)
+
+            # Inspect the resulting messages.csv: no string column may contain
+            # the literal 'nan' that str(np.nan) produces. This is the regression
+            # this test guards against — without NaN normalisation in
+            # _load_checkpoint, package-mode policy_id / package_scope round-trip
+            # as the string 'nan' on the second checkpoint.
+            import pandas as pd  # local import keeps top-level imports tidy
+            msgs = pd.read_csv(ckpt / "messages.csv", keep_default_na=False)
+            for col in ("policy_id", "recipient_scope", "package_scope",
+                        "policy_ids_json", "sender_side"):
+                offending = msgs[msgs[col].astype(str).str.lower() == "nan"]
+                self.assertTrue(
+                    offending.empty,
+                    f"messages.csv column {col!r} contains 'nan' strings "
+                    f"after a two-cycle package-mode resume:\n{offending}",
+                )
+
+
+@patch("cag.abm.sim.load_api_key", return_value="mock-key")
+@patch("cag.abm.sim.PoliticalAgent")
+class TestResumeDaysValidation(unittest.TestCase):
+
+    def test_resume_rejects_days_prefix_mismatch(self, _pa, _key):
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt = Path(tmp) / "checkpoint"
+            cfg = _base_config(tmp)
+            cfg["days"] = cfg["days"][:2]
+
+            nation1 = _make_mock_nation(n_agents=3)
+            run_simulation(cfg, nation1, checkpoint_dir=ckpt,
+                           checkpoint_every_day=True)
+
+            # Mutate an already-completed day's policy and try to resume.
+            cfg_bad = _base_config(tmp)
+            cfg_bad["days"][0] = {
+                "policy": ClimatePolicyID.RENEWABLE_ENERGY,
+                "phases": ["P-A", "P-B", "C"],
+            }
+            nation2 = _make_mock_nation(n_agents=3)
+            with self.assertRaises(ValueError) as ctx:
+                run_simulation(cfg_bad, nation2, checkpoint_dir=ckpt,
+                               resume=True)
+            self.assertIn("days", str(ctx.exception).lower())
+
+    def test_resume_rejects_shorter_days_than_checkpoint(self, _pa, _key):
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt = Path(tmp) / "checkpoint"
+            cfg = _base_config(tmp)  # 3 days
+
+            nation1 = _make_mock_nation(n_agents=3)
+            run_simulation(cfg, nation1, checkpoint_dir=ckpt,
+                           checkpoint_every_day=True)
+
+            # New config declares fewer days than the checkpoint already ran.
+            cfg_short = _base_config(tmp)
+            cfg_short["days"] = cfg_short["days"][:1]
+            nation2 = _make_mock_nation(n_agents=3)
+            with self.assertRaises(ValueError) as ctx:
+                run_simulation(cfg_short, nation2, checkpoint_dir=ckpt,
+                               resume=True)
+            self.assertIn("day", str(ctx.exception).lower())
+
+
 class TestAtomicWrite(unittest.TestCase):
 
     @patch("cag.abm.sim.load_api_key", return_value="mock-key")

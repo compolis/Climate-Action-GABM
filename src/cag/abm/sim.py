@@ -665,7 +665,7 @@ CHECKPOINT_SCHEMA_VERSION = 1
 # the simulation if mismatched against the saved state).
 _RESUME_HARD_KEYS = (
     "n_citizens", "random_seed", "p_intra", "p_inter", "network_type",
-    "communication_mode", "package_policies",
+    "communication_mode", "package_policies", "day0_anchor",
 )
 # Config keys we tolerate changing on resume but log a warning for.
 _RESUME_SOFT_KEYS = (
@@ -692,7 +692,11 @@ def _write_checkpoint(nation, cfg, last_day, checkpoint_dir):
     meta = {
         "schema_version": CHECKPOINT_SCHEMA_VERSION,
         "last_completed_day": int(last_day),
-        "agent_ids": [str(aid) for aid in nation.agents_active.keys()],
+        # Sort by string form for stable on-disk fingerprint across runs
+        # whose agent IDs may be a mix of ints / floats / strings.
+        "agent_ids": sorted(
+            (str(aid) for aid in nation.agents_active.keys()),
+        ),
         "config": serialised,
         "config_hash": _config_hash(serialised),
         "written_at": datetime.now().isoformat(timespec="seconds"),
@@ -728,6 +732,27 @@ def _validate_resume_config(meta, cfg, nation):
                 f"(checkpoint={saved.get(key)!r}, new={new.get(key)!r}). "
                 f"This would invalidate prior agent state."
             )
+
+    # Days schedule: the new config must extend (or match) the checkpoint's
+    # already-completed prefix. We allow future days to grow / change, but
+    # the past is immutable.
+    last_completed = int(meta.get("last_completed_day", 0))
+    saved_days = saved.get("days") or []
+    new_days = new.get("days") or []
+    if last_completed > len(new_days):
+        raise ValueError(
+            f"Cannot resume: checkpoint completed through day "
+            f"{last_completed} but new config only declares "
+            f"{len(new_days)} day(s). The new config must extend (or "
+            f"match) the checkpoint's day schedule."
+        )
+    if saved_days[:last_completed] != new_days[:last_completed]:
+        raise ValueError(
+            f"Cannot resume: cfg['days'][0:{last_completed}] differs "
+            f"from the checkpoint's already-completed schedule. Past "
+            f"days are immutable; only future entries may be added or "
+            f"modified."
+        )
 
     # Agent ID set must match.
     saved_ids = set(meta.get("agent_ids", []))
@@ -771,9 +796,22 @@ def _load_checkpoint(nation, checkpoint_dir):
     policy_lookup[""] = ""
 
     def _to_policy(value):
-        if value is None:
-            return None
+        # NaN can leak in from pd.read_csv on optional / package-mode columns
+        # (e.g. messages.csv policy_id is empty in package mode). Without this
+        # guard, str(NaN) -> 'nan' would propagate as a fake policy id and
+        # poison opinion_history / message_log keys, getting strictly worse on
+        # every resume cycle.
+        if value is None or value == "" or (
+            isinstance(value, float) and pd.isna(value)
+        ):
+            return ""
         return policy_lookup.get(str(value), str(value))
+
+    def _str(value):
+        """Coerce optional string-typed cells to '' (NaN/None -> '')."""
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return ""
+        return value
 
     # Index agents by str(id) so loaded CSV ids (which may be float-stringified)
     # round-trip back to the original keys in agents_active.
@@ -790,7 +828,11 @@ def _load_checkpoint(nation, checkpoint_dir):
         path = checkpoint_dir / f"{name}.csv"
         if not path.exists():
             return pd.DataFrame(columns=_RESULT_CSV_SCHEMAS[name])
-        return pd.read_csv(path)
+        df = pd.read_csv(path)
+        # Replace NaN with None across the frame so str()/json.loads/dict-keys
+        # don't see literal 'nan' or float NaN downstream. Critical for
+        # messages.csv where package mode leaves policy_id empty.
+        return df.where(pd.notna(df), None)
 
     # opinion_history
     opin = _read("opinion_trajectories")
@@ -856,17 +898,17 @@ def _load_checkpoint(nation, checkpoint_dir):
             policy_ids = []
         nation.message_log.append({
             "day": int(row.day) if pd.notna(row.day) else None,
-            "phase": row.phase,
-            "message_type": row.message_type,
-            "sender_type": row.sender_type,
+            "phase": _str(row.phase),
+            "message_type": _str(row.message_type),
+            "sender_type": _str(row.sender_type),
             "sender_id": row.sender_id,
-            "sender_side": row.sender_side,
+            "sender_side": _str(row.sender_side),
             "policy_id": _to_policy(row.policy_id),
-            "package_scope": row.package_scope,
+            "package_scope": _str(row.package_scope),
             "policy_ids": [_to_policy(p) for p in policy_ids],
             "recipient_id": row.recipient_id,
-            "recipient_scope": row.recipient_scope,
-            "message_text": row.message_text,
+            "recipient_scope": _str(row.recipient_scope),
+            "message_text": _str(row.message_text),
         })
 
     return last_day
