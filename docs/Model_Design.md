@@ -648,6 +648,102 @@ It is built by `_build_day0_rationales()` and uses only the Day-0 entries from `
 
 **Tests.** 315 passing (up from 276) across the new package-mode, anchoring, and memory-refactor test classes.
 
+### v0.4 — Checkpoint and Resume (Operational Addendum)
+
+This addendum is purely operational — it does not change agent behaviour, prompts, or any quantity recorded in the result CSVs. It adds crash-recovery and pause/resume capability to `run_simulation()` so that long, costly runs can survive kernel interrupts, network failures, or schema-compatible config changes without re-spending tokens on already-completed days.
+
+**Two new keyword arguments on `run_simulation(config, nation, ...)`:**
+
+- `checkpoint_dir: Path | None` — directory where per-day snapshots are written. When `None` (default), no checkpointing happens and behaviour is identical to v0.4.
+- `checkpoint_every_day: bool = False` — when `True` and `checkpoint_dir` is set, a full snapshot is written after each day completes (after `manage_memory`, before the loop advances).
+- `resume: bool = False` — when `True`, `run_simulation` hydrates the supplied `nation` from the checkpoint at `checkpoint_dir` instead of starting from Day 0, and continues the daily loop from `last_completed_day + 1`.
+
+**Checkpoint contents.** A checkpoint is the same set of CSVs that `save_results()` writes (`opinion_trajectories.csv`, `reflections.csv`, `messages.csv`, `daily_summaries.csv`, `survey_reasoning.csv`, `ground_truth.csv`, `package_ground_truth.csv`, `opinion_shares.csv`, plus `package_index_*` in package mode), accompanied by a `checkpoint_meta.json` recording `schema_version`, `last_completed_day`, the sorted `agent_ids`, the full normalised `config`, a `config_hash` (sha256 of the serialised config), and `written_at`. Plot images are not regenerated per day; they are produced once via `save_result_plots()` after the run finishes.
+
+**Atomicity.** Every CSV/JSON write goes through `_atomic_write_csv()` / `_atomic_write_json()`, which writes to `<name>.tmp` in the same directory and then `os.replace()`s into place. A crash mid-write therefore either leaves the previous valid checkpoint intact or the fresh complete one — never a partial file. The smoke test in `notebooks/18_checkpoint_resume_smoke_test.ipynb` asserts there are no `.tmp` files left in the checkpoint directory after either a clean run or an interrupt.
+
+**Resume semantics.** On `resume=True`, `_load_checkpoint()` rebuilds four agent state fields (`opinion_history`, `reflections`, `daily_summaries`, `survey_reasoning`) from CSVs and rebuilds `nation.message_log` from `messages.csv`. A reverse lookup `{str(pid): pid for pid in ALL_CLIMATE_POLICIES}` converts the string-form `policy_id` column back into `ClimatePolicyID` enum members so the rehydrated dictionary keys match the in-memory keys produced by a fresh run (this round-trip equality is what the unit tests verify). **Day 0 is then skipped** — no `_run_day0()` call, no Day-0 LLM token spend — and the loop advances from `last_completed_day + 1` through the configured `n_days`.
+
+**Compatibility checks (`_validate_resume_config`).**
+
+- *Hard-fail keys* (`ValueError` on mismatch): `n_citizens`, `random_seed`, `p_intra`, `p_inter`, `network_type`, `communication_mode`, `package_policies`, plus the agent-ID set itself. These define the world; mixing them across a resume would silently corrupt the trajectory.
+- *Soft-warn keys*: `llm_model`, `llm_provider`, `survey_model`, `survey_provider`, `debias`, `thinking`, `llm_temperature`. Changes here are logged as warnings and allowed — they support legitimate workflows like swapping in a cheaper model after a baseline day, or upgrading the survey model mid-experiment, while making the change visible in logs.
+
+**Caveat for stochastic models.** Resume restores world state but not the LLM's internal RNG. With `llm_temperature > 0` the post-resume daily trajectory will not be bitwise identical to a from-scratch run with the same seed; it is a statistically equivalent continuation, not a deterministic replay. For exact reproducibility, run end-to-end without checkpointing.
+
+**Validation.** Ten new unit tests in `tests/test_checkpoint.py` cover round-trip equality, day-numbering continuation, Day-0 skip on resume, hard-fail and warn-only config diffs, missing-checkpoint errors, agent-set mismatch rejection, no `.tmp` leftovers, and parameter-validation error paths (e.g. `resume=True` without `checkpoint_dir`). `notebooks/18_checkpoint_resume_smoke_test.ipynb` is the end-to-end smoke test: it runs with `checkpoint_every_day=True`, supports a manual kernel interrupt, inspects the partial checkpoint, exercises the negative-test path, then resumes from a fresh nation and asserts full day coverage `0..N_DAYS`.
+
+**Tests.** 325 passing (up from 315).
+
+---
+
+## 16. Parallelization Plan (Backlog)
+
+Status: **planning only — not yet implemented.** This section is a working note to seed a future GitHub issue. Append-only; revise via additions below rather than edits in place.
+
+### 16.1 Motivation
+
+Wall-time is dominated by blocking LLM HTTP calls made one agent at a time. For a single day with `N` agents and the default `["P-A", "P-B", "C"]` phase order, the runner issues roughly `N × (1 + 1 + 2 + 1 + 1)` sequential calls (P-A reflect, P-B reflect, peer message gen + receive-reflect, end-of-day survey, manage_memory). With `debias=True` the survey doubles. At `N=30` and ~3 s/call this is ~10 minutes/day; at `N=200` it is over an hour/day. The work is I/O-bound, not CPU-bound.
+
+### 16.2 Where parallelism is safe
+
+The model already uses **phase barriers** as the synchronisation primitive. Within a single phase, every per-agent operation reads a frozen snapshot and writes only to its own state, so the operations commute. Parallelism is therefore safe **inside a phase**, never across phases or days.
+
+| Site | Per-agent op | Parallelisable | Notes |
+|---|---|---|---|
+| Day-0 baseline survey | `administer_survey(day=0)` or `seed_opinion_with_rationale` | yes | fully independent |
+| Day-0 ground-truth seeding | `seed_opinion_from_ground_truth` | n/a | no LLM calls |
+| Phase P-A | `receive_political_message` | yes | broadcast is shared input |
+| Phase P-B | `receive_political_message` | yes | as P-A |
+| Phase C step 1 | `generate_peer_message` | yes | reads pre-phase state |
+| Phase C step 2 | `receive_peer_messages` (reflection) | yes | requires step 1 barrier |
+| End-of-day survey | `administer_survey(day=N)` | yes | independent |
+| `manage_memory` | summarisation calls | yes | independent |
+
+What is **not** safe: parallelising across days (causal dependency), or collapsing the three sub-steps of `run_peer_messaging` (they are an explicit barrier).
+
+### 16.3 Recommended first cut — `ThreadPoolExecutor` over agents
+
+Because the bottleneck is HTTP wait, a thread pool gives near-linear speedup up to the provider rate-limit ceiling. Plan:
+
+- Add a config key `max_concurrent_agents: int = 1` (default preserves current sequential behaviour).
+- Wrap the per-agent loops in [src/cag/abm/environment.py](src/cag/abm/environment.py) (`administer_survey`, `run_broadcast`, the two non-barrier sub-steps of `run_peer_messaging`) and the `manage_memory` loop in [src/cag/abm/sim.py](src/cag/abm/sim.py) with a single shared `ThreadPoolExecutor(max_workers=cfg["max_concurrent_agents"])`.
+- Provider SDKs (`openai`, `anthropic`, `google-genai`) are thread-safe per client.
+- Keep the phase barriers explicit: each `executor.map(...)` call must complete before the next phase begins.
+
+Expected speedup: roughly `min(N_agents, max_workers, rate_limit_ceiling)`. A starting point of 8–16 workers is reasonable for OpenAI tier-1.
+
+### 16.4 Caveats and mitigations
+
+- **Rate limits.** The existing `_resilient_call` in [src/cag/io/llm.py](src/cag/io/llm.py) handles 400-class param errors; it does not yet do 429 backoff with jitter. Add bounded exponential backoff before turning concurrency on in production.
+- **Determinism.** Order of completion will vary; logging will interleave. Any per-agent RNG must be seeded at agent construction (already the case). For exact reproducibility, use `max_concurrent_agents=1`.
+- **Logging volume.** The per-agent `INFO` lines in the survey loop will interleave. Consider buffering per-agent log lines and flushing at the phase barrier.
+- **Checkpoint interaction.** The atomic write in `_atomic_write_csv` happens once per day, after the `manage_memory` barrier — concurrency inside a phase does not affect checkpoint integrity.
+- **Cost.** Concurrency reduces wall-time, not token spend. Pair with the OpenAI Batch API (see 16.5) for cost reduction.
+
+### 16.5 Stretch options (larger refactors)
+
+1. **Async clients.** `openai.AsyncOpenAI` / `anthropic.AsyncAnthropic` give the same throughput as threads with lower overhead and cleaner cancellation. Requires converting `send_chat` and the per-agent methods to `async def` and replacing per-phase loops with `asyncio.gather`. Worth it past ~100 agents.
+2. **Batch API for end-of-day survey.** Phase C survey calls are independent and have no dependent follow-up that day — ideal for OpenAI / Anthropic Batch APIs. ~50 % cheaper, very high throughput, at the cost of minutes of submission latency. Suitable for offline runs.
+3. **Pre-fetched political messages.** P-A and P-B broadcast generation can run once at the top of each day in parallel (two calls, independent), removing them from the critical path.
+
+### 16.6 Explicitly out of scope
+
+- **Multiprocessing.** Pickling `SurveyedNation` and the agent graph dwarfs any benefit; the workload is I/O-bound. Threads win.
+- **Cross-day parallelism.** Breaks causality.
+- **Distributed runners.** Unjustified for current N; revisit if `N_citizens` exceeds 1 000.
+
+### 16.7 Suggested issue scope (MVP for the team)
+
+A single PR-sized first step:
+
+1. Add `max_concurrent_agents` to `SIM_CONFIG`; default 1.
+2. Introduce one helper `_parallel_for_agents(executor, agents, fn)` in `sim.py` and route the four phase loops through it.
+3. Add 429 backoff with jitter to `_resilient_call`.
+4. Add a smoke notebook that runs the same config at `max_concurrent_agents ∈ {1, 4, 8}` and reports wall-time + cost + Day-N opinion-mean drift (should be statistically indistinguishable across settings).
+
+Acceptance: existing 325 tests pass at `max_concurrent_agents=1`; new wall-time test asserts ≥3× speedup at `max_workers=8` for a 30-agent / 3-day run; opinion trajectory means agree within Monte-Carlo noise.
+
 ---
 
 *Specification version 1.0 — produced during iterative design session.*

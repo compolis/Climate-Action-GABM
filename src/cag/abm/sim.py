@@ -2,8 +2,10 @@
 Simulation runner for Climate-Action-GABM.
 """
 from dataclasses import dataclass
+import hashlib
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -129,9 +131,126 @@ def _log_package_index(nation, policies, day):
         logging.info(f"Day {day} mean package index: {mean_index:+.2f}")
 
 
+# ── Runtime resolution ──────────────────────────────────────────
+
+def _resolve_runtime(cfg):
+    """Resolve config into a flat runtime dict used by the daily loop."""
+    api_key = load_api_key(cfg["llm_provider"])
+    provider = cfg["llm_provider"]
+    survey_provider = cfg.get("survey_provider") or provider
+    survey_api_key = (
+        load_api_key(survey_provider) if survey_provider != provider else api_key
+    )
+    return {
+        "api_key": api_key,
+        "model": cfg["llm_model"],
+        "provider": provider,
+        "temperature": cfg["llm_temperature"],
+        "thinking": cfg["thinking"],
+        "debias": cfg["debias"],
+        "k_peers": cfg["k_peers_per_day"],
+        "survey_api_key": survey_api_key,
+        "survey_model": cfg.get("survey_model") or cfg["llm_model"],
+        "survey_provider": survey_provider,
+        "package_mode": _is_package_mode(cfg),
+        "package_policies": _get_package_policies(cfg),
+    }
+
+
+def _run_one_day(nation, day, day_config, n_days, rt):
+    """Run a single simulation day end-to-end (phases → EOD survey → memory)."""
+    phases = day_config["phases"]
+    package_mode = rt["package_mode"]
+    package_policies = rt["package_policies"]
+
+    if package_mode:
+        logging.info(
+            "--- Day %s/%s (package=%s, phases=%s) ---",
+            day, n_days, PACKAGE_SCOPE, phases,
+        )
+    else:
+        policy = day_config["policy"]
+        logging.info(f"--- Day {day}/{n_days} (policy={policy}, phases={phases}) ---")
+
+    for phase in phases:
+        if package_mode:
+            if phase in ("P-A", "P-B"):
+                nation.run_package_broadcast(
+                    phase, package_policies, day,
+                    api_key=rt["api_key"], model=rt["model"],
+                    provider=rt["provider"], temperature=rt["temperature"],
+                )
+            elif phase == "C":
+                nation.run_package_peer_messaging(
+                    package_policies, day, k_peers=rt["k_peers"],
+                    api_key=rt["api_key"], model=rt["model"],
+                    provider=rt["provider"], temperature=rt["temperature"],
+                )
+            else:
+                logging.warning(f"Unknown phase '{phase}' on day {day}, skipping.")
+        else:
+            if phase in ("P-A", "P-B"):
+                nation.run_political_broadcast(
+                    phase, policy, day,
+                    api_key=rt["api_key"], model=rt["model"],
+                    provider=rt["provider"], temperature=rt["temperature"],
+                )
+            elif phase == "C":
+                nation.run_peer_messaging(
+                    policy, day, k_peers=rt["k_peers"],
+                    api_key=rt["api_key"], model=rt["model"],
+                    provider=rt["provider"], temperature=rt["temperature"],
+                )
+            else:
+                logging.warning(f"Unknown phase '{phase}' on day {day}, skipping.")
+
+    if package_mode:
+        for policy_id in package_policies:
+            nation.run_end_of_day_survey(
+                policy_id, day,
+                api_key=rt["survey_api_key"], model=rt["survey_model"],
+                provider=rt["survey_provider"], temperature=rt["temperature"],
+                thinking=rt["thinking"], debias=rt["debias"],
+            )
+    else:
+        nation.run_end_of_day_survey(
+            policy, day,
+            api_key=rt["survey_api_key"], model=rt["survey_model"],
+            provider=rt["survey_provider"], temperature=rt["temperature"],
+            thinking=rt["thinking"], debias=rt["debias"],
+        )
+
+    for agent in nation.agents_active.values():
+        if package_mode:
+            agent.manage_memory(
+                day, PACKAGE_SCOPE,
+                api_key=rt["api_key"], model=rt["model"],
+                provider=rt["provider"], temperature=rt["temperature"],
+            )
+        else:
+            agent.manage_memory(
+                day, policy,
+                api_key=rt["api_key"], model=rt["model"],
+                provider=rt["provider"], temperature=rt["temperature"],
+            )
+
+    if package_mode:
+        _log_package_index(nation, package_policies, day)
+    else:
+        opinions = [
+            agent.opinion_history[policy][-1][1]
+            for agent in nation.agents_active.values()
+            if policy in agent.opinion_history and agent.opinion_history[policy]
+        ]
+        if opinions:
+            mean_op = sum(opinions) / len(opinions)
+            logging.info(f"Day {day} mean opinion: {mean_op:+.2f}")
+
+
 # ── Main simulation loop ────────────────────────────────────────
 
-def run_simulation(config, nation):
+def run_simulation(config, nation, checkpoint_dir=None, resume=False,
+                   checkpoint_every_day=False):
     """Run a full simulation and return results as a dict of DataFrames.
 
     Args:
@@ -139,43 +258,39 @@ def run_simulation(config, nation):
             config["days"] is a list where each entry is:
                 {"policy": ClimatePolicyID, "phases": ["P-A", "P-B", "C"]}
         nation: a SurveyedNation with agents already loaded.
+        checkpoint_dir: optional Path; directory to read/write per-day
+            checkpoints. Required when ``resume=True`` or
+            ``checkpoint_every_day=True``.
+        resume: if True, hydrate agent + nation state from
+            ``checkpoint_dir`` before running, skip Day 0, and continue
+            day numbering from ``last_completed_day + 1``. Hard-fails if
+            no checkpoint is found.
+        checkpoint_every_day: if True, write a CSV checkpoint to
+            ``checkpoint_dir`` after each day's ``manage_memory`` step.
 
     Returns:
-        dict with keys "opinion_trajectories", "reflections", "config".
+        dict with simulation results (see ``_collect_results``).
     """
     cfg = {**SIM_CONFIG, **config}
 
-    api_key = load_api_key(cfg["llm_provider"])
-    model = cfg["llm_model"]
-    provider = cfg["llm_provider"]
-    temperature = cfg["llm_temperature"]
-    thinking = cfg["thinking"]
-    debias = cfg["debias"]
-    k_peers = cfg["k_peers_per_day"]
-
-    # Survey-specific model override (falls back to main model when None)
-    survey_model = cfg.get("survey_model") or model
-    survey_provider = cfg.get("survey_provider") or provider
-    survey_api_key = (
-        load_api_key(survey_provider) if survey_provider != provider else api_key
-    )
-    days = cfg["days"]
-    n_days = len(days)
-    package_mode = _is_package_mode(cfg)
-    package_policies = _get_package_policies(cfg)
     anchor_mode = cfg.get("day0_anchor", "llm_survey")
     if anchor_mode not in VALID_DAY0_ANCHORS:
         raise ValueError(
             f"day0_anchor must be one of {VALID_DAY0_ANCHORS}, got {anchor_mode!r}"
         )
 
-    nation.message_log = []
+    if (resume or checkpoint_every_day) and checkpoint_dir is None:
+        raise ValueError(
+            "checkpoint_dir is required when resume=True or "
+            "checkpoint_every_day=True"
+        )
+    checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir is not None else None
 
-    if not days:
-        logging.warning("No days configured — nothing to simulate.")
-        return _collect_results(nation, cfg)
+    rt = _resolve_runtime(cfg)
+    days = cfg["days"]
+    n_days = len(days)
 
-    # Setup
+    # Setup deterministic structure (same on fresh run and on resume)
     nation.political_agent_a = PoliticalAgent("agent_a", "pro_climate")
     nation.political_agent_b = PoliticalAgent("agent_b", "anti_climate")
     nation.assign_political_exposure()
@@ -187,129 +302,64 @@ def run_simulation(config, nation):
     nation.assign_network_blocks()
 
     n_agents = len(nation.agents_active)
-    logging.info(f"Simulation: {n_agents} agents, {n_days} days")
 
-    if package_mode:
+    # Resume vs fresh start
+    if resume:
+        if checkpoint_dir is None or not (checkpoint_dir / "checkpoint_meta.json").exists():
+            raise FileNotFoundError(
+                f"resume=True but no checkpoint found at {checkpoint_dir}"
+            )
+        meta = _load_checkpoint_meta(checkpoint_dir)
+        _validate_resume_config(meta, cfg, nation)
+        last_day = _load_checkpoint(nation, checkpoint_dir)
+        start_day_index = last_day  # next day to run is last_day + 1 (1-indexed)
         logging.info(
-            "Running package baseline survey (day 0), policies=%s, anchor=%s",
-            [str(policy_id) for policy_id in package_policies],
-            anchor_mode,
+            f"Resuming from checkpoint at {checkpoint_dir} "
+            f"(last completed day={last_day}); {n_agents} agents, "
+            f"{n_days - start_day_index} day(s) remaining"
         )
-        _run_day0(
-            nation, package_policies, anchor_mode,
-            survey_api_key, survey_model, survey_provider,
-            temperature, thinking, debias,
-        )
-        _log_package_index(nation, package_policies, day=0)
     else:
-        baseline_policy = days[0]["policy"]
-        logging.info(
-            f"Running baseline survey (day 0), policy={baseline_policy}, anchor={anchor_mode}"
-        )
-        _run_day0(
-            nation, [baseline_policy], anchor_mode,
-            survey_api_key, survey_model, survey_provider,
-            temperature, thinking, debias,
-        )
+        nation.message_log = []
+        start_day_index = 0
+        logging.info(f"Simulation: {n_agents} agents, {n_days} days")
+
+        if not days:
+            logging.warning("No days configured — nothing to simulate.")
+            return _collect_results(nation, cfg)
+
+        # Day 0
+        if rt["package_mode"]:
+            logging.info(
+                "Running package baseline survey (day 0), policies=%s, anchor=%s",
+                [str(policy_id) for policy_id in rt["package_policies"]],
+                anchor_mode,
+            )
+            _run_day0(
+                nation, rt["package_policies"], anchor_mode,
+                rt["survey_api_key"], rt["survey_model"], rt["survey_provider"],
+                rt["temperature"], rt["thinking"], rt["debias"],
+            )
+            _log_package_index(nation, rt["package_policies"], day=0)
+        else:
+            baseline_policy = days[0]["policy"]
+            logging.info(
+                f"Running baseline survey (day 0), policy={baseline_policy}, anchor={anchor_mode}"
+            )
+            _run_day0(
+                nation, [baseline_policy], anchor_mode,
+                rt["survey_api_key"], rt["survey_model"], rt["survey_provider"],
+                rt["temperature"], rt["thinking"], rt["debias"],
+            )
+
+        if checkpoint_every_day:
+            _write_checkpoint(nation, cfg, last_day=0, checkpoint_dir=checkpoint_dir)
 
     # Daily loop
-    for day_index, day_config in enumerate(days):
+    for day_index in range(start_day_index, n_days):
         day = day_index + 1
-        phases = day_config["phases"]
-        if package_mode:
-            logging.info(
-                "--- Day %s/%s (package=%s, phases=%s) ---",
-                day,
-                n_days,
-                PACKAGE_SCOPE,
-                phases,
-            )
-        else:
-            policy = day_config["policy"]
-            logging.info(f"--- Day {day}/{n_days} (policy={policy}, phases={phases}) ---")
-
-        for phase in phases:
-            if package_mode:
-                if phase in ("P-A", "P-B"):
-                    nation.run_package_broadcast(
-                        phase, package_policies, day,
-                        api_key=api_key, model=model,
-                        provider=provider, temperature=temperature,
-                    )
-                elif phase == "C":
-                    nation.run_package_peer_messaging(
-                        package_policies, day, k_peers=k_peers,
-                        api_key=api_key, model=model,
-                        provider=provider, temperature=temperature,
-                    )
-                else:
-                    logging.warning(f"Unknown phase '{phase}' on day {day}, skipping.")
-            else:
-                if phase in ("P-A", "P-B"):
-                    nation.run_political_broadcast(
-                        phase, policy, day,
-                        api_key=api_key, model=model,
-                        provider=provider, temperature=temperature,
-                    )
-                elif phase == "C":
-                    nation.run_peer_messaging(
-                        policy, day, k_peers=k_peers,
-                        api_key=api_key, model=model,
-                        provider=provider, temperature=temperature,
-                    )
-                else:
-                    logging.warning(f"Unknown phase '{phase}' on day {day}, skipping.")
-
-        if package_mode:
-            for policy_id in package_policies:
-                nation.run_end_of_day_survey(
-                    policy_id,
-                    day,
-                    api_key=survey_api_key,
-                    model=survey_model,
-                    provider=survey_provider,
-                    temperature=temperature,
-                    thinking=thinking,
-                    debias=debias,
-                )
-        else:
-            nation.run_end_of_day_survey(
-                policy, day,
-                api_key=survey_api_key, model=survey_model,
-                provider=survey_provider,
-                temperature=temperature, thinking=thinking, debias=debias,
-            )
-
-        # Memory management
-        for agent in nation.agents_active.values():
-            if package_mode:
-                agent.manage_memory(
-                    day,
-                    PACKAGE_SCOPE,
-                    api_key=api_key,
-                    model=model,
-                    provider=provider,
-                    temperature=temperature,
-                )
-            else:
-                agent.manage_memory(
-                    day, policy,
-                    api_key=api_key, model=model, provider=provider,
-                    temperature=temperature,
-                )
-
-        # Log progress
-        if package_mode:
-            _log_package_index(nation, package_policies, day)
-        else:
-            opinions = [
-                agent.opinion_history[policy][-1][1]
-                for agent in nation.agents_active.values()
-                if policy in agent.opinion_history and agent.opinion_history[policy]
-            ]
-            if opinions:
-                mean_op = sum(opinions) / len(opinions)
-                logging.info(f"Day {day} mean opinion: {mean_op:+.2f}")
+        _run_one_day(nation, day, days[day_index], n_days, rt)
+        if checkpoint_every_day:
+            _write_checkpoint(nation, cfg, last_day=day, checkpoint_dir=checkpoint_dir)
 
     return _collect_results(nation, cfg)
 
@@ -516,89 +566,310 @@ def collect_package_ground_truth(agents):
 
 # ── Output ──────────────────────────────────────────────────────
 
+# Schema columns for each result CSV. Used by both save_results (final
+# canonical output) and the per-day checkpoint writer/loader so the two
+# stay in lockstep.
+_RESULT_CSV_SCHEMAS = {
+    "opinion_trajectories": ["agent_id", "day", "policy_id", "numeric"],
+    "package_index_trajectories": [
+        "agent_id", "day", "index_name", "package_scope", "package_index",
+    ],
+    "reflections": [
+        "agent_id", "day", "phase", "policy_id", "package_scope",
+        "policy_ids_json", "messages_received_json",
+        "messages_received_count", "text",
+    ],
+    "messages": [
+        "day", "phase", "message_type", "sender_type", "sender_id",
+        "sender_side", "recipient_id", "recipient_scope", "policy_id",
+        "package_scope", "policy_ids_json", "message_text",
+    ],
+    "survey_reasoning": ["agent_id", "day", "policy_id", "reasoning"],
+    "daily_summaries": ["agent_id", "day", "policy_id", "summary"],
+    "ground_truth": ["agent_id", "policy_id", "ground_truth"],
+    "package_ground_truth": ["agent_id", "index_name", "ground_truth"],
+}
+
+
+def _atomic_write_csv(df, path):
+    """Write a DataFrame to ``path`` atomically (temp file + os.replace)."""
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    df.to_csv(tmp, index=False)
+    os.replace(tmp, path)
+
+
+def _atomic_write_json(obj, path):
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)
+
+
+def _write_all_csvs(out_path, results):
+    """Write every result CSV (atomic per file). Returns dict of paths written."""
+    out_path = Path(out_path)
+    out_path.mkdir(parents=True, exist_ok=True)
+    written = {}
+
+    for key, columns in _RESULT_CSV_SCHEMAS.items():
+        df = results.get(key)
+        if df is None:
+            df = pd.DataFrame(columns=columns)
+        # Skip empty package frames to keep single-policy run dirs tidy.
+        if key in ("package_index_trajectories", "package_ground_truth") and df.empty:
+            continue
+        path = out_path / f"{key}.csv"
+        _atomic_write_csv(df, path)
+        written[key] = path
+
+    # Derived share frames (canonical end-of-run only); cheap to recompute.
+    opinion_traj = results.get("opinion_trajectories")
+    if opinion_traj is not None:
+        _atomic_write_csv(
+            build_opinion_shares({"opinion_trajectories": opinion_traj}),
+            out_path / "opinion_shares.csv",
+        )
+    package_traj = results.get("package_index_trajectories")
+    if package_traj is not None and not package_traj.empty:
+        _atomic_write_csv(
+            build_package_index_shares({"package_index_trajectories": package_traj}),
+            out_path / "package_index_shares.csv",
+        )
+
+    return written
+
+
 def save_results(results, output_dir="data/output/experiments"):
     """Save simulation results to a timestamped directory."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = Path(output_dir) / timestamp
     out_path.mkdir(parents=True, exist_ok=True)
 
-    def _result_df(key, columns):
-        value = results.get(key)
-        if value is None:
-            return pd.DataFrame(columns=columns)
-        return value
-
-    opinion_trajectories_df = _result_df(
-        "opinion_trajectories",
-        ["agent_id", "day", "policy_id", "numeric"],
-    )
-    opinion_trajectories_df.to_csv(out_path / "opinion_trajectories.csv", index=False)
-    build_opinion_shares({"opinion_trajectories": opinion_trajectories_df}).to_csv(
-        out_path / "opinion_shares.csv",
-        index=False,
-    )
-    package_index_df = _result_df(
-        "package_index_trajectories",
-        ["agent_id", "day", "index_name", "package_scope", "package_index"],
-    )
-    if package_index_df is not None and not package_index_df.empty:
-        package_index_df.to_csv(out_path / "package_index_trajectories.csv", index=False)
-        build_package_index_shares(
-            {"package_index_trajectories": package_index_df}
-        ).to_csv(out_path / "package_index_shares.csv", index=False)
-    _result_df(
-        "reflections",
-        [
-            "agent_id",
-            "day",
-            "phase",
-            "policy_id",
-            "package_scope",
-            "policy_ids_json",
-            "messages_received_json",
-            "messages_received_count",
-            "text",
-        ],
-    ).to_csv(out_path / "reflections.csv", index=False)
-    _result_df(
-        "messages",
-        [
-            "day",
-            "phase",
-            "message_type",
-            "sender_type",
-            "sender_id",
-            "sender_side",
-            "recipient_id",
-            "recipient_scope",
-            "policy_id",
-            "package_scope",
-            "policy_ids_json",
-            "message_text",
-        ],
-    ).to_csv(out_path / "messages.csv", index=False)
-    _result_df(
-        "survey_reasoning",
-        ["agent_id", "day", "policy_id", "reasoning"],
-    ).to_csv(out_path / "survey_reasoning.csv", index=False)
-    _result_df(
-        "daily_summaries",
-        ["agent_id", "day", "policy_id", "summary"],
-    ).to_csv(out_path / "daily_summaries.csv", index=False)
-    ground_truth_df = results.get("ground_truth")
-    if ground_truth_df is not None:
-        ground_truth_df.to_csv(out_path / "ground_truth.csv", index=False)
-    package_ground_truth_df = results.get("package_ground_truth")
-    if package_ground_truth_df is not None and not package_ground_truth_df.empty:
-        package_ground_truth_df.to_csv(out_path / "package_ground_truth.csv", index=False)
+    _write_all_csvs(out_path, results)
 
     # Serialise config (convert enums and lists of dicts to strings)
     config_serialisable = _serialise_config(results["config"])
-    with open(out_path / "config.json", "w") as f:
-        json.dump(config_serialisable, f, indent=2)
+    _atomic_write_json(config_serialisable, out_path / "config.json")
 
     logging.info(f"Results saved to {out_path}")
     return out_path
+
+
+# ── Checkpointing ───────────────────────────────────────────────
+
+CHECKPOINT_SCHEMA_VERSION = 1
+
+# Config keys whose change must abort a resume (would silently corrupt
+# the simulation if mismatched against the saved state).
+_RESUME_HARD_KEYS = (
+    "n_citizens", "random_seed", "p_intra", "p_inter", "network_type",
+    "communication_mode", "package_policies",
+)
+# Config keys we tolerate changing on resume but log a warning for.
+_RESUME_SOFT_KEYS = (
+    "llm_model", "llm_provider", "survey_model", "survey_provider",
+    "debias", "thinking", "llm_temperature",
+)
+
+
+def _config_hash(serialised_config):
+    """Stable hash of a serialised config dict for fingerprinting."""
+    blob = json.dumps(serialised_config, sort_keys=True).encode()
+    return hashlib.sha256(blob).hexdigest()
+
+
+def _write_checkpoint(nation, cfg, last_day, checkpoint_dir):
+    """Write a per-day checkpoint to ``checkpoint_dir`` (atomic)."""
+    checkpoint_dir = Path(checkpoint_dir)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    results = _collect_results(nation, cfg)
+    _write_all_csvs(checkpoint_dir, results)
+
+    serialised = _serialise_config(cfg)
+    meta = {
+        "schema_version": CHECKPOINT_SCHEMA_VERSION,
+        "last_completed_day": int(last_day),
+        "agent_ids": [str(aid) for aid in nation.agents_active.keys()],
+        "config": serialised,
+        "config_hash": _config_hash(serialised),
+        "written_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    _atomic_write_json(meta, checkpoint_dir / "checkpoint_meta.json")
+    logging.info(
+        f"Checkpoint written for day {last_day} to {checkpoint_dir}"
+    )
+
+
+def _load_checkpoint_meta(checkpoint_dir):
+    with open(Path(checkpoint_dir) / "checkpoint_meta.json") as f:
+        meta = json.load(f)
+    if meta.get("schema_version") != CHECKPOINT_SCHEMA_VERSION:
+        raise ValueError(
+            f"Incompatible checkpoint schema version "
+            f"{meta.get('schema_version')!r} (expected "
+            f"{CHECKPOINT_SCHEMA_VERSION}). Re-run from scratch."
+        )
+    return meta
+
+
+def _validate_resume_config(meta, cfg, nation):
+    """Hard-fail on incompatible config; warn on soft-key changes."""
+    saved = meta["config"]
+    new = _serialise_config(cfg)
+
+    # Hard keys: structural, must match exactly.
+    for key in _RESUME_HARD_KEYS:
+        if saved.get(key) != new.get(key):
+            raise ValueError(
+                f"Cannot resume: config key '{key}' changed "
+                f"(checkpoint={saved.get(key)!r}, new={new.get(key)!r}). "
+                f"This would invalidate prior agent state."
+            )
+
+    # Agent ID set must match.
+    saved_ids = set(meta.get("agent_ids", []))
+    current_ids = {str(aid) for aid in nation.agents_active.keys()}
+    if saved_ids != current_ids:
+        missing = saved_ids - current_ids
+        extra = current_ids - saved_ids
+        raise ValueError(
+            f"Cannot resume: active agent set differs from checkpoint. "
+            f"Missing: {sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}, "
+            f"Extra: {sorted(extra)[:5]}{'...' if len(extra) > 5 else ''}"
+        )
+
+    # Soft keys: warn only.
+    for key in _RESUME_SOFT_KEYS:
+        if saved.get(key) != new.get(key):
+            logging.warning(
+                "Resume: config key '%s' changed "
+                "(checkpoint=%r, new=%r). Proceeding, but downstream "
+                "analysis must account for this.",
+                key, saved.get(key), new.get(key),
+            )
+
+
+def _load_checkpoint(nation, checkpoint_dir):
+    """Hydrate ``nation`` and its agents from a checkpoint dir.
+
+    Returns the ``last_completed_day`` from the checkpoint metadata.
+    """
+    checkpoint_dir = Path(checkpoint_dir)
+    meta = _load_checkpoint_meta(checkpoint_dir)
+    last_day = int(meta["last_completed_day"])
+
+    # Build a str(policy_id) -> policy_id lookup so reloaded CSV strings
+    # become the same ClimatePolicyID objects used by live code. Agents
+    # key opinion_history / daily_summaries / survey_reasoning by the
+    # enum object, not its str repr; mixing the two would silently create
+    # parallel entries on the next day.
+    policy_lookup = {str(pid): pid for pid in ALL_CLIMATE_POLICIES}
+    policy_lookup[PACKAGE_SCOPE] = PACKAGE_SCOPE
+    policy_lookup[""] = ""
+
+    def _to_policy(value):
+        if value is None:
+            return None
+        return policy_lookup.get(str(value), str(value))
+
+    # Index agents by str(id) so loaded CSV ids (which may be float-stringified)
+    # round-trip back to the original keys in agents_active.
+    by_id = {str(aid): agent for aid, agent in nation.agents_active.items()}
+
+    # Reset agent mutable state before hydration so re-loading is idempotent.
+    for agent in by_id.values():
+        agent.opinion_history = {}
+        agent.reflections = []
+        agent.daily_summaries = {}
+        agent.survey_reasoning = {}
+
+    def _read(name):
+        path = checkpoint_dir / f"{name}.csv"
+        if not path.exists():
+            return pd.DataFrame(columns=_RESULT_CSV_SCHEMAS[name])
+        return pd.read_csv(path)
+
+    # opinion_history
+    opin = _read("opinion_trajectories")
+    for row in opin.itertuples(index=False):
+        agent = by_id.get(str(row.agent_id))
+        if agent is None:
+            continue
+        pid = _to_policy(row.policy_id)
+        agent.opinion_history.setdefault(pid, []).append(
+            (int(row.day), int(row.numeric))
+        )
+
+    # reflections
+    refl = _read("reflections")
+    for row in refl.itertuples(index=False):
+        agent = by_id.get(str(row.agent_id))
+        if agent is None:
+            continue
+        try:
+            messages_received = json.loads(row.messages_received_json)
+        except (TypeError, ValueError):
+            messages_received = []
+        try:
+            policy_ids = json.loads(row.policy_ids_json)
+        except (TypeError, ValueError):
+            policy_ids = []
+        entry = {
+            "day": int(row.day),
+            "phase": row.phase,
+            "policy_id": _to_policy(row.policy_id),
+            "text": row.text,
+            "messages_received": messages_received,
+        }
+        if policy_ids:
+            entry["policy_ids"] = [_to_policy(p) for p in policy_ids]
+        agent.reflections.append(entry)
+
+    # daily_summaries
+    summ = _read("daily_summaries")
+    for row in summ.itertuples(index=False):
+        agent = by_id.get(str(row.agent_id))
+        if agent is None:
+            continue
+        agent.daily_summaries[(int(row.day), _to_policy(row.policy_id))] = row.summary
+
+    # survey_reasoning
+    sreas = _read("survey_reasoning")
+    for row in sreas.itertuples(index=False):
+        agent = by_id.get(str(row.agent_id))
+        if agent is None:
+            continue
+        agent.survey_reasoning.setdefault(_to_policy(row.policy_id), []).append(
+            (int(row.day), row.reasoning)
+        )
+
+    # nation.message_log
+    msgs = _read("messages")
+    nation.message_log = []
+    for row in msgs.itertuples(index=False):
+        try:
+            policy_ids = json.loads(row.policy_ids_json)
+        except (TypeError, ValueError):
+            policy_ids = []
+        nation.message_log.append({
+            "day": int(row.day) if pd.notna(row.day) else None,
+            "phase": row.phase,
+            "message_type": row.message_type,
+            "sender_type": row.sender_type,
+            "sender_id": row.sender_id,
+            "sender_side": row.sender_side,
+            "policy_id": _to_policy(row.policy_id),
+            "package_scope": row.package_scope,
+            "policy_ids": [_to_policy(p) for p in policy_ids],
+            "recipient_id": row.recipient_id,
+            "recipient_scope": row.recipient_scope,
+            "message_text": row.message_text,
+        })
+
+    return last_day
 
 
 def _serialise_config(config):

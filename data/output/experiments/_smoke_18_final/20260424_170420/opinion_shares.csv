@@ -1,0 +1,6 @@
+policy_id,day,n_agents,n_support,support_pct,n_neutral,neutral_pct,n_against,against_pct
+ClimatePolicyID(5),0,5,3,60.0,2,40.0,0,0.0
+ClimatePolicyID(5),1,5,5,100.0,0,0.0,0,0.0
+ClimatePolicyID(5),2,5,5,100.0,0,0.0,0,0.0
+ClimatePolicyID(5),3,5,5,100.0,0,0.0,0,0.0
+ClimatePolicyID(5),4,5,5,100.0,0,0.0,0,0.0
