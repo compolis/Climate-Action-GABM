@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "last_completed_day": 4,
+  "agent_ids": [
+    "1309.0",
+    "1545.0",
+    "1923.0",
+    "528.0",
+    "541.0"
+  ],
+  "config": {
+    "n_citizens": 5,
+    "days": [
+      {
+        "policy": "ClimatePolicyID(5)",
+        "phases": [
+          "P-A",
+          "P-B",
+          "C"
+        ]
+      },
+      {
+        "policy": "ClimatePolicyID(5)",
+        "phases": [
+          "P-A",
+          "P-B",
+          "C"
+        ]
+      },
+      {
+        "policy": "ClimatePolicyID(5)",
+        "phases": [
+          "P-A",
+          "P-B",
+          "C"
+        ]
+      },
+      {
+        "policy": "ClimatePolicyID(5)",
+        "phases": [
+          "P-A",
+          "P-B",
+          "C"
+        ]
+      }
+    ],
+    "k_peers_per_day": 2,
+    "network_type": "stochastic_block",
+    "p_intra": 0.15,
+    "p_inter": 0.02,
+    "block_sizes": null,
+    "llm_model": "gpt-5-nano",
+    "llm_provider": "openai",
+    "llm_temperature": 0.5,
+    "survey_model": "gpt-5-nano",
+    "survey_provider": "openai",
+    "thinking": false,
+    "debias": true,
+    "communication_mode": "single_policy",
+    "package_policies": [
+      "ClimatePolicyID(1)",
+      "ClimatePolicyID(2)",
+      "ClimatePolicyID(3)",
+      "ClimatePolicyID(4)",
+      "ClimatePolicyID(5)",
+      "ClimatePolicyID(6)"
+    ],
+    "day0_anchor": "ground_truth_with_rationale",
+    "random_seed": 43,
+    "output_dir": "data/output/experiments"
+  },
+  "config_hash": "4d5bfcacbea42a9f495ff33315467ec9075900669486189620196b3f80fb1c16",
+  "written_at": "2026-04-24T18:00:18"
+}
