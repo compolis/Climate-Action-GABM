@@ -1,0 +1,5 @@
+section,seconds
+build_nation,0.05891895800596103
+create_network (diagnostic),0.001961667003342882
+collect_ground_truth,0.002847707975888625
+run_simulation (TOTAL),8293.573384874995

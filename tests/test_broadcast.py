@@ -336,5 +336,193 @@ class TestRunPackageBroadcastLogging(unittest.TestCase):
         self.assertEqual(log_entry["policy_ids"], policy_ids)
 
 
+# ===================================================================
+# Tests: SurveyedNation.apply_reach_subsample()
+# ===================================================================
+
+class TestApplyReachSubsample(unittest.TestCase):
+    """Tests for the broadcast-reach asymmetry knob."""
+
+    def _make_large_nation(self, n_per_profile=10):
+        """Build a nation with many citizens per profile so subsampling
+        produces non-trivial integer counts."""
+        sn = SurveyedNation()
+        sn.political_agent_a = PoliticalAgent("agent_a", "pro_climate")
+        sn.political_agent_b = PoliticalAgent("agent_b", "anti_climate")
+        cid = 0
+        for profile in _PROFILES:
+            for _ in range(n_per_profile):
+                citizen = SurveyedCitizen(
+                    agent_id=cid,
+                    environment=sn,
+                    brexit_vote_id=profile.get("brexit_vote_id"),
+                    ukge2019_vote_id=profile.get("ukge2019_vote_id"),
+                    politics_id=profile.get("politics_id"),
+                )
+                sn.agents_active[citizen.id] = citizen
+                cid += 1
+        sn.assign_political_exposure()
+        return sn
+
+    def test_full_reach_no_change(self):
+        sn = self._make_large_nation()
+        full_a = list(sn.political_agent_a.connected_citizens)
+        full_b = list(sn.political_agent_b.connected_citizens)
+        sn.apply_reach_subsample(reach_a=1.0, reach_b=1.0, seed=42)
+        self.assertEqual(sn.political_agent_a.connected_citizens, full_a)
+        self.assertEqual(sn.political_agent_b.connected_citizens, full_b)
+
+    def test_half_reach_halves_audience(self):
+        sn = self._make_large_nation()
+        n_a_full = len(sn.political_agent_a.connected_citizens)
+        n_b_full = len(sn.political_agent_b.connected_citizens)
+        sn.apply_reach_subsample(reach_a=0.5, reach_b=0.25, seed=42)
+        self.assertEqual(
+            len(sn.political_agent_a.connected_citizens), int(n_a_full * 0.5)
+        )
+        self.assertEqual(
+            len(sn.political_agent_b.connected_citizens), int(n_b_full * 0.25)
+        )
+
+    def test_deterministic_given_seed(self):
+        sn1 = self._make_large_nation()
+        sn2 = self._make_large_nation()
+        sn1.apply_reach_subsample(reach_a=0.4, reach_b=0.6, seed=123)
+        sn2.apply_reach_subsample(reach_a=0.4, reach_b=0.6, seed=123)
+        ids1_a = [c.id for c in sn1.political_agent_a.connected_citizens]
+        ids2_a = [c.id for c in sn2.political_agent_a.connected_citizens]
+        ids1_b = [c.id for c in sn1.political_agent_b.connected_citizens]
+        ids2_b = [c.id for c in sn2.political_agent_b.connected_citizens]
+        self.assertEqual(ids1_a, ids2_a)
+        self.assertEqual(ids1_b, ids2_b)
+
+    def test_zero_reach_empties_audience(self):
+        sn = self._make_large_nation()
+        sn.apply_reach_subsample(reach_a=0.0, reach_b=0.0, seed=42)
+        self.assertEqual(len(sn.political_agent_a.connected_citizens), 0)
+        self.assertEqual(len(sn.political_agent_b.connected_citizens), 0)
+
+    def test_invalid_reach_raises(self):
+        sn = self._make_large_nation()
+        with self.assertRaises(ValueError):
+            sn.apply_reach_subsample(reach_a=1.5, reach_b=1.0, seed=42)
+        with self.assertRaises(ValueError):
+            sn.apply_reach_subsample(reach_a=1.0, reach_b=-0.1, seed=42)
+
+
+# ===================================================================
+# Tests: SurveyedNation.apply_audience_cap()
+# ===================================================================
+
+class TestApplyAudienceCap(unittest.TestCase):
+    """Tests for the audience-cap symmetry knob."""
+
+    def _make_large_nation(self, n_per_profile=10):
+        sn = SurveyedNation()
+        sn.political_agent_a = PoliticalAgent("agent_a", "pro_climate")
+        sn.political_agent_b = PoliticalAgent("agent_b", "anti_climate")
+        cid = 0
+        for profile in _PROFILES:
+            for _ in range(n_per_profile):
+                citizen = SurveyedCitizen(
+                    agent_id=cid,
+                    environment=sn,
+                    brexit_vote_id=profile.get("brexit_vote_id"),
+                    ukge2019_vote_id=profile.get("ukge2019_vote_id"),
+                    politics_id=profile.get("politics_id"),
+                )
+                sn.agents_active[citizen.id] = citizen
+                cid += 1
+        sn.assign_political_exposure()
+        return sn
+
+    def test_none_cap_no_change(self):
+        sn = self._make_large_nation()
+        full_a = list(sn.political_agent_a.connected_citizens)
+        full_b = list(sn.political_agent_b.connected_citizens)
+        sn.apply_audience_cap(cap=None, seed=42)
+        self.assertEqual(sn.political_agent_a.connected_citizens, full_a)
+        self.assertEqual(sn.political_agent_b.connected_citizens, full_b)
+
+    def test_cap_above_audience_no_change(self):
+        sn = self._make_large_nation()
+        full_a = list(sn.political_agent_a.connected_citizens)
+        full_b = list(sn.political_agent_b.connected_citizens)
+        big = max(len(full_a), len(full_b)) + 100
+        sn.apply_audience_cap(cap=big, seed=42)
+        self.assertEqual(sn.political_agent_a.connected_citizens, full_a)
+        self.assertEqual(sn.political_agent_b.connected_citizens, full_b)
+
+    def test_cap_trims_both_sides_to_cap(self):
+        sn = self._make_large_nation()
+        full_a = len(sn.political_agent_a.connected_citizens)
+        full_b = len(sn.political_agent_b.connected_citizens)
+        cap = min(full_a, full_b) - 2
+        self.assertGreater(cap, 0)
+        sn.apply_audience_cap(cap=cap, seed=42)
+        self.assertEqual(len(sn.political_agent_a.connected_citizens), cap)
+        self.assertEqual(len(sn.political_agent_b.connected_citizens), cap)
+
+    def test_cap_trims_only_larger_side(self):
+        # If cap sits between the two audience sizes, only the larger
+        # side is trimmed; the smaller is left alone.
+        sn = self._make_large_nation()
+        full_a = len(sn.political_agent_a.connected_citizens)
+        full_b = len(sn.political_agent_b.connected_citizens)
+        if full_a == full_b:
+            self.skipTest("audience sizes equal in this fixture")
+        smaller = min(full_a, full_b)
+        cap = smaller  # exactly the smaller side
+        sn.apply_audience_cap(cap=cap, seed=42)
+        self.assertEqual(len(sn.political_agent_a.connected_citizens), min(full_a, cap))
+        self.assertEqual(len(sn.political_agent_b.connected_citizens), min(full_b, cap))
+
+    def test_deterministic_given_seed(self):
+        sn1 = self._make_large_nation()
+        sn2 = self._make_large_nation()
+        cap = min(
+            len(sn1.political_agent_a.connected_citizens),
+            len(sn1.political_agent_b.connected_citizens),
+        ) - 2
+        sn1.apply_audience_cap(cap=cap, seed=123)
+        sn2.apply_audience_cap(cap=cap, seed=123)
+        ids1_a = [c.id for c in sn1.political_agent_a.connected_citizens]
+        ids2_a = [c.id for c in sn2.political_agent_a.connected_citizens]
+        ids1_b = [c.id for c in sn1.political_agent_b.connected_citizens]
+        ids2_b = [c.id for c in sn2.political_agent_b.connected_citizens]
+        self.assertEqual(ids1_a, ids2_a)
+        self.assertEqual(ids1_b, ids2_b)
+
+    def test_cap_independent_rng_from_reach(self):
+        # Cap (uses seed+100/+101) and reach (uses seed/+1) must draw
+        # independently — applying cap then reach=1.0 must equal cap alone.
+        sn = self._make_large_nation()
+        cap = min(
+            len(sn.political_agent_a.connected_citizens),
+            len(sn.political_agent_b.connected_citizens),
+        ) - 2
+        sn.apply_audience_cap(cap=cap, seed=42)
+        ids_a_after_cap = [c.id for c in sn.political_agent_a.connected_citizens]
+        ids_b_after_cap = [c.id for c in sn.political_agent_b.connected_citizens]
+        sn.apply_reach_subsample(reach_a=1.0, reach_b=1.0, seed=42)
+        self.assertEqual(
+            [c.id for c in sn.political_agent_a.connected_citizens],
+            ids_a_after_cap,
+        )
+        self.assertEqual(
+            [c.id for c in sn.political_agent_b.connected_citizens],
+            ids_b_after_cap,
+        )
+
+    def test_invalid_cap_raises(self):
+        sn = self._make_large_nation()
+        with self.assertRaises(ValueError):
+            sn.apply_audience_cap(cap=-1, seed=42)
+        with self.assertRaises(ValueError):
+            sn.apply_audience_cap(cap=1.5, seed=42)
+        with self.assertRaises(ValueError):
+            sn.apply_audience_cap(cap="20", seed=42)
+
+
 if __name__ == "__main__":
     unittest.main()

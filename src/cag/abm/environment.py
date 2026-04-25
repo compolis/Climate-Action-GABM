@@ -321,6 +321,124 @@ class SurveyedNation(Nation):
         if self.political_agent_b is not None:
             self.political_agent_b.connected_citizens = b_citizens
 
+    def apply_audience_cap(self, cap=None, seed=42):
+        """
+        Cap each political agent's audience to at most ``cap`` citizens by
+        uniform random subsampling.
+
+        Must be called *after* :meth:`assign_political_exposure` and
+        *before* :meth:`apply_reach_subsample` so that ``reach`` is then
+        a fraction of the *capped* (canonical) audience.
+
+        Use this to neutralise the structural audience asymmetry that
+        :meth:`assign_political_exposure` produces from the YouGov panel
+        (e.g. A-audience = 27 vs B-audience = 20 at N=30) by setting
+        ``cap = min(|A|, |B|)``. With both audiences capped to the same
+        size, ``reach_a = reach_b = 1.0`` becomes a genuine symmetric
+        baseline and (C1, C3) become true mirror conditions.
+
+        Citizens are dropped uniformly at random from each agent's
+        ``connected_citizens`` (independent draws per agent) using
+        ``numpy.random.default_rng`` seeded by ``seed + 100`` (agent A)
+        and ``seed + 101`` (agent B). Per-citizen ``political_exposure``
+        labels are unchanged. Peer messaging is unaffected.
+
+        Args:
+            cap: maximum audience size for each political agent. If
+                ``None`` or larger than the current audience, that side
+                is left unchanged. Must be a non-negative integer.
+            seed: base random seed; agent A draws use ``seed + 100``,
+                agent B draws use ``seed + 101``.
+        """
+        if cap is None:
+            return
+        if not isinstance(cap, int) or cap < 0:
+            raise ValueError(
+                f"audience_cap must be a non-negative int or None, got {cap!r}"
+            )
+
+        import numpy as _np
+
+        for agent, side_seed_offset in (
+            (self.political_agent_a, 100),
+            (self.political_agent_b, 101),
+        ):
+            if agent is None:
+                continue
+            full = list(agent.connected_citizens)
+            if cap >= len(full):
+                logging.info(
+                    f"Audience cap: {agent.id} audience "
+                    f"{len(full)}/{len(full)} (cap={cap}, no trim needed)"
+                )
+                continue
+            rng = _np.random.default_rng(int(seed) + side_seed_offset)
+            idx = rng.choice(len(full), size=cap, replace=False)
+            agent.connected_citizens = [full[i] for i in sorted(idx)]
+            logging.info(
+                f"Audience cap: {agent.id} audience "
+                f"{len(agent.connected_citizens)}/{len(full)} (cap={cap})"
+            )
+
+    def apply_reach_subsample(self, reach_a=1.0, reach_b=1.0, seed=42):
+        """
+        Subsample each political agent's audience to model broadcast reach
+        asymmetry.
+
+        Must be called *after* :meth:`assign_political_exposure`. Replaces
+        ``political_agent_{a,b}.connected_citizens`` with a deterministic
+        subset of size ``floor(reach * len(connected))``. Citizens are
+        chosen uniformly without replacement using NumPy's
+        ``default_rng`` seeded by ``seed`` (agent A) and ``seed + 1``
+        (agent B), so the two sides draw independently and the result
+        is reproducible.
+
+        ``political_exposure`` labels on citizens are *not* changed; only
+        the broadcast audience that each political agent will address is
+        narrowed. Peer-messaging is unaffected.
+
+        Args:
+            reach_a: fraction in [0.0, 1.0] of A-audience reached by
+                pro-climate political agent broadcasts.
+            reach_b: fraction in [0.0, 1.0] of B-audience reached by
+                anti-climate political agent broadcasts.
+            seed: base random seed; agent A uses ``seed``, agent B uses
+                ``seed + 1``.
+        """
+        for name, val in (("reach_a", reach_a), ("reach_b", reach_b)):
+            if not (0.0 <= float(val) <= 1.0):
+                raise ValueError(
+                    f"{name} must be in [0.0, 1.0], got {val!r}"
+                )
+
+        import numpy as _np
+
+        if self.political_agent_a is not None:
+            full_a = list(self.political_agent_a.connected_citizens)
+            n_a = int(len(full_a) * float(reach_a))
+            if reach_a < 1.0 and n_a < len(full_a):
+                rng_a = _np.random.default_rng(int(seed))
+                idx = rng_a.choice(len(full_a), size=n_a, replace=False)
+                self.political_agent_a.connected_citizens = [full_a[i] for i in sorted(idx)]
+            logging.info(
+                f"Reach subsample: agent_a audience "
+                f"{len(self.political_agent_a.connected_citizens)}/{len(full_a)} "
+                f"(reach_a={reach_a})"
+            )
+
+        if self.political_agent_b is not None:
+            full_b = list(self.political_agent_b.connected_citizens)
+            n_b = int(len(full_b) * float(reach_b))
+            if reach_b < 1.0 and n_b < len(full_b):
+                rng_b = _np.random.default_rng(int(seed) + 1)
+                idx = rng_b.choice(len(full_b), size=n_b, replace=False)
+                self.political_agent_b.connected_citizens = [full_b[i] for i in sorted(idx)]
+            logging.info(
+                f"Reach subsample: agent_b audience "
+                f"{len(self.political_agent_b.connected_citizens)}/{len(full_b)} "
+                f"(reach_b={reach_b})"
+            )
+
     def create_network(self, n_blocks=2, p_intra=0.15, p_inter=0.02, seed=42):
         """
         Create a stochastic block model network with citizens assigned to blocks

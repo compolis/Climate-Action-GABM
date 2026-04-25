@@ -37,7 +37,7 @@
 
 \begin{document}
 
-\title[GABM Tipping Point and Competing Persuasion]{Tipping Dynamics under Competing Committed Minorities: A Ground-Truth-Anchored Generative Agent-Based Testbed}
+\title[GABM Framework for Competing Committed Minorities]{Towards a Generative-AI Agent-Based Modelling (GABM) Framework for Social Simulation: Building an Instrument to Study Social Tipping under Two Competing Committed Minority Groups}
 
 %%==================== AUTHORS ====================%%
 \author*[1]{\fnm{First} \sur{Author}}\email{first.author@example.org}
@@ -46,23 +46,28 @@
 
 %%==================== ABSTRACT ====================%%
 \abstract{%
-% TODO: ~150 words. Frame as methodology contribution + illustrative result.
-% (i) Problem: how do competing committed minorities tip a population on
-%     contested policy?
-% (ii) Method: a generative agent-based model (GABM) populated from real
-%      YouGov UK survey respondents, with Day~0 opinions seeded directly
-%      from each respondent's answers and rationalised by an LLM, removing
-%      initialisation bias documented in prior LLM--ABM work.
-% (iii) Illustration: vary one lever -- the broadcast reach asymmetry
-%       between two opposing political agents (Reform-aligned vs Green-aligned)
-%       -- and report the resulting movement in a six-policy pro-climate
-%       index over five simulated days.
-% (iv) Contribution: an open testbed for pre-registering competing-minority
-%      tipping experiments, with a roadmap of additional levers
-%      (persuasive capability, message style).
+% TODO: ~150 words. Methodology note, exploratory framing.
+% (i) Long-term aim: understand the dynamics of social tipping under two
+%     competing committed minority groups, using GABM as the instrument.
+% (ii) What this paper reports: the instrument we have built, not tipping
+%      results. A generative agent-based model populated from real YouGov UK
+%      survey respondents, with Day~0 opinions seeded directly from each
+%      respondent's answers and rationalised by an LLM, removing initialisation
+%      bias documented in prior LLM--ABM work.
+% (iii) Two illustrative probes: (a) a full simulation over a six-policy
+%       climate package under symmetric political broadcasts (Run~5),
+%       checking that the instrument behaves stably; (b) a one-knob
+%       manipulation (broadcast reach asymmetry, Run~7) checking that the
+%       instrument registers a directional response.
+% (iv) An LLM-grounding check: how well do agents reproduce the survey
+%      responses of the people they are anchored to?
+% (v) What we explicitly do not claim: any current evidence of tipping;
+%      effect-size estimates from these probes; robustness across seeds,
+%      models, or populations. We outline the lever space we plan to
+%      explore and invite feedback on the design.
 }
 
-\keywords{generative agent-based modelling, opinion dynamics, committed minorities, tipping points, large language models, climate policy}
+\keywords{generative agent-based modelling, opinion dynamics, committed minorities, large language models, climate policy, methodology}
 
 \maketitle
 
@@ -71,173 +76,283 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}\label{sec:intro}
 
-% TODO: 1 page.
-% - Hook: contested climate policy in the UK; visible role of small,
-%   committed political actors (Reform UK, Green Party) in shifting
-%   the Overton window.
-% - Motivation: classical ABM models of committed minorities
-%   \cite{centola2018,granovetter1978,galam2002} predict tipping under
-%   coordinated minority action, but operate on stylised binary opinions.
-%   Generative-agent ABMs \cite{park2023,tornberg2023} promise richer
-%   behavioural fidelity but suffer from documented LLM priors that
-%   inflate baseline opinions \cite{argyle2023,santurkar2023}.
-% - Gap: no open testbed combines (a) realistic individual-level
-%   priors from a representative survey, (b) explicit competing committed
-%   minorities, and (c) levers that researchers can pre-register.
-% - Contribution (3 bullets):
-%   1. A GABM with Day~0 anchoring to real survey responses, neutralising
-%      the LLM baseline-bias problem at the agent level.
-%   2. A modular two-political-agent architecture with separable resource
-%      and message-style levers, enabling targeted manipulations.
-%   3. An illustrative experiment varying broadcast reach asymmetry, with
-%      a roadmap for further levers.
-% - Roadmap of paper.
+Public opinion on contested policy is rarely uniform, and rarely static. Small, organised groups working at the edges of mainstream debate routinely shape what positions the wider population treats as reasonable. The current debate over UK climate policy offers a vivid case: parties such as Reform UK and the Green Party of England and Wales hold a small share of the seats in Parliament, yet their framings on carbon taxes, petrol cars, renewable energy and home heating circulate well beyond their voter base, and shift the terrain on which majority parties must campaign. How such competing minorities tilt majority opinion over time, and under what structural and rhetorical conditions one side prevails, remains a difficult empirical question.
+
+Classical models of committed-minority dynamics offer a structural intuition for when small groups can move majorities~\cite{centola2018, granovetter1978, galam2002}, but they typically treat agents as carriers of binary opinions on a single dimension and abstract away the persons doing the persuading and being persuaded. Recent generative agent-based models, in which each agent's behaviour is produced by a large language model rather than a fixed update rule~\cite{park2023, tornberg2023, ghaffarzadegan2024, vezhnevets2023concordia}, restore much of that texture: agents can hold a persona, remember their past, read a message, reason about it, and answer survey questions in natural language. They also import well-documented biases from the underlying language models. Synthetic respondents tend to compress diverse opinions toward a sycophantic centre, inflate baselines on socially favoured positions, and generalise the values of their developers~\cite{argyle2023, santurkar2023, bisbee2024, manivannan2026}. Realistic individual-level priors, explicit competing committed-minority actors, and disciplined handling of these biases have not, to our knowledge, been combined in a single open modelling framework for studying contested-policy dynamics.
+
+The long-term aim of the work reported here is to understand the dynamics of social tipping under two competing committed minority groups, using a generative agent-based model (GABM) as the modelling environment. As a step toward that aim, this paper introduces a GABM of UK climate-policy opinion. Each citizen agent is anchored to a real respondent in a representative YouGov survey panel; two opposing political agents, broadly modelled on Reform UK and the Green Party, act as competing committed minorities; and the model exposes a small set of structural and message-level levers that a researcher can systematically vary. The specific contributions are:
+\begin{enumerate}
+  \item a citizen-agent design in which persona, prior vote choice, and Day~0 opinions are seeded directly from the answers a real survey respondent gave, removing the initialisation bias that arises when LLMs are asked to generate opinions cold;
+  \item a two-political-agent architecture in which broadcast reach, message style, and persuasive capability are separable levers, enabling targeted manipulations of the persuasion environment;
+  \item two complementary mechanisms for keeping the LLM's residual priors under analytical control: a ground-truth Day~0 anchor that side-steps initialisation bias by construction, and a two-step end-of-day survey prompt that elicits the agent's reasoning under an anti-sycophancy preamble before the agent commits to a response;
+  \item two illustrative simulation runs that probe the framework's behaviour, together with a calibration check on how closely the agents reproduce the survey responses of the people they are anchored to.
+\end{enumerate}
+
+The framework sits within a broader research interest in using generative AI to anticipate how publics respond to climate policy before it is implemented, an agenda we have outlined elsewhere~\cite{manivannan2026}; readers interested in the wider methodological landscape, including the relative merits of equation-based and generative agent-based modelling and the existing literature on LLMs as synthetic publics, are referred there.
+
+The present paper does not attempt to detect tipping. Whether the framework can produce tipping behaviour at all is an open empirical question that requires longer horizons, replicated seeds, and population sweeps that are not yet in hand. The two simulation runs reported below are best read as evidence that the framework runs end-to-end and that one of its structural levers produces a directional response in the population trajectory; we describe the qualitative pattern but do not interpret the magnitudes. Robustness across seeds, language-model families, and alternative policy domains is left to subsequent work. The remainder of the paper is organised as follows. Section~\ref{sec:model} describes the model. Section~\ref{sec:levers} sets out the space of questions the framework is designed to ask. Section~\ref{sec:probes} reports the two simulation runs. Section~\ref{sec:grounding} reports the LLM calibration check. Section~\ref{sec:limits} states the present limitations of the framework and Section~\ref{sec:roadmap} sketches the planned next steps and the specific points on which we invite feedback.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 2. RELATED WORK
+%% 2. THE MODEL
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Related Work}\label{sec:related}
+\section{The model}\label{sec:model}
 
-% TODO: 1 page. Three subsections, ~3 paragraphs each.
-
-\subsection{Committed minorities and tipping dynamics}
-% Centola 2018 experimental tipping; Galam 2002 minority spreading;
-% Granovetter 1978 thresholds; Couzin et al. 2011 uninformed individuals.
-
-\subsection{Generative agent-based models for social science}
-% Park et al. 2023 generative agents; Tornberg et al. 2023 LLM social
-% media ABM; Argyle et al. 2023 silicon samples; Aher et al. 2023 LLM
-% reproductions of social science.
-
-\subsection{LLM bias and methodological controls}
-% Santurkar et al. 2023 (whose opinions); user's own debias work
-% (third-person rephrasing). This subsection sets up the Day~0 anchoring
-% contribution.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 3. MODEL
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Model}\label{sec:model}
-
-% TODO: 1.5 pages. Adapt prose from Model_Design.md.
+This section describes the framework at the level needed to interpret the simulation runs that follow. Full prompt templates, the exact persona schema, and the memory-summarisation procedures are deferred to the supplementary information.
 
 \subsection{Citizen agents and persona construction}\label{subsec:citizens}
-% YouGov UK survey panel; persona attributes (demographics, Schwartz
-% values, RWA, SDO, EDO, prior vote choice).
 
-\subsection{Political agents}\label{subsec:political}
-% Two opposing committed minorities, Reform-aligned and Green-aligned.
-% Each has: a policy stance, a connected-citizen list (broadcast reach),
-% and a message-generation prompt.
+The citizen population is drawn from a representative YouGov UK panel of approximately 1{,}500 respondents commissioned by the University of Leeds in January 2024. Each citizen agent is constructed from a single respondent's record. The record provides three families of attributes: demographics (age, gender, UK Government Office Region, education, household income, ethnicity, parental status); political history (self-placement on the left--right scale, 2019 General Election vote, EU Referendum vote); and a battery of psychometric scores (Schwartz self-transcendence, self-enhancement, openness, and conformity/tradition; Right-Wing Authoritarianism; Social Dominance Orientation; Environmental Dominance Orientation). The continuous psychometric scores are converted to low/moderate/high narrative descriptors and woven, together with the categorical attributes, into a first-person natural-language persona paragraph that the LLM adopts as its identity for the duration of the simulation. Critically, the same respondent record also supplies that agent's real survey answers on the six target climate policies, which serve both as the Day~0 anchor (\S\ref{subsec:anchor}) and as the ground truth against which the language model is calibrated (\S\ref{sec:grounding}).
 
-\subsection{Network structure}\label{subsec:network}
-% Stochastic-block-style intra/inter exposure groups
-% ($p_\mathrm{intra}=0.15$, $p_\mathrm{inter}=0.02$).
+\subsection{Competing political agents}\label{subsec:political}
+
+Two political-group agents act as fixed message sources representing opposing elite voices in the UK climate-policy debate: a pro-climate-policy agent broadly modelled on the Green Party of England and Wales, and an anti-climate-policy agent broadly modelled on Reform UK. Neither agent updates its position; they are scripted committed minorities. Each is parameterised by three separable levers: a \emph{policy stance} (which determines the content of broadcasts), a \emph{broadcast audience} (the subset of citizens it reaches on a given day, set by the exposure structure described next), and a \emph{message-generation configuration} (the prompt template, message style, and underlying language model used to produce its broadcasts). Holding the first two fixed and varying the third allows persuasive capability to be manipulated as an experimental condition; holding the first and third fixed and varying the second allows reach asymmetry to be manipulated, as in Section~\ref{sec:probes}.
+
+\subsection{Network and exposure structure}\label{subsec:network}
+
+Two distinct connection structures are layered on the population. Citizen--citizen ties for peer messaging are drawn from a stochastic block model in which the two blocks correspond to citizens whose 2019 General Election vote falls broadly on the political left and broadly on the political right. The intra-block tie probability is $p_{\mathrm{intra}}=0.15$ and the inter-block probability is $p_{\mathrm{inter}}=0.02$, yielding a network with strong within-bloc clustering and sparse cross-cutting ties. Citizen--political-agent exposure is set separately and is assigned from voting history rather than from the peer graph: citizens who voted Conservative or Reform in 2019 (or Leave in the EU Referendum) are exposed to the anti-climate-policy agent, citizens who voted for parties broadly aligned with stronger climate action are exposed to the pro-climate-policy agent, and a configurable share of the population is exposed to both. The two structures are independent, which lets the researcher vary peer-network density and political-broadcast reach without confounding the two channels.
 
 \subsection{Daily phase loop}\label{subsec:phases}
-% Phase P-A: Reform broadcast + reflection.
-% Phase P-B: Green broadcast + reflection.
-% Phase C: peer messaging across $k$ neighbours.
-% End of day: survey on the policy package.
 
-\subsection{Day 0 anchoring}\label{subsec:anchor}
-% This is the headline methodological contribution.
-% Three modes supported:
-%  (i) llm_survey (control, current SOTA) -- Day 0 from LLM cold survey.
-% (ii) ground_truth -- Day 0 numerically equals YouGov response, no LLM
-%      call.
-% (iii) ground_truth_with_rationale (recommended) -- (ii) plus one LLM
-%       call asking the agent to rationalise the seeded position in
-%       first person, stored as Day 0 reasoning for downstream memory.
-% Effect: removes LLM baseline-bias confound; redefines inertia
-% relative to Day 1 (analysis-side).
+A single simulated day comprises three interaction phases followed by an end-of-day survey. In Phase~P-A, the pro-climate-policy agent issues a broadcast to its audience; each exposed citizen produces a private natural-language reflection (roughly 100--150 words) on how the message affects their thinking, but does not commit to a scale position. Phase~P-B is identical for the anti-climate-policy agent. In Phase~C, citizens exchange messages with $k$ randomly chosen neighbours in the peer network; messages are generated synchronously from each citizen's pre-phase state and only then delivered, after which recipients produce a reflection summarising the peer exchange. The phase order is configurable and is itself an experimental condition. At the close of the day, every citizen is re-administered the original survey instrument for each policy in scope on the A--G ordinal scale, yielding a per-day numerical opinion record. A communication-mode switch determines whether the phase loop is run once per policy (\emph{per-policy} mode, used when the research question is a single policy in isolation) or once per day for the full policy package (\emph{package} mode, used when the question concerns the policy bundle as a whole, including in Run~5 below).
 
-\subsection{Memory, debias, and surveys}\label{subsec:debias}
-% Tiered memory; third-person rephrase debiasing on end-of-day surveys;
-% optional extended-thinking for survey responses.
+\subsection{Day~0 anchoring}\label{subsec:anchor}
+
+Day~0 of the simulation establishes each agent's starting position and its initial reasoning. The framework supports three modes. The \emph{LLM-survey} mode is the conventional baseline: the agent is asked the survey questions cold and its responses become Day~0. This mode reproduces the LLM-baseline-bias problem documented in prior work~\cite{argyle2023, santurkar2023, bisbee2024, manivannan2026} and is retained chiefly as a control. The \emph{ground-truth} mode sets each agent's Day~0 opinions equal to the YouGov respondent's actual answers, with no LLM call. The \emph{ground-truth-with-rationale} mode does the same and additionally asks the LLM to rationalise the seeded position in first person; the rationale is stored and surfaced in subsequent days' context so the agent has its own narrative justification for its starting point rather than inheriting a self-consistency cue from a numeric trajectory. The runs reported below use ground-truth-with-rationale. The effect at the population level is that the Day~0 cohort mean is, by construction, exactly the YouGov sample mean; any subsequent drift is therefore unambiguously a property of the simulated dynamics rather than of the LLM's prior over policy positions.
+
+\subsection{Memory, debiasing, and end-of-day surveys}\label{subsec:debias}
+
+Each agent's context is assembled from the persona block, a tiered memory of past activity (the current day's reflections in full, the previous two days' reflections retained verbatim, and earlier days compressed into LLM-generated daily summaries), the Day~0 rationale produced under ground-truth-with-rationale anchoring, and any current-day messages. Numeric trajectories of past survey scores are deliberately \emph{not} surfaced in the prompt: an earlier version of the framework included them and we observed that they functioned as a strong self-consistency cue, making the agent anchor on its own prior numerical answers rather than integrate the day's reflections.
+
+End-of-day surveys are administered under a two-step debiasing protocol. The agent is first asked, under an anti-sycophancy preamble that instructs it to reason from the persona's standpoint rather than to default to socially favoured positions, to articulate its current thinking on the policy in question; in a second call the agent is asked, given that articulated reasoning, to commit to an A--G response. This protocol replaces a single one-shot survey call and was selected from a four-condition pilot study (one of the alternative conditions, which rephrased the question in third-person about the persona, did not reduce bias and is not used). Optionally, the survey call can be issued in extended-thinking mode, where supported by the underlying language model.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 4. EXPERIMENTAL DESIGN
+%% 3. THE LEVER SPACE
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Experimental Design}\label{sec:design}
+\section{The lever space}\label{sec:levers}
 
-% TODO: 1 page.
+The framework is built on the working hypothesis that opinion change under competing committed minorities is a function of \emph{who} is reached, \emph{by whom}, \emph{with what message}, in \emph{what social network}, and \emph{over what horizon}. This section enumerates the levers the framework exposes in each of those categories. Some are configuration switches available today; others are extensions the architecture admits but has not yet implemented. Both are listed, because the value of the instrument is not in any single run but in the experimental programme it makes possible.
 
-\subsection{Lever under study: broadcast reach asymmetry}\label{subsec:lever}
-% Operationalisation: ratio of citizens connected to the Reform vs Green
-% political agent, while holding all other agent parameters fixed.
-% Conditions: TBC after discussion with project lead.
+\subsection{Structural levers}\label{subsec:levers-structural}
 
-\subsection{Held-fixed parameters}\label{subsec:fixed}
-% Population size, days, package policies, peer-messaging fan-out,
-% LLM models, debias on, day0_anchor=ground_truth_with_rationale.
+The structural levers control who hears whom on a given day.
 
-\subsection{Outcome metrics}\label{subsec:metrics}
-% Primary: package-index population mean trajectory.
-% Tipping operationalisation: Day-N mean crosses zero relative to
-% Day-0 anchored sign.
-% Secondary: variance (polarisation), per-agent sign-flip rate,
-% per-policy decomposition.
+\emph{Broadcast reach asymmetry.} Each political agent has an independent reach parameter in $[0,1]$ that scales the fraction of its eligible audience contacted on a given day; an optional uniform-random cap fixes the maximum audience size before reach is applied. The two parameters are independent, so a 1.0/1.0 symmetric baseline and any 1.0/$r$ or $r$/1.0 asymmetry can be specified by a single switch. This is the lever varied in Run~7 (\S\ref{subsec:probe-run7}).
 
-\subsection{Pre-registered hypotheses}\label{subsec:hypotheses}
-% H1: Population mean drifts toward the agent with greater reach.
-% H2: Effect size is monotonic in reach ratio.
-% H3: With reach symmetry (1:1) and an anchored Day 0, no systematic
-%     drift over the simulation horizon.
+\emph{Audience composition.} The mapping from citizens to political-agent audiences is currently fixed by voting history (Section~\ref{subsec:network}). The architecture admits richer assignment rules --- for example exposure proportional to political interest, or randomised assignment that breaks the voting--exposure correlation --- as a planned extension when the research question turns to whether the assignment rule itself shapes aggregate dynamics.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 5. RESULTS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Results}\label{sec:results}
+\emph{Network topology and peer fan-out.} The peer network is parameterised by the stochastic-block-model probabilities $p_{\mathrm{intra}}$ and $p_{\mathrm{inter}}$ together with the per-day peer fan-out $k$. Holding the population fixed and sweeping these parameters yields a controlled study of how echo-chamber strength and within-day social exposure shape the population trajectory. Alternative graph generators (small-world, scale-free) are a planned extension.
 
-% TODO: 2 pages. Two figures + one table.
-% Figure 1: package-index trajectory, one panel per reach condition,
-%           with GT-anchored Day 0 marked.
-% Figure 2: Day-5 effect size as function of reach ratio.
-% Table 1: condition x metric summary (mean, SD across seeds).
+\emph{Committed-minority size.} The share of the citizen population aligned with each political agent is determined by the YouGov sub-sample drawn at the start of a run. Varying it as a clean experimental knob requires sub-sampling or reweighting the survey panel along the relevant political dimension; this is not yet exposed as a single switch but is the most natural next addition, since committed-minority size is the canonical lever in classical tipping-point models~\cite{centola2018}.
 
-\subsection{Day 0 anchoring sanity check}\label{subsec:anchor-check}
-% Confirm Day 0 mean equals GT mean by construction; rationale quality
-% spot-check.
+\subsection{Message levers}\label{subsec:levers-message}
 
-\subsection{Effect of reach asymmetry on the population trajectory}\label{subsec:reach-effect}
-% Reference Figure 1.
+The message levers control what each side says and how persuasively it says it.
 
-\subsection{Tipping incidence}\label{subsec:tipping}
-% Reference Figure 2 and Table 1.
+\emph{Persuasive capability.} The language model behind each political agent can be set independently of the model used to drive the citizen agents, and independently of the model used for end-of-day surveys. Holding all message content fixed and varying only the political-agent model strength operationalises an asymmetry-of-capability experiment.
+
+\emph{Message style.} The system prompt of each political agent is replaceable wholesale. The defaults shipped with the framework parameterise the two agents in the broadly Reform UK and Green Party of England and Wales rhetorical styles, but a researcher can substitute alternative framings without touching any other part of the model. A factual-versus-emotional manipulation, or the moral-reframing manipulation studied by~\cite{feinberg2013}, would each take the form of a paired set of replacement prompts; we have not yet run such an experiment.
+
+\emph{Frequency and timing.} The framework's day schedule is a list, with the contents of each day specified separately, so a multi-day run in which one political agent broadcasts every day and the other only on selected days operationalises an unequal-broadcast-frequency experiment without any change to the rest of the model. Phase ordering within a day is part of the same schedule and is itself a structural-temporal condition: the same daily contents in the order P-A $\to$ P-B $\to$ C, P-B $\to$ P-A $\to$ C, or with peer messaging interleaved between the two political broadcasts, are different experiments.
+
+\subsection{Population and horizon levers}\label{subsec:levers-population}
+
+The population and horizon levers control the scale of the experiment.
+
+\emph{Population size $N$.} The number of citizen agents is set by a single configuration value. Wall time on the runner is dominated by sequential LLM calls and scales roughly linearly with $N$, which is what bounds the runs reported in Section~\ref{sec:probes} to small $N$. A planned implementation extension is intra-phase parallelisation, which would relax that bound substantially.
+
+\emph{Simulation horizon $T$.} The horizon is the length of the day schedule, in days. The horizons in Section~\ref{sec:probes} are deliberately short; longer horizons are needed before any tipping or rebound dynamics could in principle be detected, and are part of the planned programme.
+
+\emph{Policy-package scope.} A communication-mode switch selects between per-policy mode (the daily phase loop targets one policy per day) and package mode (the daily phase loop runs once for the full six-policy climate package, with a population-level package-index trajectory recorded alongside the per-policy trajectories). The choice is itself a research-design lever: per-policy mode isolates a single attitude object, while package mode is the natural choice when the question is the climate-policy bundle as a whole.
+
+\emph{Subgroup composition.} The YouGov panel carries the demographic and political variables needed to construct a controlled sub-population, for example a Brexit-vote-balanced cohort, a single-region cohort, or a cohort balanced on Right-Wing Authoritarianism. This composition is fixed at the start of a run; sweeping it across runs is supported in principle and has not yet been exercised systematically.
+
+In the runs reported below we vary exactly one of these levers, broadcast reach asymmetry. The remaining levers define the experimental programme that the framework is built to support; we return to priorities for the next probes in Section~\ref{sec:roadmap}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 6. DISCUSSION
+%% 4. ILLUSTRATIVE SIMULATION RUNS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Discussion}\label{sec:discussion}
+\section{Illustrative simulation runs}\label{sec:probes}
 
-% TODO: 1 page.
-\subsection{Limitations}\label{subsec:limits}
-% - Small population size; results are illustrative, not population-scale
+% TODO: ~2 pages. State up front: these are demonstrations that the
+% instrument behaves and that one knob registers. They are NOT estimates
+% of effect sizes, NOT robustness analyses, NOT evidence about tipping.
+
+\subsection{Probe~1: full simulation under symmetric broadcasts}\label{subsec:probe-run5}
+
+This first probe runs the daily phase loop end-to-end, with both political agents broadcasting at full reach, peer messaging on, and ground-truth-with-rationale anchoring at Day~0. Citizen agents are drawn from the YouGov panel ($N=30$) and the schedule covers seven days of the full six-policy climate package in package mode. Reflections, peer messages and political-agent broadcasts are produced by GPT-5-mini at temperature $0.5$; the end-of-day survey, which is the only call that elicits a numerical opinion, is administered separately by Claude Sonnet under the two-step debiasing protocol described in Section~\ref{subsec:debias}. Extended thinking is not used. The intent is to expose how the population-level dynamics behave when no structural lever is held asymmetric, so that the asymmetric probe in \S\ref{subsec:probe-run7} has a flat reference to depart from. We describe the qualitative pattern; we do not interpret magnitudes from this single run.
+
+\paragraph{Package-level dynamics.} Figures~\ref{fig:probe1-package-shares} and~\ref{fig:probe1-package-index} show the population on the climate-policy package as a whole, in two complementary metrics. The share of the population in the supporting band ($\text{index}>0$) sits at $73\%$ on Day~0 and stays in the $73$--$80\%$ band across the seven days; the against share grows from $10\%$ to roughly $13$--$23\%$, and the neutral band, which holds $17\%$ on Day~0, is largely absorbed into the two ends from Day~2 onwards. The mean package index drifts from the anchored $+0.96$ on Day~0 to a stable plateau between $+1.16$ and $+1.22$ from Day~1 onwards. The cohort does not relax to the centre, nor does it cascade in either direction; the dispersion of individual agents (the light blue lines in Figure~\ref{fig:probe1-package-index}) remains broad over the full $-3$ to $+3$ scale, which is the visual signature one wants from a model of opinion dynamics rather than of opinion convergence.
+
+\paragraph{Per-policy heterogeneity.} The package-level picture conceals substantial heterogeneity across the six policies. Figures~\ref{fig:probe1-policy-shares} and~\ref{fig:probe1-policy-index} disaggregate the population shares and the population means policy by policy. Renewable energy is essentially saturated: support climbs from $80\%$ to $93\%$ by Day~1 and stays there, with a population mean near $+2$ throughout. Carbon tax and climate compensation, the two policies with the lowest Day~0 support, show the largest gains: carbon-tax support jumps from $53\%$ to $77\%$ on Day~1 and stabilises around $80\%$, with the population mean rising from $+0.77$ to $+1.20$; climate-compensation support rises from $40\%$ to roughly $65\%$, with the population mean rising from $+0.10$ to about $+0.65$. Green housing is the one policy whose population mean drifts mildly downward (from $+1.53$ to $+1.33$) even as its supporting share remains in the $80$--$87\%$ range, illustrating that mean and share need not co-move. Ban petrol cars is the most striking case for the share-versus-mean distinction: the supporting share grows mildly (from $50\%$ to $60$--$67\%$) and so does the against share (from $27\%$ to $33$--$40\%$), with the neutral band collapsing to zero from Day~2; the population mean masks this with a single small upward drift from $+0.43$ to $+0.70$.
+
+\paragraph{Scope.} This probe shows that the simulation produces stable, interpretable trajectories under the production stack and that the Day~0 anchor holds (the cohort starts exactly on the YouGov mean by construction, as visible in Figure~\ref{fig:probe1-package-index}). It does not establish effect sizes, robustness across seeds or models, or any claim about long-horizon dynamics, none of which are accessible from a single seven-day run at $N=30$.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/probe1_package_shares.pdf}
+  \caption{Population shares on the climate-policy package over the seven simulated days, under symmetric political broadcasts. Each line gives the share of the $N=30$ citizen agents whose six-policy package index is strictly positive (support, green), exactly zero (neutral, grey), or strictly negative (against, red), as a function of simulation day. Day~0 is anchored to the YouGov ground truth and reads off as the panel composition before any simulated interaction. The supporting line stays in the $73$--$80\%$ range throughout, the neutral line collapses from Day~2 onwards as agents move into either the support or against category, and the against line grows modestly to settle in the $13$--$23\%$ range.}
+  \label{fig:probe1-package-shares}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/probe1_package_index.pdf}
+  \caption{Mean pro-climate package index trajectory under symmetric political broadcasts. Light blue traces give the per-agent index (six-policy mean on the $-3$ to $+3$ scale) for each of the $N=30$ citizen agents over the seven simulated days; the black line is the population mean and the red dashed line is the YouGov ground-truth mean ($+0.96$). Day~0 sits exactly on the ground truth by construction (anchoring) and the population mean stabilises just above it from Day~1 onwards. The dispersion of agents fills the full $-3$ to $+3$ band throughout: the cohort does not collapse onto its mean.}
+  \label{fig:probe1-package-index}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/probe1_policy_shares.pdf}
+  \caption{Population shares per policy over the seven simulated days, under symmetric political broadcasts. Panels are arranged in the survey order; within each panel the lines give the share of the $N=30$ citizen agents in the support ($\text{response}>0$, green), neutral ($\text{response}=0$, grey) and against ($\text{response}<0$, red) categories, as a function of simulation day. Day~0 reproduces the YouGov panel composition by anchoring. Movement is toward stronger support on most policies, with the largest gains on the two policies with the lowest Day~0 support (carbon tax and climate compensation). Ban petrol cars is the exception: both the support and the against lines rise at the expense of a collapsing neutral line, so the policy polarises rather than tilts.}
+  \label{fig:probe1-policy-shares}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/probe1_policy_index.pdf}
+  \caption{Mean opinion per policy over the seven simulated days, under symmetric political broadcasts. Per-panel layout matches Figure~\ref{fig:probe1-policy-shares}: light blue traces are individual agents, the black line is the population mean, and the red dashed line is the YouGov ground-truth mean for that policy. Day~0 sits on ground truth by construction. Population means drift mildly upward on five of the six policies and stabilise quickly; green housing is the only one whose mean drifts slightly downward (from $+1.53$ to $+1.33$). The two largest absolute drifts are on carbon tax (from $+0.77$ to $+1.20$) and climate compensation (from $+0.10$ to roughly $+0.65$). Comparing this figure with Figure~\ref{fig:probe1-policy-shares} for ban petrol cars illustrates that population means and population shares need not move together: a small mean drift can mask a redistribution of agents from a vanishing neutral category into both ends at once.}
+  \label{fig:probe1-policy-index}
+\end{figure*}
+
+\subsection{Probe~2: one structural lever registers a signal}\label{subsec:probe-run7}
+
+The second probe checks that a single structural lever, when varied in isolation, produces a directional response in the cohort trajectory. We restrict attention to one policy (Ban petrol cars), shorten the schedule to four days, switch peer messaging off, and keep all other configuration fixed at the same anchored Day~0, the same network, and the same political-agent system prompts and language model as in Probe~1. To make reach the only active lever and to avoid the two political agents broadcasting to overlapping but uncontrolled audiences, we additionally cap each political agent's daily audience at $20$ citizens drawn uniformly at random from those eligible, and then apply a per-agent reach probability on top of that cap. In the symmetric condition both political agents reach their full capped audience each day; in the Reform-dominant condition the green agent's reach is reduced to $0.25$ while the Reform agent stays at $1.0$; in the Green-dominant condition the assignment is reversed. With a working lever and a population that responds at all to broadcasts, one expects the Day-4 cohort mean to order Reform-dominant $<$ symmetric $<$ Green-dominant on a pro-climate scale. The point of the probe is to register whether the response is in the right direction, not to estimate the effect size.
+
+\paragraph{Mean trajectory.} Figure~\ref{fig:probe2-means} shows the cohort mean opinion on Ban petrol cars for the three conditions across the four days, with $\pm 1$ standard error of the mean (computed from the cross-agent dispersion at $N=30$) shaded around each line. All three conditions begin at the YouGov-anchored Day-0 mean of $+0.43$. By Day~4 the means split in the expected order: $+0.73$ in the Reform-dominant condition, $+0.83$ in the symmetric baseline, and $+0.90$ in the Green-dominant condition. The ordering is monotone and stable from Day~2 onward, so the lever does register. The magnitude of the asymmetry-induced separation is small (about $0.17$ on the $-3$ to $+3$ scale, against a within-condition standard error of roughly $0.34$), and the standard-error bands of the three conditions overlap heavily, which is the honest visual reading at this $N$ and horizon.
+
+\paragraph{Population shares.} Figure~\ref{fig:probe2-shares} confirms that the small mean-level ordering is reflected in the share composition rather than masked by it. In all three conditions the neutral band on Ban petrol cars collapses by Day~1 or~2, just as it did in Probe~1. The supporting share at Day~4 is $70\%$ under symmetric reach, $67\%$ under Reform-dominant reach, and $73\%$ under Green-dominant reach; the against share moves correspondingly in the opposite direction ($30\%$, $33\%$, $27\%$). This is the same monotone pattern visible in the means, on the same small scale, and it does not reveal a hidden polarisation episode in any one condition.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/probe2_means.pdf}
+  \caption{Cohort mean opinion on Ban petrol cars across the four simulated days, in three conditions that differ only in the broadcast reach of the two political agents. The black line is the symmetric baseline ($p_R = p_G = 1.0$); the blue line is the Reform-dominant condition ($p_R = 1.0$, $p_G = 0.25$); the green line is the Green-dominant condition ($p_R = 0.25$, $p_G = 1.0$). Shaded bands give $\pm 1$ standard error of the cohort mean computed from cross-agent dispersion at $N=30$, which is a lower bound on the variability one would see across re-runs because agents share political broadcasts and a network. The red dashed line is the YouGov ground-truth mean ($+0.43$), which Day~0 is anchored to by construction. The Day-4 cohort means order Reform-dominant ($+0.73$) $<$ symmetric ($+0.83$) $<$ Green-dominant ($+0.90$); the ordering is monotone in the manipulation but small relative to within-condition sampling noise, and the three bands overlap heavily.}
+  \label{fig:probe2-means}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/probe2_shares_by_condition.pdf}
+  \caption{Population shares on Ban petrol cars per condition (1\,$\times$\,3 grid; same colour-marker convention as Figure~\ref{fig:probe1-policy-shares}). Each panel gives the share of the $N=30$ citizen agents in the support (green), neutral (grey) and against (red) categories as a function of simulation day. The neutral share collapses by Day~1 or~2 in all three conditions. The Day-4 supporting share is $70\%$ in the symmetric condition, $67\%$ in the Reform-dominant condition, and $73\%$ in the Green-dominant condition, with the against share moving correspondingly in the opposite direction; this reproduces the small monotone ordering visible in the cohort means in Figure~\ref{fig:probe2-means}.}
+  \label{fig:probe2-shares}
+\end{figure*}
+
+\subsection{What these probes do and do not tell us}\label{subsec:probe-interpretation}
+
+The two probes together support a narrow methodological claim: the instrument runs end to end under the production language-model and debiasing stack, produces interpretable population-level trajectories that stay in a sensible neighbourhood of the empirical anchor, and registers a directional response when a single structural lever is varied in isolation, with population shares that move consistently with the cohort means. They do not estimate effect sizes for any of the levers in Section~\ref{sec:levers}, do not establish robustness across seeds, populations, language models, schedule lengths, or policy areas, and do not address the question of whether competing committed minorities can drive social tipping in this model. The next section turns to a separate prerequisite for any of those substantive questions: whether the language-model component, taken on its own, reproduces the empirical opinions of the personas it is asked to speak as.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 5. CALIBRATION CHECK ON THE LANGUAGE-MODEL COMPONENT
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Calibration of the language-model component}\label{sec:grounding}
+
+The simulation runs in Section~\ref{sec:probes} are anchored at Day~0 to the YouGov ground truth (\S\ref{subsec:anchor}), so the empirical starting point of each agent is correct by construction. The language model nevertheless produces every reflection, every peer message, every political broadcast and every end-of-day survey response from Day~1 onward. Two questions about the language-model component therefore matter independently of the simulation: does it actually read the persona it is asked to speak as, and to what extent are its survey responses biased relative to the real respondent's answers? This section reports a calibration probe that answers both, on the same survey-path stack used in Probes~1 and~2.
+
+\subsection{Setup}\label{subsec:grounding-setup}
+
+The probe holds the agent in isolation: no memory, no broadcasts, no peer exchange, and the agent's opinion history is cleared before each call. For each $(\text{agent},\text{policy})$ pair we administer the survey instrument exactly once, under the same Claude Sonnet, two-step debiasing, no-extended-thinking, $T=0.5$ stack used in Probes~1 and~2 (\S\ref{subsec:debias}). The two-step protocol was selected from a four-condition pilot of in-house experiments referenced in \S\ref{subsec:debias}; the alternative formulations either failed to reduce baseline bias or compressed responses around the centre. Two complementary samples are used. The first probe takes the same $30$ personas as the simulation runs and covers all six target policies, yielding $180$ Day-$0$ survey calls. The second draws $100$ fresh personas from the YouGov panel, disjoint from the first sample by construction, and restricts attention to the two policies on which the smaller sample was inconclusive (Carbon tax and Climate compensation), yielding a further $200$ calls at higher statistical power.
+
+\subsection{Metrics}\label{subsec:grounding-metrics}
+
+Four quantities summarise each $(\text{policy},\text{sample})$ cell. Let $y_i$ denote the YouGov ground-truth response of agent~$i$ on the $-3$ to $+3$ scale and $\hat{y}_i$ the LLM's response. The \emph{signed bias} $b = \tfrac{1}{n}\sum_i (\hat{y}_i - y_i)$ measures the mean shift, with positive values indicating the LLM is more pro-climate than the real respondent on average. The \emph{mean absolute error} $\mathrm{MAE} = \tfrac{1}{n}\sum_i \lvert \hat{y}_i - y_i\rvert$ measures point dispersion around the ground truth. The \emph{Spearman rank correlation} $\rho$ between $\hat{y}$ and $y$ across agents within a policy measures whether the language model orders agents the way the survey does. Finally, a \emph{permutation null} addresses a question that the first three metrics cannot: is the model reading the persona at all, or is it sampling from a marginal opinion distribution that happens to overlap the empirical one? Holding the LLM responses fixed and the ground-truth vector fixed, we shuffle the agent-to-ground-truth pairing $B=1{,}000$ times. Each shuffle yields an MAE and an ordinal-accuracy (the share of pairs with $\lvert \hat{y}_i - y_i\rvert \le 1$) under random pairing. The two $p$-values
+\begin{equation}
+  p_{\mathrm{MAE}} \;=\; \tfrac{1}{B}\sum_{b=1}^{B} \mathbb{1}\!\left[\mathrm{MAE}^{(b)}_{\mathrm{shuf}} \le \mathrm{MAE}_{\mathrm{real}}\right], \qquad
+  p_{\mathrm{ord}} \;=\; \tfrac{1}{B}\sum_{b=1}^{B} \mathbb{1}\!\left[\mathrm{ord}^{(b)}_{\mathrm{shuf}} \ge \mathrm{ord}_{\mathrm{real}}\right]
+  \label{eq:perm-null}
+\end{equation}
+report how often a random pairing matches or beats the real one. A small $p$-value rejects the null that the LLM is indifferent to which persona it is given and confirms that the agent-level mapping carries information.
+
+\subsection{Persona signal}\label{subsec:grounding-population}
+
+The permutation null is the test that decides whether the survey path is reading the persona. Figure~\ref{fig:calib-null-nb22} shows the result for the six policies at $n=30$. The MAE-based test rejects random pairing ($p_{\mathrm{MAE}}<0.05$) on five of the six policies; only Renewable energy is borderline ($p_{\mathrm{MAE}}=0.07$). The ordinal-accuracy test rejects on a different five of the six policies; here Carbon tax is the borderline case ($p_{\mathrm{ord}}=0.13$). The two tests fail on different policies, which is what one would expect from a small-$n$ probe: on Renewable energy the YouGov marginal is heavily compressed at the pro-climate end, so a random pairing already scores ordinally well and the MAE test loses power, while on Carbon tax the LLM marginal is shifted upward (\S\ref{subsec:grounding-implication}) which inflates ordinal noise without affecting MAE in the same way.
+
+Figure~\ref{fig:calib-null-nb23} resolves both borderline cases for the two policies on which the higher-power probe was run. At $n=100$, both Carbon tax ($p_{\mathrm{ord}}=0.017$, $p_{\mathrm{MAE}}<10^{-3}$) and Climate compensation ($p_{\mathrm{ord}}<10^{-3}$, $p_{\mathrm{MAE}}<10^{-3}$) clear the null comfortably on both metrics. The realised MAE on Climate compensation is $1.42$ against a null mean of $2.15$; on Carbon tax it is $1.29$ against a null mean of $1.66$. Read together with Figure~\ref{fig:calib-null-nb22}, the two probes establish that the survey path under Sonnet plus two-step debias is reading the persona on every one of the six target policies, with the borderline NB-30 cases attributable to statistical power rather than missing signal. The accompanying Spearman rank correlations are positive on every policy and lie in the $0.25$--$0.63$ range across the six policies at $n=30$; the two re-tested policies yield $0.41$ (Carbon tax) and $0.53$ (Climate compensation) at $n=100$, with a standard error of roughly $0.10$. In plain terms the LLM is \emph{rank-informative}: when asked which of two personas is more pro-carbon-tax, it tends to get the relative ordering right, even when it gets the exact scale point wrong on either of them individually.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.98\textwidth]{figures/calib_null_nb22.pdf}
+  \caption{Permutation null on the agent-to-ground-truth pairing, by policy ($n=30$, $B=1{,}000$ shuffles per panel). Grey histograms: distribution of MAE under random pairing. Black vertical line: real MAE; $p_{\mathrm{MAE}}$ in panel title. The real MAE lies outside the null distribution on four of the six policies; Carbon tax and Renewable energy are borderline at this sample size.}
+  \label{fig:calib-null-nb22}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/calib_null_nb23.pdf}
+  \caption{Permutation null on the agent-to-ground-truth pairing for the two policies on which the smaller sample was inconclusive, at $n=100$ on a fresh sample disjoint from the simulation cohort ($B=1{,}000$ shuffles per panel). The borderline NB-30 result on Carbon tax was a power artefact; both policies clear the null at $p<0.05$ on both summary statistics.}
+  \label{fig:calib-null-nb23}
+\end{figure*}
+
+\subsection{Per-policy bias and implications for the simulation}\label{subsec:grounding-implication}
+
+The permutation result settles whether persona is read but says nothing about \emph{how} the model errs when it does read. Figure~\ref{fig:calib-bias} reports the signed bias $b$ per policy, with $\pm 1$ standard error. The pattern is structured rather than uniform. On the four policies that frame the climate question as a behavioural restriction or a supply-side change (Renewable energy, Ban fossil fuels, Ban petrol cars, Green housing) the residual bias under the two-step debias is small: the central estimate lies between $+0.07$ and $+0.47$ on the seven-point scale, well inside one standard error of zero on Ban fossil fuels and Ban petrol cars. On the two policies that frame the climate question in cost or redistributive terms (Carbon tax, Climate compensation) the bias is large and persistent: $+0.87$ and $+0.60$ at $n=30$, corroborated at $+0.85$ and $+0.48$ on the higher-power sample, with the higher-power Carbon tax estimate sitting outside the standard-error envelope of every behavioural-policy estimate. The two-step debias prompt successfully removes a generic acquiescence bias but does not fully neutralise a policy-specific prior on instruments framed in terms of taxation and transfers.
+
+This pattern has three implications for the simulation reported in Section~\ref{sec:probes}. First, because Day~0 in those runs is anchored to ground truth (\S\ref{subsec:anchor}), not to the LLM's cold survey response, the bias documented here does not contaminate the empirical starting point of the cohort: the Day-$0$ cohort mean equals the YouGov sample mean by construction. Second, the structural lever varied in Probe~2 (Ban petrol cars) sits in the unbiased-policy band, so the directional ordering reported there cannot be explained by policy-specific bias in the survey instrument itself. Third, the bias on Carbon tax and Climate compensation does set an upper bound on how far one can read absolute support levels on those two policies in Probe~1: the upward drift documented there partly reflects the two-step debias still leaning into the pro-climate prior on cost-framed policies. Within-policy directional change, by contrast, is measured relative to the same biased anchor on every day and so remains interpretable. The overall verdict on the survey-path component is that it is rank-informative on every policy in the framework, unbiased at the policy level on four of six, and carries a known and quantified bias on the two cost-framed policies that the design does not yet correct for.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.95\textwidth]{figures/calib_bias.pdf}
+  \caption{Signed bias $b = \tfrac{1}{n}\sum_i (\hat{y}_i - y_i)$ per policy on the seven-point scale, with $\pm 1$ standard error of the mean. Blue: NB 22 ($n=30$); orange: NB 23 ($n=100$, two policies). Bias is small and broadly indistinguishable from zero on the four behavioural / supply-side policies and is large and persistent on the two cost / redistributive policies (Carbon tax, Climate compensation), and is reproduced on a disjoint $n=100$ sample.}
+  \label{fig:calib-bias}
+\end{figure*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 6. LIMITATIONS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Limitations}\label{sec:limits}
+
+% TODO: ~0.75 page. Limitations + validity threats, framed as the
+% experimental backlog rather than as caveats.
+
+\subsection{Scope limitations}\label{subsec:limits-scope}
+% - Small N (30) and short horizon (4--7 days); not population-scale
 %   estimates of UK opinion change.
-% - Single LLM family; cross-model robustness not tested here.
+% - Single seed per condition; no replication.
+% - Single LLM family per role; cross-model robustness untested in this
+%   paper.
 % - Single policy package (climate); no cross-issue interaction.
-% - Five-day horizon; longer-run dynamics unaddressed.
-% - No validation against a real tipping event.
+% - Two committed minorities only; no third-actor or coalition dynamics.
 
-\subsection{Threats to validity of LLM-ABM tipping claims}\label{subsec:validity}
-% Anchor mode addresses initialisation bias; debias addresses
-% measurement bias; remaining open question = behavioural realism of
-% peer-message reception.
+\subsection{Validity threats specific to LLM-ABM}\label{subsec:limits-validity}
+% - Initialisation bias: addressed by Day~0 anchoring.
+% - Measurement bias: addressed by debiasing the end-of-day survey.
+% - Behavioural realism of peer-message reception: open. We do not yet
+%   know whether the LLM updates opinions in response to peer messages
+%   the way real people do.
+% - Memory faithfulness: tiered summarisation may erode signal over long
+%   horizons.
+
+\subsection{Tipping is the question, not the result}\label{subsec:limits-tipping}
+% Explicit statement: this paper does not look for tipping. Detecting
+% tipping (if it occurs) would require longer horizons, larger N,
+% replicated seeds, and committed-minority-size sweeps. Whether the
+% instrument is capable of producing tipping behaviour at all is itself
+% an open empirical question we plan to investigate, not assume.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% 7. ROADMAP
+%% 7. ROADMAP AND OPEN QUESTIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Roadmap}\label{sec:roadmap}
+\section{Roadmap and open questions}\label{sec:roadmap}
 
-% TODO: 0.5 page. Pre-register the next two levers.
-\subsection{Persuasive capability lever}
-% E.g. messaging-LLM model upgrade for one side; or argument-quality
-% conditioning. State the operationalisation that will be tested.
+% TODO: ~0.5 page. Two parts: planned next steps, and explicit feedback
+% asks for the seminar audience.
 
-\subsection{Message-style lever}
-% Emotional vs factual vs moral-reframing message templates, with
-% references to Feinberg \& Willer.
+\subsection{Planned next probes}\label{subsec:roadmap-probes}
+% Prioritised lever sweeps from Section~\ref{sec:levers}. To be filled in
+% with the project lead. Candidates: committed-minority size, persuasive
+% capability asymmetry, message style, longer horizon with seed
+% replication.
+
+\subsection{Feedback we are seeking}\label{subsec:roadmap-feedback}
+% Explicit asks for the seminar audience:
+%  1. Persona / Day~0 anchoring design: is the YouGov grounding
+%     defensible to a survey-experimentalist?
+%  2. Mechanism design: what additional levers would you want before
+%     interpreting any result from this kind of instrument?
+%  3. Mapping to political science: does the two-committed-minority
+%     framing capture the question you would ask?
+%  4. Identification strategy: what experimental design would you want
+%     to see before you would believe a tipping claim from this kind of
+%     instrument?
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% BACKMATTER

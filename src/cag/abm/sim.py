@@ -46,6 +46,9 @@ SIM_CONFIG = {
     "communication_mode": "single_policy",
     "package_policies": ALL_CLIMATE_POLICIES,
     "day0_anchor": "llm_survey",
+    "reach_a": 1.0,             # fraction of A-audience reached by political agent A broadcasts (0.0-1.0)
+    "reach_b": 1.0,             # fraction of B-audience reached by political agent B broadcasts (0.0-1.0)
+    "audience_cap": None,       # if int, cap each political agent's audience to this many citizens (uniform random) BEFORE reach subsample. None = no cap.
     "random_seed": 42,
     "output_dir": "data/output/experiments",
 }
@@ -279,6 +282,24 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
             f"day0_anchor must be one of {VALID_DAY0_ANCHORS}, got {anchor_mode!r}"
         )
 
+    reach_a = cfg.get("reach_a", 1.0)
+    reach_b = cfg.get("reach_b", 1.0)
+    for name, val in (("reach_a", reach_a), ("reach_b", reach_b)):
+        if not isinstance(val, (int, float)) or not (0.0 <= float(val) <= 1.0):
+            raise ValueError(
+                f"{name} must be a float in [0.0, 1.0], got {val!r}"
+            )
+
+    audience_cap = cfg.get("audience_cap", None)
+    if audience_cap is not None and (
+        not isinstance(audience_cap, int)
+        or isinstance(audience_cap, bool)
+        or audience_cap < 0
+    ):
+        raise ValueError(
+            f"audience_cap must be a non-negative int or None, got {audience_cap!r}"
+        )
+
     if (resume or checkpoint_every_day) and checkpoint_dir is None:
         raise ValueError(
             "checkpoint_dir is required when resume=True or "
@@ -294,6 +315,15 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
     nation.political_agent_a = PoliticalAgent("agent_a", "pro_climate")
     nation.political_agent_b = PoliticalAgent("agent_b", "anti_climate")
     nation.assign_political_exposure()
+    nation.apply_audience_cap(
+        cap=audience_cap,
+        seed=cfg["random_seed"],
+    )
+    nation.apply_reach_subsample(
+        reach_a=float(reach_a),
+        reach_b=float(reach_b),
+        seed=cfg["random_seed"],
+    )
     nation.create_network(
         p_intra=cfg["p_intra"],
         p_inter=cfg["p_inter"],
@@ -666,6 +696,7 @@ CHECKPOINT_SCHEMA_VERSION = 1
 _RESUME_HARD_KEYS = (
     "n_citizens", "random_seed", "p_intra", "p_inter", "network_type",
     "communication_mode", "package_policies", "day0_anchor",
+    "reach_a", "reach_b", "audience_cap",
 )
 # Config keys we tolerate changing on resume but log a warning for.
 _RESUME_SOFT_KEYS = (

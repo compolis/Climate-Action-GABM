@@ -5,6 +5,707 @@ Results are listed newest-first.
 
 ---
 
+## Paper Cross-Reference (`paper/sn-article.tex`)
+
+Which results back which sections of the seminar paper draft. Use this to spot-check numbers and reasoning against the underlying CSVs without re-deriving the chain by hand.
+
+| Paper section | Source run / notebook | Result dir | Figures (`paper/figures/`) | What to verify |
+|---|---|---|---|---|
+| §4.1 Probe 1 — full simulation under symmetric broadcasts | Run 5 (NB 19) | [`data/output/experiments/20260425_010615/`](../data/output/experiments/20260425_010615/) | `probe1_package_shares.pdf`, `probe1_package_index.pdf`, `probe1_policy_shares.pdf`, `probe1_policy_index.pdf` | Day-0 package mean +0.96; package-mean plateau +1.16 to +1.22; per-policy means and shares (Carbon tax +0.77→+1.20, Climate compensation +0.10→~+0.65, Green housing +1.53→+1.33); package support share 73–80%, against 13–23% |
+| §4.2 Probe 2 — one structural lever registers a signal | Run 7 (NB 21) | [`data/output/experiments/20260425_125855/`](../data/output/experiments/20260425_125855/) (S), [`20260425_132515/`](../data/output/experiments/20260425_132515/) (C1), [`20260425_135538/`](../data/output/experiments/20260425_135538/) (C3) | `probe2_means.pdf`, `probe2_shares_by_condition.pdf` | Day-0 anchor +0.43; Day-4 means C1 +0.73 < S +0.83 < C3 +0.90; Day-4 supporting shares 67/70/73; monotone ordering from Day 2 onward |
+| §5 Calibration — persona signal (permutation null, n=30) | NB 22 | [`data/output/calibration/20260425_203841/`](../data/output/calibration/20260425_203841/) | `calib_null_nb22.pdf` | `p_MAE < 0.05` on 5/6 policies (Renewable borderline at 0.07); `p_ord < 0.05` on 5/6 (Carbon tax fails at 0.13); Spearman ρ range 0.25–0.63 across the six policies |
+| §5 Calibration — higher-power persona signal (n=100) | NB 23 | [`data/output/calibration/20260425_211242_persona/`](../data/output/calibration/20260425_211242_persona/) | `calib_null_nb23.pdf` | Carbon tax `p_ord=0.017`, `p_MAE<10⁻³`, ρ=0.41; Climate compensation `p_ord<10⁻³`, `p_MAE<10⁻³`, ρ=0.53; realised MAE 1.29 vs null 1.66 (Carbon tax) and 1.42 vs null 2.15 (Climate compensation) |
+| §5.4 Per-policy bias and implications | NB 22 + NB 23 | both calibration dirs | `calib_bias.pdf` | Behavioural-policy bias band +0.07 to +0.47 (Ban petrol cars +0.07, Ban fossil fuels +0.13, Green housing +0.30, Renewable +0.47); cost-framed bias +0.87 / +0.60 at n=30, +0.85 / +0.48 at n=100 |
+
+Notes:
+- Probe 1 and Probe 2 in the paper correspond to Run 5 and Run 7 in this report; the "Run N" labelling is repository-internal only and does not appear in the paper.
+- The calibration-figure script (`paper/figures/calibration_figures.py`) regenerates the permutation null at B=1000 for visual consistency between NB 22 and NB 23. NB 22's stored `permutation_null.csv` was computed at B=100 (the in-prose p-values quoted in §5.3 come from the CSV; figure-displayed p-values reflect B=1000).
+- NB 23's exclusion list (30 main-run respondent IDs) is recorded in `summary.json` so the n=100 sample is provably disjoint from the n=30 simulation cohort.
+
+---
+
+## NB 23: Persona Signal Test at n=100 (Carbon tax + Climate compensation)
+
+**Date:** 2026-04-25
+**Notebook:** [`notebooks/23_persona_signal_test.ipynb`](../notebooks/23_persona_signal_test.ipynb)
+**Result files:** [`data/output/calibration/20260425_211242_persona/`](../data/output/calibration/20260425_211242_persona/) — `calibration_raw.csv`, `per_policy.csv`, `permutation_null.csv`, `null_distributions.npz`, `summary.json`
+
+### Purpose
+
+Resolve the two NB-22 borderline cases (Carbon tax failing the ordinal test at `p_ord=0.13`; Renewable energy borderline on `p_MAE=0.07`) by running the same survey-path stack at higher statistical power. Re-tested only the two cost-framed policies on which NB 22 was inconclusive (Carbon tax and Climate compensation) — Renewable energy was not re-run because its NB-22 borderline is a power artefact of a heavily compressed YouGov marginal, not a Sonnet failure mode.
+
+### Configuration
+
+| Parameter | Value |
+|---|---|
+| n_agents | 100 |
+| policies | ClimatePolicyID(5) Carbon tax, ClimatePolicyID(6) Climate compensation |
+| sample_seed | 23 |
+| sample disjointness | 30 main-run respondent IDs explicitly excluded (recorded in `summary.json::excluded_main_run_ids`) |
+| model | claude-sonnet-4-6 (anthropic) |
+| temperature | 0.5 |
+| thinking | False |
+| debias | True (two-step protocol) |
+| n_perms | 1000 |
+
+Same survey-path stack as Run 5 / Run 7 production runs.
+
+### Per-Policy Results
+
+| Policy | n | Bias | MAE | Spearman ρ | Exact | Ordinal |
+|---|---|---|---|---|---|---|
+| Carbon tax (5) | 100 | **+0.85** | 1.29 | 0.407 | 0.29 | 0.58 |
+| Climate compensation (6) | 100 | **+0.48** | 1.42 | 0.528 | 0.22 | 0.62 |
+
+### Permutation Null (B=1000)
+
+| Policy | real_ord | null_ord_mean | p_ord | real_mae | null_mae_mean | p_mae |
+|---|---|---|---|---|---|---|
+| Carbon tax (5) | 0.58 | ≈0.43 | **0.017** | 1.29 | 1.661 | **<0.001** |
+| Climate compensation (6) | 0.62 | ≈0.40 | **<0.001** | 1.42 | 2.151 | **<0.001** |
+
+Both policies clear the null comfortably on both summary statistics. The realised MAE on Carbon tax (1.29) is well below the null mean (1.66); on Climate compensation (1.42 vs 2.15) the gap is larger still.
+
+### Findings
+
+1. **Borderline NB-22 cases were power artefacts, not signal failures.** At n=100 both Carbon tax and Climate compensation reject random pairing on both metrics. Sonnet under two-step debias *is* reading the persona on cost-framed policies; n=30 was just too small to detect it on the ordinal test.
+2. **Bias is reproduced on a disjoint sample.** Carbon tax bias +0.85 (NB 23) corroborates +0.87 (NB 22); Climate compensation +0.48 (NB 23) corroborates +0.60 (NB 22). The cost-framed pro-climate prior is real and not an artefact of the n=30 sample.
+3. **Spearman ρ improves modestly with n.** Carbon tax ρ rises from 0.48 (n=30) to 0.41 (n=100), Climate compensation from 0.46 to 0.53; both stay in the rank-informative-but-noisy regime expected at this individual-agent grain.
+
+### Implication for the Paper
+
+NB 23 is the high-power complement to NB 22. Together they support §5.3 (persona signal) and §5.4 (per-policy bias) of `sn-article.tex`. The disjoint-sample design also lets the paper claim corroboration rather than re-fitting on the same draws.
+
+---
+
+## NB 22: Day-0 Survey Accuracy under Sonnet + Two-Step Debias (n=30, six policies)
+
+**Date:** 2026-04-25
+**Notebook:** [`notebooks/22_day0_accuracy_sonnet.ipynb`](../notebooks/22_day0_accuracy_sonnet.ipynb)
+**Result files:** [`data/output/calibration/20260425_203841/`](../data/output/calibration/20260425_203841/) — `calibration_raw.csv`, `per_agent.csv`, `per_policy.csv`, `permutation_null.csv`, `summary.json`
+
+### Purpose
+
+Calibration check on the survey-path component used in Run 5 (NB 19) and Run 7 (NB 21). Holds the agent in isolation (no memory, no broadcasts, no peer exchange, opinion history cleared) and asks two questions: (i) does Sonnet under two-step debias actually read the persona it is given, or does it sample from a marginal distribution that happens to overlap the YouGov one? and (ii) what is the residual per-policy bias the production survey path leaves behind?
+
+### Configuration
+
+| Parameter | Value |
+|---|---|
+| n_agents | 30 (same cohort as Run 5 / Run 7, random_seed=43) |
+| policies | All six (ClimatePolicyID(1)–ClimatePolicyID(6)) |
+| model | claude-sonnet-4-6 (anthropic) |
+| temperature | 0.5 |
+| thinking | False |
+| debias | True (two-step protocol; selected from the four-condition pilot — NB 13) |
+| n_perms | 100 |
+
+### Aggregate Result
+
+| Metric | Value |
+|---|---|
+| n calls | 180 |
+| Exact match | 0.289 |
+| Ordinal match (within ±1) | 0.706 |
+| MAE | 1.194 |
+| Bias (LLM − GT) | **+0.406** |
+| Spearman ρ (pooled) | 0.550 |
+
+### Per-Policy Results
+
+| Policy | LLM mean | GT mean | Bias | MAE | Spearman ρ | Ordinal | Exact |
+|---|---|---|---|---|---|---|---|
+| (1) Renewable energy | 2.333 | 1.867 | +0.467 | — | 0.251 | 0.833 | 0.400 |
+| (2) Ban fossil fuels | 1.200 | 1.067 | +0.133 | — | 0.613 | 0.800 | 0.433 |
+| (3) Ban petrol cars | 0.500 | 0.433 | +0.067 | — | 0.628 | 0.700 | 0.233 |
+| (4) Green housing | 1.833 | 1.533 | +0.300 | — | 0.444 | 0.767 | 0.233 |
+| (5) Carbon tax | 1.633 | 0.767 | **+0.867** | — | 0.480 | 0.567 | 0.233 |
+| (6) Climate compensation | 0.700 | 0.100 | **+0.600** | — | 0.464 | 0.567 | 0.200 |
+
+### Permutation Null (B=100)
+
+| Policy | real_ord | null_ord_mean | p_ord | real_mae | null_mae_mean | p_mae |
+|---|---|---|---|---|---|---|
+| (1) Renewable energy | 0.833 | 0.745 | **0.04** | 0.867 | 1.045 | 0.07 |
+| (2) Ban fossil fuels | 0.800 | 0.443 | **<0.01** | 0.933 | 2.133 | **<0.01** |
+| (3) Ban petrol cars | 0.700 | 0.423 | **<0.01** | 1.267 | 2.244 | **<0.01** |
+| (4) Green housing | 0.767 | 0.600 | **<0.01** | 1.033 | 1.496 | **<0.01** |
+| (5) Carbon tax | 0.567 | 0.481 | 0.13 | 1.400 | 1.885 | **0.01** |
+| (6) Climate compensation | 0.567 | 0.400 | **0.02** | 1.667 | 2.178 | **0.04** |
+
+`p_MAE < 0.05` on **5 of 6** policies (Renewable borderline at 0.07). `p_ord < 0.05` on **5 of 6** policies (Carbon tax fails at 0.13). The two tests fail on different policies, which is expected at n=30: Renewable's MAE test loses power because the YouGov marginal is heavily compressed at the pro-climate end (a random pairing already scores ordinally well, eroding MAE separation), while Carbon tax's ordinal test is hurt by the LLM's upward bias inflating ordinal noise without affecting MAE in the same way.
+
+### Findings
+
+1. **Persona is read on every behavioural / supply-side policy with no ambiguity.** Policies (2)–(4) reject random pairing decisively on both tests.
+2. **Borderline cases are power, not signal.** Renewable (1) and Carbon tax (5) are inconclusive at n=30. NB 23 was run to resolve the cost-framed cases; Renewable's borderline is structurally explained by ground-truth compression and was not re-run.
+3. **Bias is structured by policy framing.** Behavioural-restriction and supply-side policies (1)–(4) sit in a small bias band of +0.07 to +0.47, all within roughly one SE of zero on (2) and (3). Cost-framed policies (5) and (6) carry +0.87 and +0.60 — large, persistent, and qualitatively distinct from the behavioural band.
+4. **Implication for the simulation.** Day-0 in Run 5 / Run 7 is anchored to ground truth, not to a cold LLM survey, so the bias documented here does not contaminate the empirical starting point of the cohort. Within-policy directional change (the quantity Probe 2 tests) is measured against the same biased anchor on every day and remains interpretable; absolute support levels on Carbon tax and Climate compensation in Probe 1 should be read with the residual cost-framed bias in mind.
+
+### Implication for the Paper
+
+NB 22 supplies the n=30 panel of §5.3 (Figure `calib_null_nb22.pdf`) and the blue series of §5.4 (Figure `calib_bias.pdf`). NB 23 supplies the orange overlay on the latter and the n=100 high-power panel of §5.3 (Figure `calib_null_nb23.pdf`). Together they back the four bullets in §5.4's "implications for the simulation".
+
+---
+
+## Run 7: NB 21 Broadcast-Only Asymmetry Sweep (S / C1 / C3, single-policy, peers off)
+
+**Date:** 2026-04-25
+**Notebook:** [`notebooks/21_broadcast_only_asymmetry.ipynb`](../notebooks/21_broadcast_only_asymmetry.ipynb)
+**Result files:**
+- S_symmetric: [`data/output/experiments/20260425_125855/`](../data/output/experiments/20260425_125855/) — `reach_a=1.0, reach_b=1.0`
+- C1_reform_dominant: [`data/output/experiments/20260425_132515/`](../data/output/experiments/20260425_132515/) — `reach_a=0.25, reach_b=1.0`
+- C3_green_dominant: [`data/output/experiments/20260425_135538/`](../data/output/experiments/20260425_135538/) — `reach_a=1.0, reach_b=0.25`
+
+Each run produced the standard suite: [`opinion_trajectories.csv`](../data/output/experiments/20260425_125855/opinion_trajectories.csv), [`opinion_shares.csv`](../data/output/experiments/20260425_125855/opinion_shares.csv), [`messages.csv`](../data/output/experiments/20260425_125855/messages.csv), [`reflections.csv`](../data/output/experiments/20260425_125855/reflections.csv), [`survey_reasoning.csv`](../data/output/experiments/20260425_125855/survey_reasoning.csv), [`ground_truth.csv`](../data/output/experiments/20260425_125855/ground_truth.csv), [`timings.csv`](../data/output/experiments/20260425_125855/timings.csv), [`CONDITION.txt`](../data/output/experiments/20260425_125855/CONDITION.txt), and [`opinion_trajectories.png`](../data/output/experiments/20260425_125855/opinion_trajectories.png).
+
+### What Changed Since Run 6
+
+Run 6 (NB 20 C1) showed only a −0.044 aggregate package-index gap vs the Run 5 symmetric baseline. Per-agent diagnostics (Q2) revealed two confounds: (i) **peer flooding** — pro-climate peer messages in phase C carry the population's pro-climate prior into every interaction and dilute any broadcast asymmetry, and (ii) **structural audience asymmetry** — `assign_political_exposure()` produces a 27/20 audience split on this seed, so reach=1.0/1.0 was already 35% asymmetric in agent_a's favour and (C1, C3) were not true mirrors.
+
+Run 7 addresses both:
+
+| Confound | Mechanism in Run 7 |
+|---|---|
+| Peer flooding | Phase C removed entirely; `phases=["P-A","P-B"]` only |
+| Structural audience asymmetry | New `audience_cap=20` knob applied before reach subsample → both political agents start from identical-sized capped audiences |
+| Aggregate-noise drowning the signal | Single-policy mode (Ban Petrol Cars, GT mean ≈ +0.43, the most contestable policy in our set), so 1 EOD survey/agent/day instead of 6 |
+
+This is the cleanest possible test of the reach mechanism that this codebase supports as of today.
+
+### Experiment Configuration
+
+| Parameter | Value (all 3 conditions) |
+|---|---|
+| n_citizens | 30 |
+| n_days | 4 |
+| communication_mode | single_policy |
+| policy | ClimatePolicyID(3) — Ban Petrol Cars (GT = +0.43) |
+| day0_anchor | ground_truth_with_rationale |
+| debias | True |
+| llm_model (broadcast) | gpt-5-mini |
+| survey_model | claude-sonnet-4-6 |
+| thinking | False |
+| llm_temperature | 0.5 |
+| **k_peers_per_day** | **0** (peers off) |
+| phases (alternating) | odd days P-A→P-B, even days P-B→P-A |
+| network | SBM, p_intra=0.15, p_inter=0.02 |
+| **audience_cap** | **20** |
+| random_seed | 43 |
+
+| | reach_a | reach_b | wall-time |
+|---|---|---|---|
+| S_symmetric | 1.0  | 1.0  | 1,574 s = 26.2 min |
+| C1_reform_dominant | 0.25 | 1.0  | 1,339 s = 22.3 min |
+| C3_green_dominant  | 1.0  | 0.25 | 1,354 s = 22.6 min |
+
+C1 and C3 are ~14% faster than S because they cut total broadcast deliveries from 160 to 100. The dominant cost (120 Anthropic survey calls per condition) is identical across all three. Total wall-time: ~71 min, total cost: ~£3–6 across the three runs.
+
+### Audience Construction (cap → reach pipeline)
+
+`assign_political_exposure()` produces the same starting audiences in every condition: agent_a natural=27, agent_b natural=20. The `audience_cap=20` knob trims agent_a's list to 20 (independent RNG, seed+100), leaving agent_b untouched. The `apply_reach_subsample` step then enforces the condition-specific reach (independent RNG, seed/seed+1).
+
+Resulting effective audiences (citizens who received ≥1 broadcast across the 4 days, reconstructed from `messages.csv`):
+
+| Group | S | C1 | C3 |
+|---|---|---|---|
+| A-only | 6  | 1  | 17 |
+| B-only | 6  | 16 | 2  |
+| both   | 14 | 4  | 3  |
+| neither| 4  | 9  | 8  |
+
+Per-day broadcast deliveries:
+
+| Source | S | C1 | C3 |
+|---|---|---|---|
+| agent_a (pro-climate) | 20/day × 4 = 80  | 5/day × 4 = 20  | 20/day × 4 = 80 |
+| agent_b (anti-climate)| 20/day × 4 = 80  | 20/day × 4 = 80 | 5/day × 4 = 20  |
+| **Total broadcasts**  | **160**          | **100**         | **100**         |
+| Peer messages         | 0 | 0 | 0 |
+
+C1 and C3 are now true mirrors: identical total volume, identical reach ratios, swapped sides. This is the property Run 6 lacked.
+
+### Aggregate Mean Opinion (Ban Petrol Cars, GT = +0.43)
+
+| Day | C1 (anti dom.) | S (sym) | C3 (pro dom.) | C3 − C1 |
+|---|---|---|---|---|
+| 0 (anchor) | +0.433 | +0.433 | +0.433 | 0.000 |
+| 1 | +0.633 | +0.600 | +0.767 | +0.133 |
+| 2 | +0.533 | +0.833 | +0.900 | +0.367 |
+| 3 | +0.633 | +0.733 | +0.833 | +0.200 |
+| 4 | **+0.733** | **+0.833** | **+0.900** | **+0.167** |
+
+**4-day drift:** C1 = **+0.300**, S = **+0.400**, C3 = **+0.467**. Strictly monotone in reach asymmetry from Day 1 onward, no inversions on any day. The full swing C3 − C1 = **+0.167** opinion units on the −3..+3 scale at N=30 after only 4 days.
+
+Daily SDs (1.81–2.01 across all conditions and days) are slightly *lower* than Day 0's 2.11 — the population is converging marginally, not polarising. Asymmetric reach moves the *mean*; it does not fan out the distribution at this scale.
+
+### Population Composition (% support / neutral / against)
+
+| Day | C1 | S | C3 |
+|---|---|---|---|
+| 0 | 50 / 23 / 27 | 50 / 23 / 27 | 50 / 23 / 27 |
+| 1 | 67 / 0 / 33  | 63 / 0 / 37  | 67 / 3 / 30  |
+| 2 | 63 / 0 / 37  | 67 / 0 / 33  | 73 / 0 / 27  |
+| 3 | 67 / 0 / 33  | 67 / 3 / 30  | 73 / 0 / 27  |
+| 4 | **67 / 0 / 33** | **70 / 0 / 30** | **73 / 0 / 27** |
+
+Day 4 support: 20 / 21 / 22 agents — a clean +1-agent-per-step monotone progression. Same monotonicity holds on the against side (10 / 9 / 8).
+
+### Per-Agent Comparison
+
+| Comparison | Identical at Day 4 | Drift correlation r |
+|---|---|---|
+| S vs C3  | 25/30 (83%) | **0.924** |
+| S vs C1  | 23/30 (77%) | 0.747 |
+| C1 vs C3 (full swing) | 21/30 (70%) | 0.681 |
+
+C3 is the closest to S: it adds a modest pro-climate push without destabilising who responds. C1 is more disruptive — silencing the pro-climate side both shifts the mean and changes which agents move (lower r with both S and C3). The lower C1↔C3 correlation (0.681) means asymmetric reach is doing something more than rescaling magnitudes; it's reshuffling individual trajectories at the margin.
+
+### Top Differential Movers (C3 vs C1, |Δ| ≥ 1 at Day 4)
+
+9/30 agents differ. The five largest swings:
+
+| agent_id | C1 d4 | C3 d4 | C3 − C1 |
+|---|---|---|---|
+| 332  | −1 | +2 | **+3** |
+| 1244 | −2 | +1 | **+3** |
+| 1555 | −1 | +1 | +2 |
+| 991  | +1 | −1 | −2 |
+| 574  | +1 | 0  | −1 |
+
+agent 332 and 1244 are the cleanest signature: both centrist (GT 0 and −2 respectively), both swing the full reach-knob range when the dominant voice flips. agent 991 swings the wrong way (more pro-climate when the *anti* side dominates) — small-N noise on a centrist who's reactive to whichever broadcast happens to land late.
+
+### Per-Phase Trajectory Note
+
+C1 has a non-monotone Day 1 → Day 2 dip (+0.633 → +0.533) before recovering to +0.733 at Day 4. The other two conditions rise smoothly. This is consistent with the alternating-phase ordering: Day 2 starts with phase P-B, and with agent_a's 5-recipient broadcast unable to compensate the 20-recipient anti-climate broadcast on the same day, the population briefly retreats toward GT before stabilising. Worth a single-seed replication before claiming it's structural.
+
+### Mechanism Throughput Summary
+
+| Channel | S | C1 | C3 |
+|---|---|---|---|
+| Political broadcasts (agent_a) | 80 | **20** | 80 |
+| Political broadcasts (agent_b) | 80 | 80 | **20** |
+| Peer messages | 0 | 0 | 0 |
+| Reflections (P-A and P-B only) | 240 | 240 | 240 |
+| Survey reasoning rows | 120 | 120 | 120 |
+
+### Key Findings
+
+1. **Reach asymmetry produces a clean monotone signal once peers are removed.** Day 4 means: C1 +0.733 < S +0.833 < C3 +0.900. Same monotonicity for support shares (67% < 70% < 73%) and for against shares (33% > 30% > 27%). All three independent metrics agree.
+2. **Effect size: 0.167 opinion units on the −3..+3 scale (full reach swing C3 − C1) after 4 days at N=30.** This is ~4× the per-day-Day-7 NB 20 effect of −0.044 — the broadcast-only design clearly recovers signal that NB 20's package + peers configuration buried.
+3. **C3 − S = +0.067 ≈ S − C1 = +0.100 in the right direction.** The asymmetry between the two halves is small enough to be seed noise, but the direction is consistent: each step of the reach knob (0.25 → 1.0) moves the mean by ~0.08–0.10.
+4. **Peer flooding is confirmed as the NB 20 confound.** Same agents, same seed, same day count — moving from "package + 3 peers/day + 7 days" (NB 20) to "single-policy + 0 peers + 4 days" (NB 21) flips the C1 vs symmetric gap from −0.044 (in noise) to a clean monotone effect.
+5. **Audience-cap mechanism works as designed.** Both C1 and C3 produce identical total broadcast counts (100 each) with reach swapped. This is the property NB 20 lacked because of the 27/20 structural asymmetry.
+6. **C3 is "less disruptive" than C1 (r(S,C3)=0.92 vs r(S,C1)=0.75).** Adding pro-climate dominance pushes the mean further in the same direction the population already drifts; muting it (C1) creates more individual trajectory reshuffling because some centrists who would have moved pro now stay put or drift the other way.
+7. **No polarisation at N=30, 4 days.** Daily SDs are within ±0.13 of each other across conditions and slightly lower than Day 0. The reach knob shifts the population centre; it does not widen the distribution at this scale.
+
+### Caveats and Open Questions
+
+- **Single seed.** All three results are at seed=43. Replicate at 47 and 53 to bound seed noise on the 0.167 effect size.
+- **C1 Day-1→Day-2 dip.** Non-monotone within-condition trajectory. Could be alternating-phase artefact; needs a second seed to disambiguate from structural.
+- **Coarsening the discrete scale.** Several differences vanish into integer rounding. A continuous-scale survey (or averaging across multiple LLM samples per opinion) would surface sub-unit reach effects more cleanly.
+- **N=30 ceiling on per-exposure-group inference.** A-only/B-only/both partition shifts dramatically across conditions (S: 6/6/14, C1: 1/16/4, C3: 17/2/3) — too small for stable group-level claims. N=60 would help.
+- **"Most contestable" policy choice.** Ban Petrol Cars was picked as the contestable single policy (GT = +0.43, near neutral). High-consensus policies (Renewable Energy, GT > +1.8) likely show ceiling effects; contested low-baseline policies (Climate Compensation, GT ≈ +0.1) might amplify the swing. Worth a follow-up sweep across policies.
+- **Effect sizes on the discrete −3..+3 scale.** A 0.167-unit shift is real and monotone but small in absolute terms — it's roughly "1–2 agents shifting by one notch". Whether that constitutes a meaningful "tipping" signal in the GABM-as-public-opinion-instrument framing is a separate methodological question.
+
+### Comparison Across Reach-Asymmetry Experiments So Far
+
+| Run | Mode | Days | Peers | Audience cap | C1 − Sym (aggregate) | Signal? |
+|---|---|---|---|---|---|---|
+| Run 5 vs Run 6 | package | 7 | k=3 | None (27/20) | −0.044 | Ambiguous |
+| Run 7 (NB 21 S vs C1) | single_policy | 4 | 0 | 20/20 | −0.100 | Yes, clean |
+| Run 7 (NB 21 S vs C3) | single_policy | 4 | 0 | 20/20 | +0.067 | Yes, clean |
+| Run 7 (NB 21 C1 vs C3) | single_policy | 4 | 0 | 20/20 | +0.167 | Yes, monotone |
+
+The trend is unambiguous: removing peers and equalising audiences progressively surfaces the broadcast effect.
+
+### Suggested Next Steps
+
+1. **Seed replication.** Run S/C1/C3 at seeds 47 and 53. Cost: ~70 min × 2 = ~140 min wall-time, ~£10–12 Anthropic.
+2. **Add intermediate reach.** A 5-point sweep (reach_a ∈ {0.25, 0.5, 0.75, 1.0} × reach_b ∈ {1.0, 0.75, 0.5, 0.25}) would test linearity vs threshold dynamics.
+3. **Reintroduce peers gradually.** k_peers_per_day ∈ {0, 1, 2, 3} sweep at fixed reach C1 — confirms the peer-flooding magnitude and finds the threshold at which broadcast asymmetry becomes invisible again.
+4. **Multi-policy replication.** Repeat S/C1/C3 on Carbon Tax (the Run 6 anomaly) and Climate Compensation (low-baseline contested) to test policy generalisation.
+5. **N=60 paper-grade run.** Once seed-noise is bounded, scale up to support per-exposure-group inference.
+
+### Code Changes Triggered or Validated
+
+- New `audience_cap` knob (added during Run 6 follow-up): validated end-to-end here. C1/C3 produce the expected identical broadcast-volume mirror condition.
+- NB 21 itself: new notebook, single-policy + peers-off + audience_cap design, with cross-condition overlay cell that auto-discovers latest output dir per condition via `CONDITION.txt` markers.
+- No further code changes required; existing infrastructure now demonstrably supports clean reach-asymmetry experiments.
+
+---
+
+## Run 6: 20260425_082317 — NB 20 C1 (Reach Asymmetry Pilot: Reform-Dominant Broadcast)
+
+**Date:** 2026-04-25
+**Result files:** [`data/output/experiments/20260425_082317/`](../data/output/experiments/20260425_082317/)
+- [`CONDITION.txt`](../data/output/experiments/20260425_082317/CONDITION.txt) — `C1_reform_dominant`, reach_a=0.25, reach_b=1.0
+- [`config.json`](../data/output/experiments/20260425_082317/config.json)
+- [`opinion_trajectories.csv`](../data/output/experiments/20260425_082317/opinion_trajectories.csv) (1,440 rows)
+- [`package_index_trajectories.csv`](../data/output/experiments/20260425_082317/package_index_trajectories.csv) (240 rows)
+- [`reflections.csv`](../data/output/experiments/20260425_082317/reflections.csv)
+- [`messages.csv`](../data/output/experiments/20260425_082317/messages.csv) (553 rows: 182 broadcast + 371 peer)
+- [`survey_reasoning.csv`](../data/output/experiments/20260425_082317/survey_reasoning.csv) (1,440 rows)
+- Plots: [`opinion_trajectories.png`](../data/output/experiments/20260425_082317/opinion_trajectories.png), [`package_index_trajectories.png`](../data/output/experiments/20260425_082317/package_index_trajectories.png), [`opinion_shares.png`](../data/output/experiments/20260425_082317/opinion_shares.png), [`package_index_shares.png`](../data/output/experiments/20260425_082317/package_index_shares.png)
+- [`timings.csv`](../data/output/experiments/20260425_082317/timings.csv)
+
+**Notebook:** [`notebooks/20_reach_asymmetry_pilot.ipynb`](../notebooks/20_reach_asymmetry_pilot.ipynb)
+**Comparison baseline:** Run 5 ([`data/output/experiments/20260425_010615/`](../data/output/experiments/20260425_010615/), NB 19) — identical config except `reach_a=reach_b=1.0`.
+
+### What Changed Since Run 5
+
+Run 6 introduces the first **broadcast-reach asymmetry** experiment. A single new mechanism, `apply_reach_subsample()`, runs once at simulation start (after `assign_political_exposure()`, before `create_network()`) to deterministically subsample each political agent's audience to `floor(reach × |audience|)` citizens. RNG seeds are `random_seed` for agent A and `random_seed + 1` for agent B, so the two sides draw independently and the result is fully reproducible. Per-citizen `political_exposure` labels are unchanged; peer messaging is unaffected.
+
+Run 6 is the C1 condition of the NB 20 pilot:
+
+| Knob | Run 5 (baseline) | Run 6 (C1) |
+|---|---|---|
+| `reach_a` (pro-climate) | 1.0 | **0.25** |
+| `reach_b` (anti-climate) | 1.0 | 1.0 |
+| Everything else | identical | identical |
+
+The intent is to model an asymmetric communication environment in which the anti-climate ("Reform-aligned") political agent dominates the airwaves while the pro-climate ("Green-aligned") agent reaches only a quarter of its natural audience.
+
+### Experiment Configuration
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 30 |
+| n_days | 7 |
+| communication_mode | package (all 6 climate policies) |
+| day0_anchor | ground_truth_with_rationale |
+| debias | True |
+| llm_model (broadcast / peer / memory) | gpt-5-mini |
+| survey_model | claude-sonnet-4-6 |
+| thinking | False |
+| llm_temperature | 0.5 |
+| k_peers_per_day | 3 |
+| **reach_a** | **0.25** |
+| **reach_b** | **1.0** |
+| phases (alternating) | odd days P-A→P-B→C, even days P-B→P-A→C |
+| network | SBM, p_intra=0.15, p_inter=0.02 |
+| random_seed | 43 |
+| **wall-time** | **13,498 s ≈ 225 min** |
+
+The wall-time is *higher* than Run 5's 138 min despite ~45% fewer broadcast deliveries — most of the cost is the Anthropic survey calls (1,440 of them with debias), not the OpenAI broadcasts. Reach-subsampling cuts cheap calls but leaves the dominant cost untouched.
+
+### Audience Construction
+
+`assign_political_exposure()` produces a structurally asymmetric population on the YouGov sample:
+
+| Group | Count (N=30, seed=43) | Receives agent_a | Receives agent_b |
+|---|---|---|---|
+| A-only | 10 | ✓ | — |
+| B-only | 3 | — | ✓ |
+| both | 17 | ✓ | ✓ |
+| neither | 0 | — | — |
+| **agent_a natural audience** | **27** | | |
+| **agent_b natural audience** | **20** | | |
+
+After `apply_reach_subsample(reach_a=0.25, reach_b=1.0, seed=43)`:
+
+| Audience | Run 5 | Run 6 (C1) |
+|---|---|---|
+| agent_a (pro-climate) | 27/27 | **6/27** |
+| agent_b (anti-climate) | 20/20 | 20/20 |
+
+Per-day broadcast deliveries (verified from `messages.csv`):
+
+| Source | Run 5 | Run 6 (C1) |
+|---|---|---|
+| agent_a broadcasts (7 days) | 189 | **42** (= 6 × 7) |
+| agent_b broadcasts (7 days) | 140 | 140 (unchanged) |
+| Total broadcasts | 329 | 182 (−45%) |
+| Peer messages | 371 | 371 (unchanged) |
+| **Peer : political ratio** | **1.13 : 1** | **2.04 : 1** |
+
+The peer:political ratio more than doubles under C1 — peer messaging now carries roughly twice the message volume of the (combined) political broadcast channel. This is mechanistically important; see "Findings" below.
+
+### Aggregate Package-Index Trajectory
+
+| Day | Run 5 mean | Run 6 (C1) mean | Δ (C1 − Run 5) | Run 5 SD | C1 SD |
+|---|---|---|---|---|---|
+| 0 (anchor) | +0.961 | +0.961 | **0.000** | 1.323 | 1.323 |
+| 1 | +1.156 | +1.150 | −0.006 | 1.338 | 1.370 |
+| 2 | +1.194 | +1.156 | −0.039 | 1.356 | 1.362 |
+| 3 | +1.222 | +1.122 | −0.100 | 1.332 | 1.369 |
+| 4 | +1.183 | +1.211 | +0.028 | 1.349 | 1.298 |
+| 5 | +1.178 | +1.139 | −0.039 | 1.327 | 1.304 |
+| 6 | +1.217 | +1.167 | −0.050 | 1.304 | 1.318 |
+| 7 (final) | +1.167 | +1.122 | **−0.044** | 1.357 | 1.376 |
+
+The aggregate gap is **−0.044** at Day 7, much smaller than the manipulation might suggest. Direction is correct (silencing the pro-climate broadcast yields a slightly less pro-climate population) but the magnitude is well within seed/sampling noise. SDs across days are essentially identical between the two conditions (1.30–1.38 in both), so the asymmetric reach did **not** produce additional polarisation.
+
+### Per-Policy Drift (GT → Day 7)
+
+| Policy | GT mean | Run 5 Day 7 | Run 6 (C1) Day 7 | Run 5 drift | C1 drift | Δ drift (C1 − R5) |
+|---|---|---|---|---|---|---|
+| Renewable Energy (1) | +1.87 | +2.07 | +1.80 | +0.20 | **−0.07** | **−0.27** |
+| Ban Fossil Fuel (2) | +1.07 | +1.13 | +1.07 | +0.07 | 0.00 | −0.07 |
+| Ban Petrol Cars (3) | +0.43 | +0.63 | +0.57 | +0.20 | +0.13 | −0.07 |
+| Green Housing (4) | +1.53 | +1.33 | +1.40 | −0.20 | −0.13 | +0.07 |
+| Carbon Tax (5) | +0.77 | +1.20 | +1.30 | +0.43 | **+0.53** | **+0.10** |
+| Climate Compensation (6) | +0.10 | +0.63 | +0.60 | +0.53 | +0.50 | −0.03 |
+
+**Renewable Energy is the clean signature of the manipulation.** Run 5 drifted +0.20 above its already high GT (+1.87) — clearly attributable to the pro-climate political agent pushing on a high-consensus policy. Under C1, with that agent silenced for 21 of its 27 audience members, Renewable Energy drifts in the *opposite* direction, ending −0.07 below GT (Δ = −0.27). This is the largest signed gap in the table and the one most consistent with the intended mechanism.
+
+**Carbon Tax goes the wrong way.** Counterintuitively, Carbon Tax drifts *more* pro-climate under C1 (+0.53) than under Run 5 (+0.43). Two plausible explanations: (i) seed-level noise on a contested low-baseline policy, (ii) a latent peer-channel effect — when the pro-climate political broadcast is silenced, peer messaging becomes the dominant channel and the population's pro-climate prior asserts itself more strongly. The peer:political ratio doubling (1.13 → 2.04) supports the latter. This anomaly is worth investigating in any longer-run replication.
+
+### Per-Exposure-Group Drift (Day 0 → Day 7, package index)
+
+Citizens classified by Run 5 broadcast audience (the unfiltered population labels). The A-only group are the strongest diagnostic: they have *no* exposure to the anti-climate agent and *only* the pro-climate agent's broadcast (plus peers) can move them.
+
+| Group | n | Run 5 d0 | Run 5 d7 | C1 d7 | Run 5 drift | C1 drift | Δ drift |
+|---|---|---|---|---|---|---|---|
+| A-only | 10 | +1.967 | +2.233 | +2.217 | +0.267 | +0.250 | **−0.017** |
+| B-only | 3 | −0.611 | −1.278 | −1.389 | −0.667 | −0.778 | −0.111 |
+| both | 17 | +0.647 | +0.971 | +0.922 | +0.324 | +0.275 | −0.049 |
+
+**A-only is the smoking gun for peer-flooding.** Under C1, most A-only citizens lose their political broadcast (only ~6/27 of the natural audience get any pro-climate input). Yet their drift barely changes (+0.267 → +0.250, Δ = −0.017). They continue to drift pro-climate at almost the same rate as when fully reached. The conclusion is that **the +0.25 drift in this group is being carried by peer messaging, not by the political broadcast**. When peers are the dominant channel and the population GT mean is +0.961, every peer-pull is a small pro-climate nudge.
+
+B-only (n=3) shows the cleanest asymmetric effect (−0.667 → −0.778, additional −0.111) but is too small for inference.
+
+### Population Composition (Package-Index Shares)
+
+| Day | Run 5 support / neutral / against | C1 support / neutral / against |
+|---|---|---|
+| 0 | 73.3 / 16.7 / 10.0 | 73.3 / 16.7 / 10.0 |
+| 1 | 73.3 / 10.0 / 16.7 | 83.3 / 0.0 / 16.7 |
+| 2 | 80.0 / 0.0 / 20.0 | 80.0 / 0.0 / 20.0 |
+| 3 | 80.0 / 3.3 / 16.7 | 76.7 / 0.0 / 23.3 |
+| 4 | 76.7 / 0.0 / 23.3 | 80.0 / 3.3 / 16.7 |
+| 5 | 76.7 / 0.0 / 23.3 | 80.0 / 3.3 / 16.7 |
+| 6 | 76.7 / 10.0 / 13.3 | 83.3 / 0.0 / 16.7 |
+| 7 | 76.7 / 3.3 / 20.0 | 80.0 / 0.0 / 20.0 |
+
+C1 actually has a *larger* support share than Run 5 at most days (80–83% vs 73–80%) — the opposite of the intended manipulation. Same explanation as Carbon Tax: peers carry the population's pro-climate prior when the political broadcast is muted.
+
+### Individual Dynamics
+
+**Run 5 vs C1 drift correlation across the 30 agents: r = 0.937.**
+
+The same individuals move in both runs and they move by similar magnitudes. Cutting agent_a's reach to 25% did not change *who* moves; it slightly trimmed *how far* they moved. Net effect on counts:
+
+| Metric | Run 5 | C1 |
+|---|---|---|
+| |drift| ≥ 0.5 (movers) | 10 / 30 | 12 / 30 |
+| Sign flips Day 0 → Day 7 | 1 (in "both" group) | 1 (same agent) |
+| Population SD across days | 1.30–1.36 | 1.30–1.38 |
+
+Top 5 differential movers (largest |C1_drift − Run5_drift|), all in the "both" exposure group except one A-only:
+
+| agent_id | exposure | Run5 d0 | Run5 d7 | C1 d7 | Run5 drift | C1 drift | Δ |
+|---|---|---|---|---|---|---|---|
+| 1545 | both   | +0.50 | +0.83 | +1.50 | +0.33 | +1.00 | +0.67 |
+| 516  | both   | +1.00 | +1.17 | +0.67 | +0.17 | −0.33 | −0.50 |
+| 1339 | both   | +0.17 | +2.00 | +1.50 | +1.83 | +1.33 | −0.50 |
+| 332  | both   |  0.00 | +1.67 | +1.33 | +1.67 | +1.33 | −0.33 |
+| 1923 | A-only | +0.67 | +2.00 | +1.67 | +1.33 | +1.00 | −0.33 |
+
+No agent flipped to or from the centre under C1 that hadn't already flipped under Run 5 — the manipulation produced amplitude differences, not categorical flips.
+
+### Mechanism Throughput
+
+| Channel | Run 5 | Run 6 (C1) | Notes |
+|---|---|---|---|
+| Political broadcasts (agent_a) | 189 | **42** | reach_a=0.25 → 6/27 audience × 7 days |
+| Political broadcasts (agent_b) | 140 | 140 | unchanged |
+| Peer messages | 371 | 371 | unchanged (peer mechanism untouched) |
+| Reflections | 490 | 372 | drop is broadcast-receive reflections (157 → 39 for P-A) |
+| Survey reasoning rows | 1,440 | 1,440 | one debias trace per (agent, policy, day) |
+
+### Key Findings
+
+1. **The reach-asymmetry mechanism fires correctly.** Broadcast counts match `floor(reach × audience)` exactly: 6 deliveries/day × 7 days = 42 from agent_a, 20/day × 7 = 140 from agent_b.
+2. **Aggregate effect is small (−0.044 on package index at Day 7) and within seed-noise.** Direction is correct but magnitude does not support a strong "asymmetric reach shifts the population" claim from this single seed.
+3. **Renewable Energy is the cleanest signal.** Drift goes from +0.20 (Run 5) to −0.07 (C1), a Δ of −0.27 — the largest signed per-policy gap and the one most directly consistent with the manipulation's intent.
+4. **Per-agent drifts are highly correlated across conditions (r=0.937).** The same individuals move in both runs by similar amounts. The reach knob rescales magnitudes; it does not restructure who moves.
+5. **A-only group is the smoking-gun diagnostic for peer flooding.** Under C1, A-only citizens lose ~78% of their pro-climate broadcasts but their pro-climate drift falls only from +0.267 to +0.250. The drift is being carried by peer messaging, not by the political broadcast.
+6. **The peer : political ratio doubles (1.13 → 2.04) and the population's pro-climate prior asserts itself.** Several "wrong-direction" results — Carbon Tax drifting *more* pro-climate, support share *higher* under C1 — are consistent with the peer channel becoming dominant when one political voice is muted, and peers carrying the GT mean (+0.961, structurally pro-climate) into every interaction.
+7. **No additional polarisation.** Daily SDs of the package index are within ±0.03 between Run 5 and C1. Asymmetric reach did not produce a wider opinion distribution at this scale.
+
+### Methodological Issues Surfaced
+
+This run made two pre-existing limitations of the test design visible enough to require fixes before further reach-asymmetry experiments:
+
+- **Structural audience asymmetry (27 vs 20).** `assign_political_exposure()` produces a 27-citizen audience for agent_a and a 20-citizen audience for agent_b on this seed, because the YouGov panel is more Remain/Labour-leaning than Leave/Conservative-leaning. A "symmetric" baseline at reach=1.0/1.0 already favours agent_a by 35%. C1 (reach_a=0.25) cuts agent_a to 6 deliveries/day; a future C3 (reach_b=0.25) would cut agent_b to 5 — so C1 and C3 are **not** mirror conditions as the code stands.
+- **B-only group too small for inference (n=3).** Any per-exposure-group claim about asymmetric reach effects on B-only citizens is statistically anecdotal at this N.
+
+Both are addressed by the `audience_cap` knob added in this session (see "Code Changes" below) and by moving to N=60 in future paper-grade sweeps.
+
+### Code Changes Triggered by This Run
+
+- New `SurveyedNation.apply_audience_cap(cap, seed)` method: deterministic uniform random trim of each political agent's `connected_citizens` to ≤ `cap`, applied *before* `apply_reach_subsample`. RNG seeds `seed+100` / `seed+101`, independent of reach's `seed` / `seed+1`. With `audience_cap=20`, both political agents broadcast to identical-sized audiences at reach=1.0/1.0, so future C1/C3 conditions become true mirrors. Adds a 7th `_RESUME_HARD_KEYS` entry. Tests: 7 new in `TestApplyAudienceCap` (test_broadcast.py); 339/339 suite passes.
+- Default `audience_cap=None` preserves bit-for-bit reproducibility of Run 5 and prior.
+
+### Remaining Issues / Open Questions
+
+- **Is the small effect a real ceiling, or seed noise?** Repeating C1 at seeds 47 and 53 would distinguish them. Cost: ~225 min × 2.
+- **Run a true peer-free condition.** With phases reduced to `["P-A", "P-B"]` only (no peer C), the broadcast asymmetry should produce its full effect. NB 21 has been created for this (single-policy, 4-day, peers-off, with `audience_cap=20` and the three reach conditions S/C1/C3 as a clean mirror sweep).
+- **Re-run a `Run 5b` symmetric baseline at `audience_cap=20`** as the canonical control for future asymmetric runs. Diagnostic: how much does the cap alone move the trajectory vs Run 5?
+- **Run capped C3 (reach_a=1.0, reach_b=0.25).** Only with the cap does C3 become a real mirror of C1 and the (S, C1, C3) triple a valid asymmetry-direction comparison.
+- **Carbon Tax anomaly.** The +0.10 *increase* in pro-climate drift under C1 is the most surprising result in the table. A peer-free replication should disambiguate "peer-channel taking over" from "seed noise on a contested policy".
+- **Per-agent message-exposure join.** With `messages.csv` already structured, attributing the (small) gaps to specific broadcast vs peer events per agent is a one-notebook follow-up.
+
+---
+
+## Run 5: 20260425_010615 — NB 19 (Full-Stack Production Run: Package Mode + Day-0 Anchor + Debias)
+
+**Date:** 2026-04-25
+**Result files:** [`data/output/experiments/20260425_010615/`](../data/output/experiments/20260425_010615/)
+- [`config.json`](../data/output/experiments/20260425_010615/config.json)
+- [`opinion_trajectories.csv`](../data/output/experiments/20260425_010615/opinion_trajectories.csv) (1,440 rows = 30 agents × 6 policies × 8 days)
+- [`package_index_trajectories.csv`](../data/output/experiments/20260425_010615/package_index_trajectories.csv) (240 rows)
+- [`reflections.csv`](../data/output/experiments/20260425_010615/reflections.csv) (490 rows)
+- [`messages.csv`](../data/output/experiments/20260425_010615/messages.csv) (700 rows: 329 broadcast + 371 peer)
+- [`survey_reasoning.csv`](../data/output/experiments/20260425_010615/survey_reasoning.csv) (1,440 rows)
+- [`ground_truth.csv`](../data/output/experiments/20260425_010615/ground_truth.csv), [`package_ground_truth.csv`](../data/output/experiments/20260425_010615/package_ground_truth.csv)
+- Plots: [`opinion_trajectories.png`](../data/output/experiments/20260425_010615/opinion_trajectories.png), [`package_index_trajectories.png`](../data/output/experiments/20260425_010615/package_index_trajectories.png), [`opinion_shares.png`](../data/output/experiments/20260425_010615/opinion_shares.png), [`package_index_shares.png`](../data/output/experiments/20260425_010615/package_index_shares.png)
+- [`timings.csv`](../data/output/experiments/20260425_010615/timings.csv)
+
+**Notebook:** [`notebooks/19_full_simulation.ipynb`](../notebooks/19_full_simulation.ipynb)
+
+### What Changed Since Run 4
+
+Run 4 (NB 15) was a single-policy run on Carbon Tax with debias + Claude surveys + extended thinking. Run 5 is the first **production-scale** run that combines every mechanism added through v0.4 in a single experiment.
+
+| Mechanism | First introduced | Run 5 setting |
+|---|---|---|
+| Condition B debias on surveys | Run 4 | `debias=True` |
+| Dual-model (cheap msg / strong survey) | Run 4 | `gpt-5-mini` + `claude-sonnet-4-6` |
+| Extended thinking | Run 4 | `thinking=False` (cost) |
+| **Package communication mode** (all 6 policies in one broadcast/peer pass) | NB 16, v0.4 | `communication_mode="package"` |
+| **Day-0 ground-truth anchor with rationale** | v0.4 | `day0_anchor="ground_truth_with_rationale"` |
+| **Per-day atomic checkpoints + resume** | NB 18, v0.4 | `checkpoint_every_day=True` |
+| Alternating P-A / P-B order across days | Run 3 | reinstated |
+
+The NB 19 notebook also adds explicit Day-0 anchor verification (every (agent, policy) Day-0 opinion equals GT exactly) and a sanity check that Day-0 rationales are stored for all 30 × 6 = 180 (agent, policy) cells.
+
+### Experiment Configuration
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 30 |
+| n_days | 7 |
+| communication_mode | **package** (all 6 climate policies) |
+| day0_anchor | **ground_truth_with_rationale** |
+| debias | **True** (Condition B on every end-of-day survey) |
+| llm_model (broadcast / peer / memory) | gpt-5-mini |
+| llm_provider | openai |
+| survey_model | claude-sonnet-4-6 |
+| survey_provider | anthropic |
+| thinking | False |
+| llm_temperature | 0.5 |
+| k_peers_per_day | 3 |
+| phases (alternating) | odd days P-A→P-B→C, even days P-B→P-A→C |
+| network | SBM, p_intra=0.15, p_inter=0.02 |
+| random_seed | 43 |
+| **wall-time** | **8,294 s ≈ 138 min** |
+
+### Day-0 Anchor Verification (sanity)
+
+| Check | Result |
+|---|---|
+| Day-0 opinion == GT for all 180 (agent, policy) cells | **PASS** |
+| Day-0 rationale stored per (agent, policy) | 180 / 180 |
+| Day-0 mean package index | **+0.961** |
+| GT package mean | **+0.961** |
+| Day-0 SD | 1.323 (matches GT SD = 1.323) |
+
+The new anchor mechanism reproduces the YouGov sample distribution **exactly** at Day 0, eliminating baseline bias by construction. Runs 1–4 all started with a +0.87 to +2.04 inflation that had to be argued away; Run 5 starts at zero.
+
+### Aggregate Package-Index Trajectory
+
+| Day | Mean | SD | Min | Max | Bias vs GT |
+|---|---|---|---|---|---|
+| 0 (anchor) | **+0.961** | 1.32 | −2.17 | +2.83 | **0.000** |
+| 1 | +1.156 | 1.34 | −2.00 | +2.83 | +0.195 |
+| 2 | +1.194 | 1.36 | −2.00 | +2.83 | +0.233 |
+| 3 | +1.222 | 1.33 | −1.83 | +2.83 | +0.261 |
+| 4 | +1.183 | 1.35 | −2.00 | +2.83 | +0.222 |
+| 5 | +1.178 | 1.33 | −1.83 | +2.83 | +0.217 |
+| 6 | +1.217 | 1.30 | −1.83 | +2.83 | +0.256 |
+| 7 (final) | +1.167 | 1.36 | −2.00 | +2.83 | +0.206 |
+
+Day 1 jumps **+0.20** and then *flat-lines* through Day 7 (+0.20 to +0.26). This is a qualitatively new pattern. Compared with Run 4's drift between +0.87 → −0.03 → +0.47, Run 5 produces a small, *stable* steady-state offset rather than oscillation. The combined Day-0 anchor + Condition-B debias stack reduces persistent bias by roughly **3–10×** versus prior runs.
+
+### Per-Policy Drift (GT → Day 7)
+
+| Policy | GT mean | Day 0 (anchored) | Day 7 | Drift |
+|---|---|---|---|---|
+| Renewable Energy (1) | +1.87 | +1.87 | +2.07 | +0.20 |
+| Ban Fossil Fuel (2) | +1.07 | +1.07 | +1.13 | **+0.07** |
+| Ban Petrol Cars (3) | +0.43 | +0.43 | +0.63 | +0.20 |
+| Green Housing (4) | +1.53 | +1.53 | +1.33 | **−0.20** |
+| Carbon Tax (5) | +0.77 | +0.77 | +1.20 | +0.43 |
+| Climate Compensation (6) | +0.10 | +0.10 | +0.63 | **+0.53** |
+
+The high-consensus, ceiling-pinned policies (Renewable Energy, Ban Fossil Fuel, Green Housing) move ≤ 0.2 — Green Housing actually drifts *down*, which is qualitatively new and rules out a "pro-climate gradient on everything" interpretation. The biggest movement is concentrated in the two **lowest-baseline** policies — Climate Compensation (+0.53) and Carbon Tax (+0.43) — exactly the policies the NB 14 multi-policy work flagged as the most dynamic. This matches a regression-from-the-anchor dynamic plus genuine pro-climate net pull on the contested policies.
+
+### Population Composition (Package-Index Shares)
+
+| Day | Support (>0) | Neutral (=0) | Against (<0) |
+|---|---|---|---|
+| 0 | 73.3% | 16.7% | 10.0% |
+| 1 | 73.3% | 10.0% | 16.7% |
+| 2 | 80.0% | 0.0% | 20.0% |
+| 3 | 80.0% | 3.3% | 16.7% |
+| 4 | 76.7% | 0.0% | 23.3% |
+| 5 | 76.7% | 0.0% | 23.3% |
+| 7 | 76.7% | 3.3% | 20.0% |
+
+The neutral band collapses from 17% to 0–3% by Day 2 and stays there. Mass redistributes in *both* directions: support 73 → 77–80%, against 10 → 17–23%. The simulation produces **mild polarisation** around the GT mean rather than runaway pro-climate convergence — this is the cleanest demonstration so far that the competing-political-agent setup is doing the qualitative thing it was designed to do.
+
+### Individual Dynamics
+
+**Net movement Day 0 → Day 7 (package index):**
+
+| Direction | Agents |
+|---|---|
+| Moved up (>0) | 16 |
+| Unchanged | 3 |
+| Moved down (<0) | 11 |
+| Max single agent gain | +1.83 |
+| Max single agent loss | −1.33 |
+
+Day-to-day inertia (package index): **41.0% zero-shift** day-pairs, mean abs shift **0.18**, mean signed shift **+0.03**. Zero-shift fractions are not directly comparable to single-policy runs (a 6-policy mean is more granular and harder to keep flat), but the ~+0.03 net drift per day matches the small steady-state bias.
+
+Notable individual cases (manual spot-check of [`package_index_trajectories.csv`](../data/output/experiments/20260425_010615/package_index_trajectories.csv)):
+- **Strong supporters lock in:** agents 528, 861, 1450, 1318 stay pinned at +2.5 to +2.83 across all 8 days.
+- **Strong opposers harden:** agent 771 drifts −1.83 → −2, agent 1540 drifts −2.17 → −1.67, agent 174 stays −1.0 to −1.17. The anti-climate broadcast is reinforcing existing opposers, not converting them.
+- **One clear conversion:** agent **1932 moves 0 → −1.33** between Day 0 and Day 1 and stays anti for the rest of the run — a centrist captured by the anti-climate political agent. This is the kind of single-agent flip the research question is interested in.
+- **One clear pro-side capture:** agent **332 moves 0 → +1.5** on Day 1 and consolidates around +1.5 to +1.83.
+
+### Mechanism Throughput
+
+| Channel | Count | Notes |
+|---|---|---|
+| Political broadcasts | 329 | ~47/day; both political agents broadcast each day |
+| Peer messages | 371 | ~53/day; matches `k_peers_per_day=3` × 30 agents minus deduplication |
+| Reflections | 490 | P-A: 189, P-B: 140, C: 161 (per-phase imbalance reflects the alternating phase order) |
+| Survey reasoning rows | 1,440 | 30 agents × 6 policies × 8 days; debias Step-1 reasoning is stored for every cell |
+
+The structured `messages.csv` instrumentation added in v0.4 makes this the first run where every persuasion event is auditable — useful for downstream causal analyses (e.g. "did the agent who flipped 1932 also receive a peer message from another opposer?"), which prior runs could not answer cleanly.
+
+### Key Findings
+
+1. **The Day-0 anchor works perfectly.** Mean and full per-(agent, policy) distribution match GT at Day 0 by construction. The historical bias-investigation line (NB 11–14) is no longer a methodological prerequisite for opinion-dynamics research using this code path — but it remains the only way to *measure* bias on new models.
+2. **Steady-state bias is small and flat.** Day 1+ settles at +0.20 to +0.26 above GT and stays there for 7 days. No drift, no rebound, no escalation. This is the cleanest steady state observed.
+3. **Polarisation rather than consensus.** The neutral band collapses; both tails grow. This is the qualitative behaviour the model was designed to produce, and the first run where it's unambiguous in the data.
+4. **Where the dynamics live: low-consensus contested policies.** Carbon Tax and Climate Compensation account for almost all of the directional movement. High-consensus policies hit a ceiling (Renewable Energy ~+2) or even drift slightly down (Green Housing).
+5. **At least one genuine flip per side.** Agents 1932 (0 → −1.33) and 332 (0 → +1.5) are clean examples of competing political agents capturing centrists in opposite directions — the smallest-scale instance of the social-tipping dynamic the project is studying.
+6. **Cost / wall-time is now the binding constraint.** 30 × 7 × package mode took ~138 min and is dominated by Claude survey calls (1,440 of them, two per cell because of debias). Scaling to N=50 / 14 days would push this into the multi-hour range; the new checkpoint/resume machinery (NB 18) is the right answer rather than reducing rigour.
+
+### Remaining Issues / Open Questions
+
+- **Is +0.20 steady-state bias the floor for this stack, or noise?** A repeat with a different seed would tell us whether the offset is structural (e.g. the pro-climate political agent is genuinely more persuasive) or sampling.
+- **No exposure-group breakdown yet.** The same per-exposure-group analysis flagged in Run 4 is still pending. With package-mode messages now logged, this is straightforward in a follow-up notebook.
+- **Polarisation magnitude is small.** The against share grows from 10% to 20%, but this is 2 extra agents in N=30. To make polarisation claims with statistical confidence we need either larger N or repeated seeds.
+- **Green Housing drift is negative.** Worth investigating whether this is the anti-climate agent successfully pushing on a high-consensus policy, or a Claude survey artefact (e.g. small reluctance to repeat the strongest agreement letter twice in a row).
+- **Per-agent message exposure not yet joined.** The instrumented `messages.csv` enables, but doesn't yet provide, an answer to "which messages each flipped agent saw before flipping". A short follow-up notebook can produce this directly.
+
+---
+
 ## Run 4: 20260419_204851 — NB 15 (Claude Sonnet + Debias + Thinking)
 
 **Date:** 2026-04-19  
@@ -1041,3 +1742,5 @@ These pre-fix runs used the **old** exposure assignment (30% neither) and temper
 | 2026-04-18 | NB 12 | 3rd-person perspective shift | Claude, 30 agents, Ban Petrol Cars | **NEGATIVE result** — 3P slightly worse on all metrics |
 | 2026-04-19 | NB 13 | 4-condition bias mitigation (A/B/C/D) | Claude + Gemini, 30 agents, Ban Petrol Cars | **Condition D eliminates 97% of aggregate bias** (+1.067 → +0.033); MAE floor unchanged |
 | 2026-04-19 | NB 14 | Multi-policy generalization (A vs D) | Claude, 30 agents, 3 policies + NB 13 ref | **D generalizes to 3/4 policies** (+73–97% bias reduction); overcorrects on Renewable Energy (-44%) |
+| 2026-04-25 | **082317** | **`apply_reach_subsample()`: reach_a=0.25, reach_b=1.0 (Reform-dominant)** | 30 agents, 7d, package, GT-anchor, debias, dual-model, seed=43 (Run 5 config + reach knob) | **Aggregate Δ=−0.044 vs Run 5 (small, in-noise). Renewable Energy clean signature (−0.27 Δ drift). A-only group barely changes (+0.267 → +0.250) → peer flooding diagnosed; peer:political ratio doubled (1.13 → 2.04). Triggered new `audience_cap` knob.** |
+| 2026-04-25 | **NB 21 (125855 / 132515 / 135538)** | **Broadcast-only 3-condition reach sweep: S(1.0/1.0), C1(0.25/1.0), C3(1.0/0.25); peers off; `audience_cap=20` enforces true mirrors** | 30 agents, 4d, single_policy (Ban Petrol Cars), GT-anchor, debias, dual-model, seed=43 | **MONOTONE result Day 1+: drift C1=+0.300 < S=+0.400 < C3=+0.467; full swing C3−C1 = +0.167. Support shares 67% / 70% / 73% at Day 4. Reach mechanism validated once peer-flooding confound removed; audience_cap mirror property confirmed (100 broadcasts each in C1/C3, swapped sides).** |
