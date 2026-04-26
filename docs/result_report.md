@@ -11,16 +11,171 @@ Which results back which sections of the seminar paper draft. Use this to spot-c
 
 | Paper section | Source run / notebook | Result dir | Figures (`paper/figures/`) | What to verify |
 |---|---|---|---|---|
-| §4.1 Probe 1 — full simulation under symmetric broadcasts | Run 5 (NB 19) | [`data/output/experiments/20260425_010615/`](../data/output/experiments/20260425_010615/) | `probe1_package_shares.pdf`, `probe1_package_index.pdf`, `probe1_policy_shares.pdf`, `probe1_policy_index.pdf` | Day-0 package mean +0.96; package-mean plateau +1.16 to +1.22; per-policy means and shares (Carbon tax +0.77→+1.20, Climate compensation +0.10→~+0.65, Green housing +1.53→+1.33); package support share 73–80%, against 13–23% |
-| §4.2 Probe 2 — one structural lever registers a signal | Run 7 (NB 21) | [`data/output/experiments/20260425_125855/`](../data/output/experiments/20260425_125855/) (S), [`20260425_132515/`](../data/output/experiments/20260425_132515/) (C1), [`20260425_135538/`](../data/output/experiments/20260425_135538/) (C3) | `probe2_means.pdf`, `probe2_shares_by_condition.pdf` | Day-0 anchor +0.43; Day-4 means C1 +0.73 < S +0.83 < C3 +0.90; Day-4 supporting shares 67/70/73; monotone ordering from Day 2 onward |
-| §5 Calibration — persona signal (permutation null, n=30) | NB 22 | [`data/output/calibration/20260425_203841/`](../data/output/calibration/20260425_203841/) | `calib_null_nb22.pdf` | `p_MAE < 0.05` on 5/6 policies (Renewable borderline at 0.07); `p_ord < 0.05` on 5/6 (Carbon tax fails at 0.13); Spearman ρ range 0.25–0.63 across the six policies |
-| §5 Calibration — higher-power persona signal (n=100) | NB 23 | [`data/output/calibration/20260425_211242_persona/`](../data/output/calibration/20260425_211242_persona/) | `calib_null_nb23.pdf` | Carbon tax `p_ord=0.017`, `p_MAE<10⁻³`, ρ=0.41; Climate compensation `p_ord<10⁻³`, `p_MAE<10⁻³`, ρ=0.53; realised MAE 1.29 vs null 1.66 (Carbon tax) and 1.42 vs null 2.15 (Climate compensation) |
-| §5.4 Per-policy bias and implications | NB 22 + NB 23 | both calibration dirs | `calib_bias.pdf` | Behavioural-policy bias band +0.07 to +0.47 (Ban petrol cars +0.07, Ban fossil fuels +0.13, Green housing +0.30, Renewable +0.47); cost-framed bias +0.87 / +0.60 at n=30, +0.85 / +0.48 at n=100 |
+| §4.1 Probe 1 — end-to-end run under symmetric broadcasts | Run 5 (NB 19) | [`data/output/experiments/20260425_010615/`](../data/output/experiments/20260425_010615/) | `probe1_package_shares.pdf`, `probe1_package_index.pdf`, `probe1_policy_shares.pdf`, `probe1_policy_index.pdf` | Day-0 package mean +0.96; package-mean plateau +1.16 to +1.22; per-policy means and shares (Carbon tax +0.77→+1.20, Climate compensation +0.10→~+0.65, Green housing +1.53→+1.33); package support share 73–80%, against 13–23% |
+| §4.2 Probe 2 — reach asymmetry registers a signal | Run 7 (NB 21) | [`data/output/experiments/20260425_125855/`](../data/output/experiments/20260425_125855/) (S), [`20260425_132515/`](../data/output/experiments/20260425_132515/) (C1), [`20260425_135538/`](../data/output/experiments/20260425_135538/) (C3) | `probe2_means.pdf`, `probe2_shares_by_condition.pdf` | Day-0 anchor +0.43; Day-4 means C1 +0.73 < S +0.83 < C3 +0.90; Day-4 supporting shares 67/70/73; monotone ordering from Day 2 onward |
+| §5 Evaluation — persona signal (shuffle test, n=30) | NB 22 | [`data/output/calibration/20260425_203841/`](../data/output/calibration/20260425_203841/) | `calib_null_sixpolicy.pdf` | `p_MAE < 0.05` on 5/6 policies (Renewable borderline at 0.07); `p_ord < 0.05` on 5/6 (Carbon tax fails at 0.13); Spearman ρ range 0.25–0.63 across the six policies |
+| §5 Evaluation — higher-power persona signal (n=100) | NB 23 | [`data/output/calibration/20260425_211242_persona/`](../data/output/calibration/20260425_211242_persona/) | `calib_null_followup.pdf` | Carbon tax `p_ord=0.017`, `p_MAE<10⁻³`, ρ=0.41; Climate compensation `p_ord<10⁻³`, `p_MAE<10⁻³`, ρ=0.53; realised MAE 1.29 vs null 1.66 (Carbon tax) and 1.42 vs null 2.15 (Climate compensation) |
+| §5.4 Residual bias and what it means for the simulation | NB 22 + NB 23 | both calibration dirs | `calib_bias.pdf` | Behavioural-policy bias band +0.07 to +0.47 (Ban petrol cars +0.07, Ban fossil fuels +0.13, Green housing +0.30, Renewable +0.47); cost-framed bias +0.87 / +0.60 at n=30, +0.85 / +0.48 at n=100 |
 
 Notes:
 - Probe 1 and Probe 2 in the paper correspond to Run 5 and Run 7 in this report; the "Run N" labelling is repository-internal only and does not appear in the paper.
 - The calibration-figure script (`paper/figures/calibration_figures.py`) regenerates the permutation null at B=1000 for visual consistency between NB 22 and NB 23. NB 22's stored `permutation_null.csv` was computed at B=100 (the in-prose p-values quoted in §5.3 come from the CSV; figure-displayed p-values reflect B=1000).
 - NB 23's exclusion list (30 main-run respondent IDs) is recorded in `summary.json` so the n=100 sample is provably disjoint from the n=30 simulation cohort.
+
+---
+
+## Run 8: NB 21 Broadcast-Only Asymmetry Replication Across Seeds (43 / 47 / 53)
+
+**Date:** 2026-04-26
+**Notebook:** [`notebooks/21_broadcast_only_asymmetry.ipynb`](../notebooks/21_broadcast_only_asymmetry.ipynb)
+
+**Result files:**
+- Seed 43 reference (Run 7): S [`data/output/experiments/20260425_125855/`](../data/output/experiments/20260425_125855/), C1 [`20260425_132515/`](../data/output/experiments/20260425_132515/), C3 [`20260425_135538/`](../data/output/experiments/20260425_135538/)
+- Seed 47 replication: S [`data/output/experiments/20260426_172247/`](../data/output/experiments/20260426_172247/), C1 [`20260426_180114/`](../data/output/experiments/20260426_180114/), C3 [`20260426_182614/`](../data/output/experiments/20260426_182614/)
+- Seed 53 replication: S [`data/output/experiments/20260426_185644/`](../data/output/experiments/20260426_185644/), C1 [`20260426_192446/`](../data/output/experiments/20260426_192446/), C3 [`20260426_202955/`](../data/output/experiments/20260426_202955/)
+
+This section is the cross-seed read of NB 21. Run 7 below remains the full single-seed diagnostic write-up for seed 43; the purpose here is to ask whether the same peers-off, audience-capped asymmetry design survives across independently sampled seed-47 and seed-53 cohorts.
+
+### What Changed Since Run 7
+
+No code changes. The same NB 21 design was re-run at `random_seed=47` and `random_seed=53`, keeping the prompt stack, models, alternating P-A/P-B order, `audience_cap=20`, and peers-off design fixed. Only the sampled 30-person cohort and the deterministic cap/reach draws changed.
+
+### Shared Configuration
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 30 |
+| n_days | 4 |
+| communication_mode | single_policy |
+| policy | ClimatePolicyID(3) — Ban Petrol Cars |
+| day0_anchor | ground_truth_with_rationale |
+| debias | True |
+| llm_model (broadcast) | gpt-5-mini |
+| survey_model | claude-sonnet-4-6 |
+| thinking | False |
+| llm_temperature | 0.5 |
+| k_peers_per_day | 0 |
+| phases (alternating) | odd days P-A→P-B, even days P-B→P-A |
+| network | SBM, p_intra=0.15, p_inter=0.02 |
+| audience_cap | 20 |
+| seeds tested | 43, 47, 53 |
+
+| Seed | S wall-time | C1 wall-time | C3 wall-time | Total |
+|---|---|---|---|---|
+| 43 | 26.2 min | 22.3 min | 22.6 min | 71.1 min |
+| 47 | 30.8 min | 22.1 min | 22.9 min | 75.9 min |
+| 53 | 24.0 min | 22.5 min | 21.5 min | 68.0 min |
+
+The delivery budget remains structurally identical across seeds: S always delivers 80 pro-climate + 80 anti-climate broadcasts, while C1 and C3 each deliver 20 on the reduced side and 80 on the full-reach side. What changes across seeds is the sampled cohort's Day-0 baseline and the overlap structure of the effective audiences.
+
+### Cohort Baselines and Natural Exposure
+
+| Seed | GT mean | Day 0 support / neutral / against | Natural exposure A-only / B-only / both / neither | Natural audiences |
+|---|---|---|---|---|
+| 43 | +0.43 | 50 / 23 / 27 | 10 / 3 / 17 / 0 | agent_a=27, agent_b=20 |
+| 47 | -0.27 | 37 / 17 / 47 | 7 / 1 / 21 / 1 | agent_a=28, agent_b=22 |
+| 53 | 0.00 | 47 / 10 / 43 | 6 / 5 / 18 / 1 | agent_a=24, agent_b=23 |
+
+This is the main reason the effect sizes differ. Seed 43 starts mildly pro-climate, seed 47 starts mildly anti-climate, and seed 53 is almost exactly centred. The reach-asymmetry design is therefore being tested on three substantively different cohorts, not just three RNG perturbations around the same mean.
+
+### Effective Delivery Groups After Cap + Reach
+
+Counts below are reconstructed from `messages.csv` and therefore refer to citizens who actually received at least one political broadcast during the 4-day run.
+
+| Seed | Condition | A-only | B-only | both | neither | agent_a/day | agent_b/day |
+|---|---|---|---|---|---|---|---|
+| 43 | S | 6 | 6 | 14 | 4 | 20 | 20 |
+| 43 | C1 | 1 | 16 | 4 | 9 | 5 | 20 |
+| 43 | C3 | 17 | 2 | 3 | 8 | 20 | 5 |
+| 47 | S | 6 | 6 | 14 | 4 | 20 | 20 |
+| 47 | C1 | 2 | 17 | 3 | 8 | 5 | 20 |
+| 47 | C3 | 15 | 0 | 5 | 10 | 20 | 5 |
+| 53 | S | 7 | 7 | 13 | 3 | 20 | 20 |
+| 53 | C1 | 1 | 16 | 4 | 9 | 5 | 20 |
+| 53 | C3 | 16 | 1 | 4 | 9 | 20 | 5 |
+
+The cap-and-reach mechanism behaves exactly as intended on every seed: identical per-day audience sizes inside each condition and a clean C1/C3 mirror on total broadcast volume. What varies is overlap. Seed 47's Green-dominant run, for example, leaves zero B-only citizens at Day 4 because the reduced anti-climate audience is entirely nested inside the pro-climate side's broader reach.
+
+### Aggregate Mean Opinion (Ban Petrol Cars)
+
+| Seed | Day | C1 | S | C3 | Ordered? |
+|---|---|---|---|---|---|
+| 43 | 0 | +0.433 | +0.433 | +0.433 | — |
+| 43 | 1 | +0.633 | +0.600 | +0.767 | No |
+| 43 | 2 | +0.533 | +0.833 | +0.900 | Yes |
+| 43 | 3 | +0.633 | +0.733 | +0.833 | Yes |
+| 43 | 4 | +0.733 | +0.833 | +0.900 | Yes |
+| 47 | 0 | -0.267 | -0.267 | -0.267 | — |
+| 47 | 1 | -0.133 | +0.233 | +0.833 | Yes |
+| 47 | 2 | +0.067 | +0.367 | +0.633 | Yes |
+| 47 | 3 | -0.133 | +0.233 | +0.567 | Yes |
+| 47 | 4 | -0.133 | +0.500 | +0.667 | Yes |
+| 53 | 0 | +0.000 | +0.000 | +0.000 | — |
+| 53 | 1 | +0.067 | +0.300 | +0.533 | Yes |
+| 53 | 2 | +0.067 | +0.167 | +0.500 | Yes |
+| 53 | 3 | -0.067 | +0.167 | +0.567 | Yes |
+| 53 | 4 | -0.100 | +0.233 | +0.667 | Yes |
+
+By Day 4 the mean ordering holds on all three seeds. It is monotone from Day 1 onward on seeds 47 and 53, and from Day 2 onward on seed 43 (where Day 1 has a small C1 > S inversion despite the expected C3 > S gap).
+
+### Day-4 Summary
+
+| Seed | C1 day 4 | S day 4 | C3 day 4 | C1 drift | S drift | C3 drift | C3 − C1 swing |
+|---|---|---|---|---|---|---|---|
+| 43 | +0.733 | +0.833 | +0.900 | +0.300 | +0.400 | +0.467 | +0.167 |
+| 47 | -0.133 | +0.500 | +0.667 | +0.133 | +0.767 | +0.933 | +0.800 |
+| 53 | -0.100 | +0.233 | +0.667 | -0.100 | +0.233 | +0.667 | +0.767 |
+| Mean across seeds | +0.167 | +0.522 | +0.744 | +0.111 | +0.467 | +0.689 | +0.578 |
+
+The large story is robustness with strong seed sensitivity in magnitude. Seed 43 gives the smallest swing (+0.167). Seeds 47 and 53 produce much larger separations (+0.800 and +0.767), largely because their cohorts start less pro-climate and therefore leave much more room for the anti-dominant condition to suppress support.
+
+### Population Composition at Day 4
+
+| Seed | C1 support / against | S support / against | C3 support / against |
+|---|---|---|---|
+| 43 | 67 / 33 | 70 / 30 | 73 / 27 |
+| 47 | 40 / 60 | 63 / 37 | 63 / 37 |
+| 53 | 53 / 47 | 60 / 40 | 70 / 30 |
+
+Support-share ordering is therefore slightly noisier than mean ordering. Seed 43 and seed 53 show the expected monotone support gradient at Day 4. Seed 47 shows a tie between S and C3 on support shares (both 63%), even though the mean still cleanly orders C1 < S < C3; on the coarse 7-point scale, the C3 advantage in seed 47 appears mostly as more intensity among supporters rather than a larger supporter count.
+
+### Per-Agent Comparison Across Conditions
+
+| Seed | S vs C3 identical at Day 4 / drift r | S vs C1 identical at Day 4 / drift r | C1 vs C3 identical at Day 4 / drift r |
+|---|---|---|---|
+| 43 | 25 / 0.924 | 23 / 0.747 | 21 / 0.681 |
+| 47 | 21 / 0.687 | 15 / 0.453 | 13 / 0.492 |
+| 53 | 17 / 0.677 | 18 / 0.750 | 14 / 0.493 |
+
+The mean effect is robust, but the individual-level path is seed-sensitive. Seed 43 preserves the earlier pattern where S is much closer to C3 than to C1. Seed 47 still shows S closer to C3, but much less tightly. Seed 53 partially flips that comparison on the drift correlation, with S closer to C1 than to C3. So the sign of the reach effect is robust; the claim that one side is systematically the "less disruptive" variant is not yet robust enough to elevate into the paper.
+
+### Daily Dispersion
+
+Across all three seeds, Day 4 standard deviations stay at or below the Day-0 level in every condition: seed 43 falls from 2.11 to 1.81-1.98, seed 47 from 2.27 to 1.74-1.90, and seed 53 from 2.23 to 2.06-2.17. The broadcast asymmetry continues to move the cohort mean without generating wider disagreement at this scale.
+
+### Key Findings
+
+1. **The mean-ordering result replicates.** By Day 4 all three seeds satisfy `C1 < S < C3` on the opinion mean. Two of the three seeds satisfy it from Day 1 onward; all three satisfy it from Day 2 onward.
+2. **Effect size is strongly cohort-dependent.** The Day-4 full swing `C3 - C1` ranges from **+0.167** (seed 43) to **+0.800** (seed 47) and **+0.767** (seed 53), with a three-seed average of **+0.578**. The design is robust to seed at the sign level, not at the magnitude level.
+3. **The cohort baseline matters as much as the reach lever.** Seed 43 starts mildly pro-climate (`GT=+0.43`), seed 47 mildly anti-climate (`GT=-0.27`), and seed 53 roughly neutral (`GT=0.00`). These starting points explain much of the variation in swing size.
+4. **Support shares are a blunter diagnostic than means.** Day-4 support shares are monotone on seeds 43 and 53, but seed 47 ends in a tie between S and C3 (63 / 63) despite a clear mean gap (+0.50 vs +0.67). The integer survey scale compresses some of the treatment effect into intensity rather than count changes.
+5. **The audience-cap mirror property is fully validated.** Every seed yields the intended 20/20 capped baseline, 5/20 in C1, and 20/5 in C3. The earlier NB 20 confound is gone.
+6. **No evidence of added polarisation at N=30, 4 days.** Dispersion does not widen under asymmetry on any seed; the effect continues to operate as a shift in the centre of the distribution.
+
+### Interpretation
+
+The clean conclusion is that the broadcast-only asymmetry mechanism is real, but the current paper should describe it as a **directionally robust small-N result** rather than as a stable effect-size estimate. The three seeds agree on the sign and final-day ordering. They disagree sharply on magnitude because the sampled cohorts differ materially in Day-0 baseline and exposure composition. Seed 43 remains the most conservative illustration; seed 47 and seed 53 show that once the sampled cohort is less pro-climate at baseline, the same reach manipulation can produce a much larger final gap.
+
+### Remaining Issues / Open Questions
+
+- **Effect-size stability is still open.** Three seeds are enough to reject the idea that seed 43 was a one-off fluke, but not enough to estimate a paper-grade mean effect with confidence.
+- **Share-based claims should be phrased carefully.** Means replicate more cleanly than support shares because a 30-agent sample on a 7-point scale is coarse.
+- **The seed-47 cohort is unusually favourable to a large asymmetry effect.** With only one B-only citizen and 21 naturally in `both`, the effective overlap structure leaves more room for reach to re-sort exposure sharply.
+- **The per-agent "less disruptive" story is not yet robust.** Seed 43 suggested C3 was consistently closer to S than C1 was; seeds 47 and 53 weaken that claim.
+
+### Implication for the Paper
+
+Run 8 does not replace the current Probe-2 source run in the paper; it supplies the replication evidence for deciding how strongly the main text should state the asymmetry claim and what should be tabulated in the SI. The main-text figure can still use seed 43 as the concrete worked example, but any strengthened prose should be grounded in the three-seed result reported here rather than in Run 7 alone.
 
 ---
 
@@ -86,7 +241,7 @@ NB 23 is the high-power complement to NB 22. Together they support §5.3 (person
 
 ### Purpose
 
-Calibration check on the survey-path component used in Run 5 (NB 19) and Run 7 (NB 21). Holds the agent in isolation (no memory, no broadcasts, no peer exchange, opinion history cleared) and asks two questions: (i) does Sonnet under two-step debias actually read the persona it is given, or does it sample from a marginal distribution that happens to overlap the YouGov one? and (ii) what is the residual per-policy bias the production survey path leaves behind?
+Evaluation of the survey-path component used in Run 5 (NB 19) and Run 7 (NB 21). Holds the agent in isolation (no memory, no broadcasts, no peer exchange, opinion history cleared) and asks two questions: (i) does Sonnet under two-step debias actually read the persona it is given, or does it sample from a marginal distribution that happens to overlap the YouGov one? and (ii) what is the residual per-policy bias the production survey path leaves behind?
 
 ### Configuration
 
@@ -144,7 +299,7 @@ Calibration check on the survey-path component used in Run 5 (NB 19) and Run 7 (
 
 ### Implication for the Paper
 
-NB 22 supplies the n=30 panel of §5.3 (Figure `calib_null_nb22.pdf`) and the blue series of §5.4 (Figure `calib_bias.pdf`). NB 23 supplies the orange overlay on the latter and the n=100 high-power panel of §5.3 (Figure `calib_null_nb23.pdf`). Together they back the four bullets in §5.4's "implications for the simulation".
+NB 22 supplies the n=30 panel of §5.3 (Figure `calib_null_sixpolicy.pdf`) and the blue series of §5.4 (Figure `calib_bias.pdf`). NB 23 supplies the orange overlay on the latter and the n=100 high-power panel of §5.3 (Figure `calib_null_followup.pdf`). Together they back the four bullets in §5.4's "implications for the simulation".
 
 ---
 
@@ -1744,3 +1899,4 @@ These pre-fix runs used the **old** exposure assignment (30% neither) and temper
 | 2026-04-19 | NB 14 | Multi-policy generalization (A vs D) | Claude, 30 agents, 3 policies + NB 13 ref | **D generalizes to 3/4 policies** (+73–97% bias reduction); overcorrects on Renewable Energy (-44%) |
 | 2026-04-25 | **082317** | **`apply_reach_subsample()`: reach_a=0.25, reach_b=1.0 (Reform-dominant)** | 30 agents, 7d, package, GT-anchor, debias, dual-model, seed=43 (Run 5 config + reach knob) | **Aggregate Δ=−0.044 vs Run 5 (small, in-noise). Renewable Energy clean signature (−0.27 Δ drift). A-only group barely changes (+0.267 → +0.250) → peer flooding diagnosed; peer:political ratio doubled (1.13 → 2.04). Triggered new `audience_cap` knob.** |
 | 2026-04-25 | **NB 21 (125855 / 132515 / 135538)** | **Broadcast-only 3-condition reach sweep: S(1.0/1.0), C1(0.25/1.0), C3(1.0/0.25); peers off; `audience_cap=20` enforces true mirrors** | 30 agents, 4d, single_policy (Ban Petrol Cars), GT-anchor, debias, dual-model, seed=43 | **MONOTONE result Day 1+: drift C1=+0.300 < S=+0.400 < C3=+0.467; full swing C3−C1 = +0.167. Support shares 67% / 70% / 73% at Day 4. Reach mechanism validated once peer-flooding confound removed; audience_cap mirror property confirmed (100 broadcasts each in C1/C3, swapped sides).** |
+| 2026-04-26 | **Run 8 / NB 21 multi-seed replication (172247 / 180114 / 182614 / 185644 / 192446 / 202955)** | **No code changes; replicated NB 21 at seeds 47 and 53 and compared against seed 43** | 30 agents, 4d, single_policy, peers off, `audience_cap=20`, seeds 43 / 47 / 53 | **Day-4 mean ordering holds on all 3 seeds: C1 < S < C3. Full swing ranges +0.167 to +0.800 (3-seed mean +0.578). Support-share ordering is monotone on 2/3 seeds and tied on seed 47. Main implication: the sign is robust, the magnitude is cohort-sensitive.** |
