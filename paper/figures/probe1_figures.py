@@ -3,7 +3,7 @@ Generate Probe 1 (full simulation under symmetric broadcasts) figures for the
 seminar paper.
 
 Reads the saved CSVs under data/output/experiments/20260425_010615/ and writes
-four PDF files into paper/figures/:
+PDF and PNG versions of four figures into paper/figures/:
 
   - probe1_package_shares.pdf        Population shares (against / neutral /
                                      support) on the climate-policy package.
@@ -44,11 +44,14 @@ C_AGAINST = "#de2d26"
 C_LINE = "black"
 C_AGENT = "steelblue"
 C_GT = "#d62728"
+PNG_DPI = 300
 
 
 def _save(fig, name: str) -> Path:
     out = FIG_DIR / name
     fig.savefig(out, format="pdf", bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), format="png", dpi=PNG_DPI,
+                bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return out
 

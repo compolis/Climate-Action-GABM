@@ -1,0 +1,10 @@
+NB21 broadcast-only asymmetry
+condition=C1_reform_dominant
+reach_a=0.25
+reach_b=1.0
+audience_cap=20
+policy=ClimatePolicyID(3)
+n_citizens=30
+n_days=4
+seed=53
+phases=P-A,P-B (no peer C)
