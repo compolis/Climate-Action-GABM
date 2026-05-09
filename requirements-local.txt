@@ -1,0 +1,21 @@
+# Optional dependencies for the `provider="local"` LLM backend.
+#
+# These are NOT required for cloud-only runs (OpenAI / GenAI / Anthropic).
+# Install only the runtime that matches your hardware. All four runtimes
+# expose the same OpenAI-compatible Chat Completions API, so the simulation
+# code path is identical regardless of which one you pick.
+#
+# Install:  pip install -r requirements-local.txt   (only if you have all 3)
+# More commonly, install just one of the lines below.
+
+# Apple Silicon (M-series Macs). Recommended local backend for laptop runs.
+mlx-lm>=0.22 ; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Linux + NVIDIA GPU (workstation or HPC). Recommended for scaled experiments.
+# vllm>=0.7 ; sys_platform == "linux"
+
+# Cross-platform binary — install Ollama from https://ollama.com/download
+# (it is NOT a pip package). After installing, run `ollama serve`.
+
+# Server-health check helper (already pulled in transitively, listed for clarity).
+requests>=2.31

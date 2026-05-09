@@ -89,8 +89,10 @@ The exact config dict that produced the run. Most important keys for review:
 | `day0_anchor` | `"llm_survey"`, `"ground_truth"`, or `"ground_truth_with_rationale"`. Controls how Day-0 opinions are set. |
 | `k_peers_per_day` | Max number of peer-message recipients per citizen per day in Phase C. |
 | `network_type`, `p_intra`, `p_inter`, `block_sizes` | Stochastic-block-model parameters for the citizen network. |
-| `llm_model` / `llm_provider` / `llm_temperature` | LLM used for **messaging** (broadcasts, peer messages, reflections). |
+| `llm_model` / `llm_provider` / `llm_temperature` | LLM used for **messaging** (broadcasts, peer messages, reflections). `llm_provider` is one of `"openai"`, `"genai"`, `"anthropic"`, `"local"`. |
 | `survey_model` / `survey_provider` / `thinking` / `debias` | LLM used for **end-of-day surveys**, plus whether extended-thinking and the Condition-B anti-sycophancy two-step survey are on. |
+| `local_base_url` / `local_extra_body` / `local_timeout_s` | Only used when `llm_provider="local"` (or `survey_provider="local"`). See [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md). All optional with env-var / built-in defaults. |
+| `local_base_url` / `local_extra_body` / `local_timeout_s` | Only used when `llm_provider="local"` (or `survey_provider="local"`). See [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md). All optional with env-var / built-in defaults. |
 | `random_seed` | Seed for sampling YouGov rows and SBM edges. |
 
 The two-LLM split lets us message with a cheap fast model and survey with a careful, less-biased model.
@@ -335,8 +337,8 @@ Hard-fail (raises `ValueError`):
 - Active agent ID set differs from the checkpoint
 
 Warn-only (proceeds, but logs at `WARNING` level):
-
-- `llm_model`, `llm_provider`, `survey_model`, `survey_provider`, `debias`, `thinking`, `llm_temperature`
+, `local_base_url`, `local_extra_body`, `local_timeout_s`
+- `llm_model`, `llm_provider`, `survey_model`, `survey_provider`, `debias`, `thinking`, `llm_temperature`, `local_base_url`, `local_extra_body`, `local_timeout_s`
 
 ### Caveat
 
