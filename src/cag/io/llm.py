@@ -5,6 +5,13 @@ Provides three functions:
     send_chat          — send a system + user message pair and get a response string
     load_api_key       — read an API key from CSV or environment variable
     parse_letter_response — extract a single A-G letter from free-text LLM output
+
+Supported providers: ``openai``, ``genai``, ``anthropic``, ``local``.
+
+The ``local`` provider routes calls to any OpenAI-compatible HTTP server
+(mlx-lm, Ollama, vLLM, sglang, llama.cpp/llama-server, LM Studio, ...).
+Server location and per-call quirks are configured via :func:`configure_local`
+or environment variables — see that function's docstring for details.
 """
 
 import csv
@@ -15,6 +22,139 @@ import re
 from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_KEY_CSV = _REPO_ROOT / "data" / "api_key.csv"
+
+
+# ---------------------------------------------------------------------------
+# Local-provider runtime config (settable by sim.py at startup)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_LOCAL_BASE_URL = "http://localhost:8080/v1"
+_DEFAULT_LOCAL_TIMEOUT_S = 600.0
+
+_LOCAL_CONFIG: dict = {
+    "base_url": None,    # None → resolved from env or default
+    "extra_body": None,  # user-supplied dict merged on top of model registry entry
+    "timeout_s": None,   # None → default
+}
+
+
+def configure_local(base_url=None, extra_body=None, timeout_s=None):
+    """Set process-wide defaults for the ``local`` provider.
+
+    Called once by ``sim.py`` at simulation start. Any value left as ``None``
+    falls back to (in order): the matching ``CAG_LOCAL_*`` environment
+    variable, then a built-in default.
+
+    Parameters
+    ----------
+    base_url : str or None
+        OpenAI-compatible endpoint, e.g. ``http://localhost:8080/v1``.
+    extra_body : dict or None
+        Extra request-body keys merged on top of the model registry entry.
+        Use this to override sampling presets or pass server-specific knobs
+        (e.g. ``{"chat_template_kwargs": {"enable_thinking": False}}``).
+    timeout_s : float or None
+        Per-call HTTP timeout in seconds. Local thinking calls can run for
+        90+ s, so the default is much higher than the OpenAI client default.
+    """
+    if base_url is not None:
+        _LOCAL_CONFIG["base_url"] = base_url
+    if extra_body is not None:
+        _LOCAL_CONFIG["extra_body"] = dict(extra_body)
+    if timeout_s is not None:
+        _LOCAL_CONFIG["timeout_s"] = float(timeout_s)
+
+
+def _resolve_local_base_url():
+    return (
+        _LOCAL_CONFIG.get("base_url")
+        or os.environ.get("CAG_LOCAL_BASE_URL")
+        or _DEFAULT_LOCAL_BASE_URL
+    )
+
+
+def _resolve_local_timeout():
+    cfg = _LOCAL_CONFIG.get("timeout_s")
+    if cfg is not None:
+        return cfg
+    env = os.environ.get("CAG_LOCAL_TIMEOUT_S")
+    if env:
+        try:
+            return float(env)
+        except ValueError:
+            pass
+    return _DEFAULT_LOCAL_TIMEOUT_S
+
+
+# ---------------------------------------------------------------------------
+# Per-model defaults for local servers
+# ---------------------------------------------------------------------------
+#
+# Substring-keyed (lowercase). First match wins. Each entry may set:
+#   sampling_non_thinking : dict merged into request kwargs when thinking=False
+#   sampling_thinking     : dict merged into request kwargs when thinking=True
+#   extra_body            : dict merged into extra_body for *all* calls
+#   thinking_extra_body   : callable(thinking_bool) -> extra_body dict
+#   max_tokens_msg        : default max_tokens for non-thinking calls
+#   max_tokens_thinking   : default max_tokens for thinking calls
+#
+# Unknown models fall through to bare defaults (no special handling). Users
+# can always override via ``configure_local(extra_body=...)``.
+
+_MODEL_REGISTRY = [
+    # Qwen3 family — toggles `enable_thinking` via Jinja chat-template kwarg.
+    {
+        "match": "qwen3",
+        "sampling_non_thinking": {"temperature": 0.7, "top_p": 0.8},
+        "sampling_thinking":     {"temperature": 0.6, "top_p": 0.95},
+        "thinking_extra_body":   lambda thk: {"chat_template_kwargs": {"enable_thinking": bool(thk)}},
+        "max_tokens_msg":        2048,
+        "max_tokens_thinking":   16384,
+    },
+    # DeepSeek-R1 distills always reason; no toggle exposed.
+    {
+        "match": "deepseek-r1",
+        "sampling_non_thinking": {"temperature": 0.6, "top_p": 0.95},
+        "sampling_thinking":     {"temperature": 0.6, "top_p": 0.95},
+        "max_tokens_msg":        4096,
+        "max_tokens_thinking":   16384,
+    },
+    # Llama 3.x family.
+    {
+        "match": "llama",
+        "sampling_non_thinking": {"temperature": 0.7, "top_p": 0.9},
+        "sampling_thinking":     {"temperature": 0.7, "top_p": 0.9},
+        "max_tokens_msg":        2048,
+        "max_tokens_thinking":   4096,
+    },
+    # Apertus.
+    {
+        "match": "apertus",
+        "sampling_non_thinking": {"temperature": 0.7, "top_p": 0.9},
+        "sampling_thinking":     {"temperature": 0.7, "top_p": 0.9},
+        "max_tokens_msg":        2048,
+        "max_tokens_thinking":   4096,
+    },
+    # Mistral / Mixtral.
+    {
+        "match": "mistral",
+        "sampling_non_thinking": {"temperature": 0.7, "top_p": 0.9},
+        "sampling_thinking":     {"temperature": 0.7, "top_p": 0.9},
+        "max_tokens_msg":        2048,
+        "max_tokens_thinking":   4096,
+    },
+]
+
+
+def _resolve_model_profile(model):
+    """Return the first matching entry from ``_MODEL_REGISTRY``, or {}."""
+    if not model:
+        return {}
+    needle = model.lower()
+    for entry in _MODEL_REGISTRY:
+        if entry["match"] in needle:
+            return entry
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +176,9 @@ def send_chat(system_prompt, user_prompt, api_key=None, model="gpt-5-mini",
     model : str
         Model identifier (e.g. "gpt-5-mini", "gemini-2.0-flash").
     provider : str
-        "openai", "genai", or "anthropic".  Raises ValueError for anything else.
+        ``"openai"``, ``"genai"``, ``"anthropic"``, or ``"local"``. Raises
+        ValueError for anything else. The ``local`` provider routes to any
+        OpenAI-compatible HTTP server — see :func:`configure_local`.
     temperature : float
         Sampling temperature (default 0.5).
     thinking : bool
@@ -68,9 +210,12 @@ def send_chat(system_prompt, user_prompt, api_key=None, model="gpt-5-mini",
         return _send_genai(system_prompt, user_prompt, api_key, model, temperature, thinking)
     elif provider == "anthropic":
         return _send_anthropic(system_prompt, user_prompt, api_key, model, temperature, thinking)
+    elif provider == "local":
+        return _send_local(system_prompt, user_prompt, model, temperature, thinking)
     else:
         raise ValueError(
-            f"Unsupported provider '{provider}'. Supported: 'openai', 'genai', 'anthropic'."
+            f"Unsupported provider '{provider}'. "
+            f"Supported: 'openai', 'genai', 'anthropic', 'local'."
         )
 
 
@@ -288,6 +433,161 @@ def _send_anthropic(system_prompt, user_prompt, api_key, model, temperature, thi
 
 
 # ---------------------------------------------------------------------------
+# Local OpenAI-compatible backend (mlx-lm, Ollama, vLLM, sglang, llama.cpp, ...)
+# ---------------------------------------------------------------------------
+
+_LOGGED_UNKNOWN_LOCAL_MODELS: set[str] = set()
+
+
+def _merge_extra_body(*sources):
+    """Shallow-merge dicts in order, later sources override earlier ones."""
+    out: dict = {}
+    for src in sources:
+        if src:
+            out.update(src)
+    return out
+
+
+def _send_local(system_prompt, user_prompt, model, temperature, thinking):
+    """Send a chat completion to an OpenAI-compatible local server.
+
+    Server location, request timeout, and per-call extras are read from the
+    process-wide config set by :func:`configure_local` (with environment
+    variable and built-in default fallbacks).
+
+    Per-model defaults (sampling presets, ``enable_thinking`` for Qwen3,
+    sensible ``max_tokens``) are applied from :data:`_MODEL_REGISTRY`.
+    Unknown models fall through to bare defaults and trigger a one-time
+    INFO log so the user can spot the gap.
+    """
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ImportError(
+            "The 'openai' package is required for provider='local' "
+            "(it implements the OpenAI-compatible HTTP client)."
+        ) from exc
+
+    base_url = _resolve_local_base_url()
+    timeout_s = _resolve_local_timeout()
+    profile = _resolve_model_profile(model)
+
+    if not profile and model and model not in _LOGGED_UNKNOWN_LOCAL_MODELS:
+        _logger.info(
+            "local: no MODEL_REGISTRY entry for %r — using bare defaults. "
+            "Pass extra_body via configure_local() to tune sampling.",
+            model,
+        )
+        _LOGGED_UNKNOWN_LOCAL_MODELS.add(model)
+
+    client = OpenAI(base_url=base_url, api_key="not-needed", timeout=timeout_s)
+
+    # Sampling: profile-supplied preset, else fall back to caller temperature.
+    if thinking and profile.get("sampling_thinking"):
+        sampling = dict(profile["sampling_thinking"])
+    elif (not thinking) and profile.get("sampling_non_thinking"):
+        sampling = dict(profile["sampling_non_thinking"])
+    else:
+        sampling = {"temperature": temperature}
+
+    # Token cap: profile-supplied default, very generous on thinking calls.
+    if thinking:
+        max_tokens = profile.get("max_tokens_thinking", 16384)
+    else:
+        max_tokens = profile.get("max_tokens_msg", 2048)
+
+    # Extra body: model-registry static + thinking-aware + user override.
+    user_extra = _LOCAL_CONFIG.get("extra_body") or {}
+    profile_extra_static = profile.get("extra_body") or {}
+    profile_extra_thk = (
+        profile["thinking_extra_body"](thinking)
+        if profile.get("thinking_extra_body")
+        else {}
+    )
+    extra_body = _merge_extra_body(profile_extra_static, profile_extra_thk, user_extra)
+
+    def _do_call(use_thinking, tok_budget, samp):
+        kwargs = dict(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=tok_budget,
+            **samp,
+        )
+        # Re-derive extra_body so the retry can flip enable_thinking.
+        if profile.get("thinking_extra_body"):
+            local_extra = _merge_extra_body(
+                profile_extra_static,
+                profile["thinking_extra_body"](use_thinking),
+                user_extra,
+            )
+        else:
+            local_extra = extra_body
+        if local_extra:
+            kwargs["extra_body"] = local_extra
+        try:
+            resp = client.chat.completions.create(**kwargs)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Local server call failed: {exc}") from exc
+        return (resp.choices[0].message.content or "")
+
+    text = _do_call(thinking, max_tokens, sampling)
+
+    # Thinking-mode truncation guard: when the model burns its budget on
+    # reasoning and emits no answer, retry once with thinking disabled so
+    # the simulation makes progress instead of failing the day.
+    if thinking and not text.strip():
+        _logger.warning(
+            "local: thinking-mode call returned empty content "
+            "(likely truncated by max_tokens=%d). Retrying without thinking.",
+            max_tokens,
+        )
+        fallback_sampling = (
+            dict(profile["sampling_non_thinking"])
+            if profile.get("sampling_non_thinking")
+            else {"temperature": temperature}
+        )
+        fallback_max = profile.get("max_tokens_msg", 2048)
+        text = _do_call(False, fallback_max, fallback_sampling)
+
+    return text
+
+
+def ping_local(base_url=None, timeout=5.0):
+    """Check that the configured local LLM server is reachable.
+
+    Performs a ``GET {base_url}/models`` request. Raises ``RuntimeError`` with
+    a remediation message on failure. Returns the parsed JSON response on
+    success.
+
+    Call this at simulation start when ``provider="local"`` to fail fast
+    instead of mid-run.
+    """
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImportError("The 'requests' package is required for ping_local().") from exc
+
+    url = (base_url or _resolve_local_base_url()).rstrip("/") + "/models"
+    try:
+        r = requests.get(url, timeout=timeout)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            f"Local LLM server not reachable at {url}. Start a server "
+            f"speaking the OpenAI Chat Completions protocol on this URL "
+            f"(e.g. `mlx_lm.server --model <model> --port 8080`, "
+            f"`ollama serve`, `vllm serve <model>`). "
+            f"Override the URL via configure_local(base_url=...) or the "
+            f"CAG_LOCAL_BASE_URL environment variable.\n"
+            f"Underlying error: {exc}"
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
 # load_api_key
 # ---------------------------------------------------------------------------
 
@@ -320,6 +620,11 @@ def load_api_key(provider, csv_path=_DEFAULT_KEY_CSV):
     """
     provider = provider.lower()
 
+    # The local OpenAI-compatible servers (mlx-lm, Ollama, vLLM, ...) do not
+    # require authentication. Return a sentinel so call sites do not need to
+    # special-case the local provider when wiring api_key through.
+    if provider == "local":
+        return "not-needed"
 
     # Try CSV first.
     try:

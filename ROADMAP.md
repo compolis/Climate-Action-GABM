@@ -3,7 +3,7 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.4 — Package Mode, Day-0 Anchoring, Memory Refactor](#04--package-mode-day-0-anchoring-memory-refactor)
+3. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
 4. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
 5. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
@@ -11,29 +11,35 @@
 ## Overview
 This file outlines planned next steps and future goals.
 
+Version 0.5 has not been planned yet. This roadmap therefore records the completed v0.4 surface and the longer-term 1.0 backlog only.
+
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
 Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
 
 
-## 0.4 — Package Mode, Day-0 Anchoring, Memory Refactor
+## 0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls
 
-Post-v0.3 work focused on a single composite headline-experiment configuration:
-the full six-policy package, with Day-0 opinions anchored to the real YouGov
-response so that subsequent drift is unambiguously simulation-driven, and
-without the numeric self-consistency cue that anchored agents on their own
-prior survey answers. New notebooks (NB16, NB17) exercise the combination
-end-to-end with a timing harness for scaling estimates.
+Post-v0.3 work expanded into a broader v0.4 release line: the six-policy
+package mode, Day-0 grounding against the real YouGov cohort, prompt-memory
+cleanup, atomic checkpoint/resume for long runs, and reach-control knobs used
+to test asymmetric political influence. The same release cycle also produced
+the current notebook / experiment stack (NB16–23) and the corresponding
+analysis written up in `docs/result_report.md`.
 
 | # | Deliverable | Status |
 |---|-------------|--------|
 | 1 | Package communication mode (`communication_mode="package"`, `compute_package_index()`, `package_index_trajectories`, `collect_package_ground_truth()`, `PACKAGE_SCOPE`) | ✅ Done |
 | 2 | Day-0 ground-truth anchoring (`day0_anchor` config: `llm_survey` / `ground_truth` / `ground_truth_with_rationale`; `seed_opinion_from_ground_truth()`, `seed_opinion_with_rationale()`, `_run_day0()` dispatcher) | ✅ Done |
 | 3 | Memory anchor refactor — numeric Day-0..N trajectory removed from `assemble_context()`, replaced with Day-0 rationale block via `_build_day0_rationales()` | ✅ Done |
-| 4 | NB16 — package mode sanity checks | ✅ Done |
-| 5 | NB17 — full-stack smoke test (package + anchor + debias + thinking + dual-model + timing harness) | ✅ Done |
+| 4 | Checkpoint + resume (`checkpoint_dir`, `checkpoint_every_day`, `resume`, atomic CSV/JSON writes, config compatibility checks) | ✅ Done |
+| 5 | Reach subsampling (`reach_a`, `reach_b`, `apply_reach_subsample()`) for asymmetric political-broadcast experiments | ✅ Done |
+| 6 | Audience mirror control (`audience_cap`, `apply_audience_cap()`) to equalise political-agent audience sizes before reach subsampling | ✅ Done |
+| 7 | NB16–18 — package mode, anchoring, and checkpoint/resume smoke tests | ✅ Done |
+| 8 | NB19–21 — production package-mode run and reach-asymmetry studies | ✅ Done |
+| 9 | NB22–23 — Day-0 survey-path audit and persona-signal evaluation | ✅ Done |
 
-**315 tests passing across 16 test files.**
+**340 tests collected; 339 passing and 1 skipped across 15 test files.**
 
 
 ## 0.3 — Bias Calibration & Validation
@@ -113,10 +119,12 @@ Issues 1, 2  (independent)
 
 ## 1.0
 - Longer simulation campaigns (10+ days) to study equilibrium and oscillation
-- Multi-policy simultaneous simulation (6 policies in a single run)
+- Larger-N and multi-seed reach-asymmetry sweeps
 - Per-exposure-group analysis tooling and visualisation
 - True peer-to-peer conversation (dialogue, not one-way messaging)
 - Dynamic network rewiring based on opinion distance
 - Calibration against longitudinal survey panel data
+- Parallelisation of agent-local LLM calls
 - Additional LLM providers and model comparisons
+- **Local LLM provider (v0.5, in flight)** — `provider="local"` for any OpenAI-compatible server (mlx-lm, Ollama, vLLM, sglang, llama.cpp). First end-to-end validated with Qwen3 8B 4-bit on M1 16 GB (NB 24). Next: 30–50-agent persona-fidelity rerun, then HPC scale-out with vLLM/sglang and async dispatch.
 - Publication-ready analysis and visualisation pipeline

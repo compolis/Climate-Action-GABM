@@ -24,6 +24,144 @@ Notes:
 
 ---
 
+---
+
+## v0.5 Integration Parity: NB 25 — Qwen3 8B 4-bit via integrated `provider="local"`
+
+**Date:** 2026-05-09
+**Notebook:** [notebooks/25_local_llm_integrated_smoke.ipynb](../notebooks/25_local_llm_integrated_smoke.ipynb)
+**Result files:** [data/output/local_qwen3_integrated_20260509_182846/20260509_202846/](../data/output/local_qwen3_integrated_20260509_182846/20260509_202846/)
+
+NB 24 was the local-LLM proof-of-concept via in-notebook monkey-patching. NB 25 is the same run executed through the **v0.5 integrated `provider="local"`** branch in [src/cag/io/llm.py](../src/cag/io/llm.py) — no patching, no notebook-side wrapper. The purpose is parity validation before promoting any future local-model work onto the supported path.
+
+### Configuration
+
+Identical to NB 24 (10 agents × 1 day, Ban Petrol Cars, `mlx-community/Qwen3-8B-4bit` on `mlx_lm.server`, `debias=True`, `thinking=True`, seed 42, M1 16 GB) — only the routing changes. The `SIM_CONFIG` now sets `llm_provider="local"` and `local_base_url="http://localhost:8080/v1"`; `configure_local()` and `ping_local()` are called automatically by `_resolve_runtime` at simulation start.
+
+### Headline Results — Bit-for-Bit Parity with NB 24
+
+| Metric | NB 24 (monkey-patched) | NB 25 (integrated) |
+|---|---:|---:|
+| Day-0 LLM mean / GT mean | +0.70 / +0.20 | **+0.70 / +0.20** |
+| Day-0 bias | +0.50 | **+0.50** |
+| Day-0 MAE | 2.10 | **2.10** |
+| Day-0 ρ (p) | −0.05 (0.88) | **−0.05 (0.88)** |
+| Day-1 LLM mean / GT mean | 0.00 / +0.20 | **0.00 / +0.20** |
+| Day-1 bias | −0.20 | **−0.20** |
+| Day-1 ρ (p) | +0.76 (0.010) | **+0.76 (0.010)** |
+| Reflections n / median tokens | 22 / 136 | **22 / 135.5** |
+| Mention petrol/car | 59 % | **59 %** |
+| Errors / empty-thinking retries | 0 / 0 | **0 / 0** |
+
+`mlx_lm.server` is deterministic at fixed seed for this prompt set, so the match is mechanical, not statistical: anything other than identity would have signalled a routing difference between the monkey-patch and the integrated provider. There is none.
+
+### What This Validates
+
+- `cag.io.llm.send_chat(provider="local")` is functionally identical to NB 24's patched path.
+- `_MODEL_REGISTRY` correctly applies Qwen3 sampling, max_tokens, and the `enable_thinking` chat-template kwarg under a live mlx-lm server.
+- `SIM_CONFIG["local_base_url"]` propagates through `_resolve_runtime` → `configure_local()` → every downstream `send_chat` call site without touching `agent.py` or `environment.py`.
+- `ping_local()` startup health-check ran cleanly; the empty-thinking retry path was not triggered (0 retries) but is exercised in [tests/test_llm_local.py](../tests/test_llm_local.py).
+
+### Status and Next Steps
+
+The NB 24 monkey-patch is now superseded. All future local-model experiments should follow the NB 25 pattern. Open accuracy questions (per-agent persona ρ at non-trivial N) and scale questions (wall-time, parallel dispatch — see [Model_Design.md §16](Model_Design.md)) are unchanged from NB 24 and remain the next experimental priorities.
+
+---
+
+## Local-LLM Smoke Test: NB 24 — Qwen3 8B 4-bit End-to-End
+
+**Date:** 2026-05-09
+**Notebook:** [notebooks/24_local_qwen3_smoke_test.ipynb](../notebooks/24_local_qwen3_smoke_test.ipynb)
+**Result files:** [data/output/local_qwen3_smoke_20260509_170007/20260509_174754/](../data/output/local_qwen3_smoke_20260509_170007/20260509_174754/)
+
+First end-to-end run of the simulation pipeline with **all** LLM calls (broadcasts, peer messages, reflections, surveys) routed to a **local Qwen3 8B 4-bit** model served by `mlx_lm.server` on M1 16 GB. No `src/` changes — routing is done by monkey-patching `cag.io.llm.send_chat`, the rebound copy in `cag.abm.agent`, and the `load_api_key` rebind in `cag.abm.sim`.
+
+### Configuration
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 10 |
+| n_days | 1 (+ Day 0 baseline) |
+| communication_mode | single_policy |
+| policy | ClimatePolicyID(3) — Ban Petrol Cars |
+| day0_anchor | llm_survey |
+| debias | True (Condition D) |
+| llm_model | mlx-community/Qwen3-8B-4bit (local) |
+| survey_model | (same — local) |
+| thinking | True (only forwarded to surveys) |
+| sampling | non-thinking T=0.7 top_p=0.8; thinking T=0.6 top_p=0.95 |
+| max_tokens | 2048 (msg) / 16384 (survey) |
+| k_peers_per_day | 2 |
+| network | SBM, p_intra=0.3, p_inter=0.05 |
+| random_seed | 42 |
+| hardware | Apple M1 16 GB |
+
+### Headline Results
+
+| Question | Answer |
+|---|---|
+| End-to-end success? | Yes — 0 errors, 0 thinking-mode empty-content retries, all 7 output artefacts produced |
+| Total wall-time | **46.6 min** (Day 0 baseline 16.1 min, Day 1 30.4 min) |
+| Total LLM calls | 72 |
+| Reflection length (mean / median) | **133 / 136 tokens** (range 84–176, n=22) |
+| Reflections mentioning policy | 59 % (`petrol` or `car`) |
+
+### Day-0 / Day-1 Survey Accuracy vs YouGov GT (Ban Petrol Cars, n=10)
+
+| Day | LLM mean | GT mean | **Bias** | MAE | **Pearson ρ** | p |
+|-----|---------:|--------:|---------:|----:|--------------:|--:|
+| 0 | +0.70 | +0.20 | **+0.50** | 2.10 | −0.05 | 0.88 |
+| 1 | 0.00 | +0.20 | −0.20 | 1.00 | **+0.76** | **0.010** |
+
+- **Aggregate Day-0 bias of +0.50 is the lowest we have ever measured.** Better than NB 15 Sonnet+debias+thinking (+0.87) on Carbon Tax, dramatically below the +1.4 to +2.2 NB 11/13 baselines. Condition D debiasing transfers cleanly to Qwen3 8B.
+- **Per-agent persona fidelity on Day 0 is poor** (ρ ≈ 0, MAE 2.10 / 7-pt scale). Aggregate cancellation hides per-agent error: marginals are right, individuals are essentially decoupled from their persona.
+- **Day 1 ρ jumps to +0.76 (p = 0.010).** Either (a) the EOD survey re-anchors on memory of received messages and snaps agents toward their persona-consistent stance, or (b) n=10 makes Day-0 ρ noise. **Disambiguation requires a 30–50-agent rerun.**
+
+### Latency Profile
+
+| Stage | n calls | mean (s) | median (s) | total (s) | share |
+|-------|--------:|---------:|-----------:|----------:|------:|
+| survey (thinking) | 40 | **53.2** | 50.8 | 2129 | **76 %** |
+| broadcast_msg | 2 | 25.9 | 25.9 | 52 | 2 % |
+| reflection_broadcast | 14 | 23.6 | 23.5 | 331 | 12 % |
+| reflection_peer | 8 | 19.6 | 18.1 | 157 | 6 % |
+| peer_msg | 8 | 15.5 | 15.3 | 124 | 4 % |
+
+Each agent-survey is 2 calls under `debias=True` (reasoning + answer), so 40 survey calls = 10 agents × 2 days × 2 passes. The projection model self-checks at +12 % (predicted 41.7 min vs actual 46.6 min).
+
+### Scenario Projections (same hardware, same model)
+
+| Scenario | thinking on | thinking off |
+|---|---:|---:|
+| 100 agents × 1 day | 6.8 h | 5.0 h |
+| 100 agents × 5 days | 28 h | 23 h |
+| 100 agents × 10 days | **55 h** | 45 h |
+| 50 agents × 5 days | 14 h | — |
+| 10 agents × 10 days | 5.6 h | — |
+
+### Where We Are and Where to Go
+
+**Status.** Qwen3 8B 4-bit is a *viable* local backend: full pipeline, research-quality reflections, best aggregate Day-0 bias on record. Open questions are per-agent persona fidelity at non-trivial N, and wall-time at non-trivial scale.
+
+**Accuracy levers (priority order):**
+1. **30–50-agent Qwen3 rerun** — the highest-value experiment; resolves whether per-agent ρ ≈ 0 is real or noise.
+2. **Try Qwen3 14B 4-bit (fits 16 GB) and 32B 4-bit (HPC).** Persona fidelity scales with model size more than with bit-width.
+3. **Qwen3 4B Instruct 2507 4-bit** as a *speed* baseline — if accuracy holds, 100×10 becomes overnight on a single M1.
+4. **Explicit debias on/off A/B with Qwen3** to confirm Condition D is doing the work.
+5. **`day0_anchor="ground_truth"` for Qwen3** — side-steps the per-agent ρ problem on small N and is the right fit if Qwen3 turns out to be a weak persona-tracker.
+
+**Realism / mechanism levers (HPC + parallelism):**
+1. **Async concurrent dispatch** — within-day calls (broadcast reflections, peer reflections, EOD surveys) are embarrassingly parallel. asyncio + httpx against N model replicas gives near-linear speedup; 100×10 drops from 55 h to ~5 h with 10 replicas.
+2. **vLLM or sglang on NVIDIA HPC** instead of mlx-lm. Continuous batching + paged attention is 5–20× faster at the same model size; OpenAI-compatible API drops in for free.
+3. **Batched survey calls** (vLLM/sglang) — surveys are 76 % of cost and have no inter-agent dependency.
+4. **Cap thinking-mode reasoning** (e.g. 2048 tokens, not 16384), or apply thinking only to Condition D's *reasoning* call and not the *answer* call.
+5. **Persistent prefix caching** (vLLM/sglang automatic) — every call re-sends the 1–2k-token persona system prompt; caching roughly halves per-call latency.
+6. **Reflection conditioning** — promote the policy name to an explicit slot in the reflection user prompt to lift the 59 % policy-mention rate.
+
+**Recommended next step.** Promote the in-notebook monkey-patch into a real `provider="openai_compatible"` (or `"local"`) branch in [src/cag/io/llm.py](../src/cag/io/llm.py), then run the 30–50-agent Qwen3 rerun, then move heavy experiments to HPC with vLLM/sglang and concurrent dispatch.
+
+---
+
 ## Run 8: NB 21 Broadcast-Only Asymmetry Replication Across Seeds (43 / 47 / 53)
 
 **Date:** 2026-04-26

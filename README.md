@@ -44,13 +44,13 @@ Citizen agents are constructed from real **YouGov survey data** (UK, April 2024)
 
 ## Current Status
 
-**v0.4 — Day-0 ground-truth anchoring and package communication mode.**
+**v0.4 — package communication, Day-0 anchoring, checkpoint/resume, and reach-control tooling.**
 
 | Metric | Value |
 |--------|-------|
-| Tests | 315 passing |
-| Issues done | 10 of 10 |
-| Notebooks | 17 (01–17) |
+| Tests | 340 collected; 339 passing, 1 skipped |
+| Runtime extensions | package mode, Day-0 anchoring, checkpoint/resume, `reach_a` / `reach_b`, `audience_cap` |
+| Notebooks | 23 (01–23) |
 | Source files | 21 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
@@ -70,7 +70,7 @@ src/cag/
 │   │   └── opinion.py     # ClimatePolicyID, survey constants, clamping
 │   └── democracy/         # Brexit & UKGE2019 vote enums (from gabm)
 ├── io/
-│   ├── llm.py             # send_chat(), load_api_key(), parse_letter_response()
+│   ├── llm.py             # send_chat() (openai/genai/anthropic/local), load_api_key(), parse_letter_response(), configure_local(), ping_local()
 │   └── survey.py          # Survey loading utilities
 └── __main__.py
 ```
@@ -99,6 +99,12 @@ Interactive demos live in `notebooks/`. Each covers one simulation component:
 | 15 | Full Simulation + Ground Truth | Debias + thinking + dual-model + GT comparison |
 | 16 | Package Mode Sanity Checks | Single broadcast / peer pass covers all six policies per phase |
 | 17 | Full-Stack Smoke Test | Package + Day-0 anchor + debias + thinking + dual-model + timing harness |
+| 18 | Checkpoint + Resume Smoke Test | Atomic per-day checkpoints, interrupt handling, and resume validation |
+| 19 | Full Simulation | Production package-mode run with Day-0 anchor, debias, and checkpointing |
+| 20 | Reach Asymmetry Pilot | First reach-subsample experiment under the full package-mode stack |
+| 21 | Broadcast-Only Asymmetry | Reach sweep with peers disabled and `audience_cap` mirror control |
+| 22 | Day-0 Accuracy (Sonnet) | Survey-path audit against ground truth under the production survey stack |
+| 23 | Persona Signal Test | Null-model comparison for persona signal and higher-power calibration |
 
 
 ## License

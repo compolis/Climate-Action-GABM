@@ -22,7 +22,7 @@ from cag.abm.attributes.opinion import (
     SURVEY_QUESTIONS,
     compute_package_index,
 )
-from cag.io.llm import load_api_key
+from cag.io.llm import configure_local, load_api_key, ping_local
 
 
 SIM_CONFIG = {
@@ -51,6 +51,10 @@ SIM_CONFIG = {
     "audience_cap": None,       # if int, cap each political agent's audience to this many citizens (uniform random) BEFORE reach subsample. None = no cap.
     "random_seed": 42,
     "output_dir": "data/output/experiments",
+    # Local-LLM provider (provider="local"). All optional.
+    "local_base_url": None,     # None → CAG_LOCAL_BASE_URL env or http://localhost:8080/v1
+    "local_extra_body": None,   # dict merged into every local request body (e.g. server-specific knobs)
+    "local_timeout_s": None,    # None → CAG_LOCAL_TIMEOUT_S env or 600 s
 }
 
 
@@ -138,9 +142,20 @@ def _log_package_index(nation, policies, day):
 
 def _resolve_runtime(cfg):
     """Resolve config into a flat runtime dict used by the daily loop."""
-    api_key = load_api_key(cfg["llm_provider"])
     provider = cfg["llm_provider"]
     survey_provider = cfg.get("survey_provider") or provider
+
+    # Configure the local-LLM provider once per run, before any send_chat call.
+    if "local" in (provider, survey_provider):
+        configure_local(
+            base_url=cfg.get("local_base_url"),
+            extra_body=cfg.get("local_extra_body"),
+            timeout_s=cfg.get("local_timeout_s"),
+        )
+        # Fail fast if the local server is unreachable.
+        ping_local()
+
+    api_key = load_api_key(provider)
     survey_api_key = (
         load_api_key(survey_provider) if survey_provider != provider else api_key
     )
@@ -702,6 +717,7 @@ _RESUME_HARD_KEYS = (
 _RESUME_SOFT_KEYS = (
     "llm_model", "llm_provider", "survey_model", "survey_provider",
     "debias", "thinking", "llm_temperature",
+    "local_base_url", "local_extra_body", "local_timeout_s",
 )
 
 

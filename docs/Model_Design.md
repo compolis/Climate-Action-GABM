@@ -678,6 +678,38 @@ This addendum is purely operational — it does not change agent behaviour, prom
 
 ---
 
+### v0.5 — Local LLM Provider (Operational Addendum)
+
+Like v0.4's checkpoint addendum, v0.5 is purely operational — agent behaviour, prompts, and CSV semantics are unchanged. v0.5 promotes NB 24's in-notebook monkey-patch into a first-class fourth provider in [src/cag/io/llm.py](../src/cag/io/llm.py) so that any locally-hosted, OpenAI-compatible model (mlx-lm, Ollama, vLLM, sglang, llama.cpp) can be used as a drop-in replacement for the cloud `openai` / `genai` / `anthropic` providers without modifying any call site.
+
+**`provider="local"` dispatcher branch.** `send_chat(..., provider="local")` routes through a new `_send_local()` that uses the `openai` SDK with a configurable `base_url` (any OpenAI-compatible server). The dispatcher reads its base URL, timeout, and per-model defaults from a module-level `_LOCAL_CONFIG` populated once per run by `configure_local(base_url=..., extra_body=..., timeout_s=...)`. This avoids touching the dozens of `send_chat` call sites in `agent.py` / `environment.py` — they keep passing `provider="local"` with no other change. Resolution order for the base URL is: `configure_local()` argument → `CAG_LOCAL_BASE_URL` environment variable → the built-in default `http://localhost:8080/v1`. Timeout follows the same chain via `CAG_LOCAL_TIMEOUT_S`.
+
+**No-API-key short-circuit.** `load_api_key("local")` returns the sentinel string `"not-needed"` without consulting `data/api_key.csv` or any environment variable. Local servers reject `Authorization` headers from some clients if absent, so the OpenAI SDK still receives a non-empty key, but no real credential is read or stored.
+
+**`_MODEL_REGISTRY` — substring-keyed per-family defaults.** A list-of-dicts registry maps model-name substrings to recommended sampling, `max_tokens`, and (for Qwen3) the `enable_thinking` chat-template kwarg. Currently registered families: Qwen3 (4B / 8B / 14B / 32B), Llama 3.1/3.2, Apertus, Mistral, DeepSeek-R1-Distill. Unknown models log an INFO line on first use and fall back to caller-supplied or library-default sampling. User-supplied `extra_body` always overrides the registry, so workflow-specific overrides remain possible.
+
+**Empty-thinking-truncation guard.** Some local backends return an empty `content` field when a thinking-mode response is truncated at `max_tokens` while the model is still inside `<think>…</think>`. `_send_local()` detects this and retries once with `enable_thinking=False` plus the non-thinking sampling preset and `max_tokens` budget. Non-thinking empties are not retried (they indicate a real generation failure to surface). This is generic across any registered model with a `thinking_extra_body` lambda; today only Qwen3 has one.
+
+**`ping_local()` startup health-check.** `_resolve_runtime` in [src/cag/abm/sim.py](../src/cag/abm/sim.py) calls `ping_local()` once at simulation start when `llm_provider=="local"` (or `survey_provider=="local"`). It issues a GET to `<base_url>/models` and raises a remediation-tagged exception if the server is unreachable, so a misconfigured run fails in the first second instead of after the first agent call.
+
+**Three new SIM_CONFIG keys.**
+
+- `local_base_url: str | None = None` — passed to `configure_local()` at start; falls back to env var, then default.
+- `local_extra_body: dict | None = None` — global override applied to every local call (e.g. force a specific sampler).
+- `local_timeout_s: float | None = None` — per-call HTTP timeout for the local server.
+
+All three are added to `_RESUME_SOFT_KEYS`: changing them mid-experiment (e.g. swapping the local server's port between days) is allowed and logged.
+
+**Mixed providers.** Because `survey_provider` / `survey_model` are independent of `llm_provider` / `llm_model`, a run can use, for example, a local Qwen3 for messaging and reflections while routing surveys to GPT-4o-mini in the cloud, or vice versa. `configure_local()` is invoked when either provider is `"local"`.
+
+**Validation.** [tests/test_llm_local.py](../tests/test_llm_local.py) adds 26 unit tests (mocked `openai.OpenAI`, no live server required) covering: dispatcher routing, base-URL / timeout resolution priority chain, registry substring matching across all five registered families, registry sampling and `max_tokens` injection (with caller and user-`extra_body` precedence rules), Qwen3 thinking on/off behaviour, empty-thinking retry trigger and non-trigger, `load_api_key("local")` short-circuit, and unsupported-provider error message coverage. The full suite is **365 passing, 1 skipped, 0 failures** (up from 339).
+
+**End-to-end parity.** [notebooks/25_local_llm_integrated_smoke.ipynb](../notebooks/25_local_llm_integrated_smoke.ipynb) re-runs NB 24's exact configuration (10 agents × 1 day Ban Petrol Cars, Qwen3 8B 4-bit, `debias=True`, `thinking=True`, seed 42) through the integrated provider. Headline metrics match NB 24 bit-for-bit (Day-0 bias +0.50, Day-1 ρ +0.76, reflections median 135.5 tokens, 59 % mention rate, 0 errors, 0 thinking-empty retries) — see [result_report.md](result_report.md) for the full comparison table.
+
+**Documentation.** A V3 quickstart-first rewrite of [docs/Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md) covers mlx-lm, Ollama, vLLM, sglang, and llama.cpp; a model gallery lists licenses, RAM footprints, and registered status; a registry-extension recipe shows how to add a new model family without code changes outside `_MODEL_REGISTRY`; troubleshooting covers server-unreachable, empty-thinking, OOM, and HPC scenarios. The legacy V2 (mlx-only) and V1 (Qwen 2.5) sections are retained below the V3 section as historical reference. Optional dependencies are pinned in [requirements-local.txt](../requirements-local.txt).
+
+---
+
 ## 16. Parallelization Plan (Backlog)
 
 Status: **planning only — not yet implemented.** This section is a working note to seed a future GitHub issue. Append-only; revise via additions below rather than edits in place.
