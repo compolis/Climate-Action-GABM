@@ -439,60 +439,72 @@ class SurveyedNation(Nation):
                 f"(reach_b={reach_b})"
             )
 
-    def create_network(self, n_blocks=2, p_intra=0.15, p_inter=0.02, seed=42):
-        """
-        Create a stochastic block model network with citizens assigned to blocks
-        based on their political exposure categories.
+    def create_network(
+        self,
+        network_type="stochastic_block",
+        network_params=None,
+        seed=42,
+        # Back-compat: legacy flat keyword arguments
+        n_blocks=None,
+        p_intra=None,
+        p_inter=None,
+    ):
+        """Create the peer-messaging network using the pluggable factory.
 
         Must call assign_political_exposure() before this method.
 
-        Args:
-            n_blocks: Number of blocks (default 2).
-            p_intra: Within-block connection probability.
-            p_inter: Between-block connection probability.
-            seed: Random seed for reproducibility.
+        Parameters
+        ----------
+        network_type : str
+            One of :data:`cag.abm.networks.NETWORK_TYPES`.
+            Default ``"stochastic_block"`` preserves v0.5 behaviour.
+        network_params : dict | None
+            Type-specific parameters. See :mod:`cag.abm.networks` for each
+            builder's accepted keys.
+        seed : int
+            Random seed.
+        n_blocks, p_intra, p_inter : optional
+            Deprecated flat-keyword form for ``stochastic_block`` only.
+            If provided, they are folded into ``network_params`` and a
+            DeprecationWarning is logged.
 
-        Returns:
-            The created nx.Graph, also stored as self.network.
+        Returns
+        -------
+        nx.Graph
+            The created graph, also stored as ``self.network``.
         """
+        from cag.abm.networks import build_network
+
+        params = dict(network_params or {})
+
+        # Legacy flat keys: fold in with a deprecation warning.
+        legacy = {}
+        if p_intra is not None:
+            legacy["p_intra"] = p_intra
+        if p_inter is not None:
+            legacy["p_inter"] = p_inter
+        if n_blocks is not None and int(n_blocks) != 2:
+            logging.warning(
+                "create_network: n_blocks=%r is no longer honoured; "
+                "stochastic_block is fixed to 2 blocks driven by "
+                "political_exposure.",
+                n_blocks,
+            )
+        if legacy:
+            logging.warning(
+                "create_network: flat keyword args %s are deprecated; "
+                "pass via network_params={...} instead.",
+                list(legacy.keys()),
+            )
+            for k, v in legacy.items():
+                params.setdefault(k, v)
+
         agents = list(self.agents_active.values())
-
-        # Sort citizens into blocks based on exposure
-        block_0 = []  # A-leaning
-        block_1 = []  # B-leaning
-        swing = []     # both + neither — distribute across blocks
-
-        for citizen in agents:
-            if citizen.political_exposure == "A-only":
-                block_0.append(citizen)
-            elif citizen.political_exposure == "B-only":
-                block_1.append(citizen)
-            else:
-                swing.append(citizen)
-
-        # Round-robin distribute swing citizens across blocks
-        for i, citizen in enumerate(swing):
-            if i % 2 == 0:
-                block_0.append(citizen)
-            else:
-                block_1.append(citizen)
-
-        # Build the ordered agent list (block 0 first, then block 1)
-        ordered_agents = block_0 + block_1
-        block_sizes = [len(block_0), len(block_1)]
-
-        # Build probability matrix
-        p_matrix = [[p_intra if i == j else p_inter
-                      for j in range(n_blocks)]
-                     for i in range(n_blocks)]
-
-        G = nx.stochastic_block_model(block_sizes, p_matrix, seed=seed)
-
-        # Relabel nodes from integer indices to agent IDs
-        mapping = {i: ordered_agents[i].id for i in range(len(ordered_agents))}
-        G = nx.relabel_nodes(G, mapping)
+        G = build_network(network_type, agents, params=params, seed=int(seed))
 
         self.network = G
+        self.network_type = network_type
+        self.network_params = params
         return G
 
     def assign_network_blocks(self):
