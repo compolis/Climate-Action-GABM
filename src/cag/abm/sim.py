@@ -33,9 +33,18 @@ SIM_CONFIG = {
     ],
     "k_peers_per_day": 3,
     "network_type": "stochastic_block",
+    # Per-type parameters for the pluggable network factory
+    # (see cag.abm.networks). When None, builder defaults are used.
+    # Legacy flat keys p_intra / p_inter / block_sizes are still read
+    # for back-compat with stochastic_block.
+    "network_params": None,
     "p_intra": 0.15,
     "p_inter": 0.02,
     "block_sizes": None,        # defaults to equal split
+    # Wall-clock cap (seconds) for the conditional block of network
+    # diagnostics (clustering / shortest-path / diameter). 0 or None
+    # disables; per-metric size caps still apply.
+    "diagnostics_timeout_s": 30.0,
     "llm_model": "gpt-5-mini",
     "llm_provider": "openai",
     "llm_temperature": 0.5,
@@ -67,6 +76,68 @@ def _is_package_mode(config):
 
 def _get_package_policies(config):
     return config.get("package_policies") or ALL_CLIMATE_POLICIES
+
+
+def _resolve_network_params(cfg):
+    """Build the params dict for the network factory.
+
+    Reads the new ``network_params`` dict if present; otherwise falls back
+    to the legacy flat keys (``p_intra``, ``p_inter``) so existing
+    configurations and notebooks keep working.
+    """
+    params = dict(cfg.get("network_params") or {})
+    network_type = cfg.get("network_type", "stochastic_block")
+    if network_type == "stochastic_block":
+        for legacy_key in ("p_intra", "p_inter"):
+            if legacy_key in cfg and legacy_key not in params:
+                val = cfg.get(legacy_key)
+                if val is not None:
+                    params[legacy_key] = val
+    return params
+
+
+def _safe_network_diagnostics(nation, config):
+    """Compute network diagnostics, swallowing any error so a long
+    simulation never aborts at the reporting stage.
+
+    Returns ``None`` only when there is no graph on the nation. Otherwise
+    always returns a dict with the always-on cheap-metric keys present;
+    on failure those keys are filled with ``None`` and an ``error`` field
+    is attached so downstream consumers can rely on a stable shape.
+    """
+    G = getattr(nation, "network", None)
+    if G is None:
+        return None
+    try:
+        from cag.abm.networks import compute_diagnostics
+        timeout = config.get("diagnostics_timeout_s", 30.0)
+        diag = compute_diagnostics(
+            G, agents=list(nation.agents_active.values()),
+            timeout_s=timeout,
+        )
+        diag["network_type"] = getattr(nation, "network_type", config.get("network_type"))
+        diag["network_params"] = getattr(nation, "network_params", None) \
+            or _resolve_network_params(config)
+        return diag
+    except Exception as e:  # noqa: BLE001
+        logging.warning("Network diagnostics failed: %s", e)
+        return {
+            "n_nodes": None,
+            "n_edges": None,
+            "density": None,
+            "mean_degree": None,
+            "median_degree": None,
+            "max_degree": None,
+            "degree_histogram": None,
+            "n_connected_components": None,
+            "largest_component_size": None,
+            "assortativity_political_exposure": None,
+            "timed_out": False,
+            "network_type": getattr(nation, "network_type", config.get("network_type")),
+            "network_params": getattr(nation, "network_params", None)
+                or _resolve_network_params(config),
+            "error": str(e),
+        }
 
 
 def _run_baseline_surveys(nation, policies, api_key, model, provider,
@@ -340,8 +411,8 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
         seed=cfg["random_seed"],
     )
     nation.create_network(
-        p_intra=cfg["p_intra"],
-        p_inter=cfg["p_inter"],
+        network_type=cfg.get("network_type", "stochastic_block"),
+        network_params=_resolve_network_params(cfg),
         seed=cfg["random_seed"],
     )
     nation.assign_network_blocks()
@@ -558,6 +629,7 @@ def _collect_results(nation, config):
         "ground_truth": ground_truth_df,
         "package_ground_truth": package_ground_truth_df,
         "config": config,
+        "network_diagnostics": _safe_network_diagnostics(nation, config),
     }
 
 
@@ -698,6 +770,11 @@ def save_results(results, output_dir="data/output/experiments"):
     config_serialisable = _serialise_config(results["config"])
     _atomic_write_json(config_serialisable, out_path / "config.json")
 
+    # Network diagnostics (if a graph was attached to the results dict)
+    diagnostics = results.get("network_diagnostics")
+    if diagnostics is not None:
+        _atomic_write_json(diagnostics, out_path / "network_diagnostics.json")
+
     logging.info(f"Results saved to {out_path}")
     return out_path
 
@@ -708,8 +785,13 @@ CHECKPOINT_SCHEMA_VERSION = 1
 
 # Config keys whose change must abort a resume (would silently corrupt
 # the simulation if mismatched against the saved state).
+# Note: ``p_intra`` and ``p_inter`` are *not* listed here — they are folded
+# into the resolved ``network_params`` dict by ``_resolve_network_params``
+# and compared in resolved form by ``_validate_resume_config`` so that
+# upgrading a config from flat legacy keys to ``network_params={...}``
+# (or vice versa) does not trigger a spurious resume mismatch.
 _RESUME_HARD_KEYS = (
-    "n_citizens", "random_seed", "p_intra", "p_inter", "network_type",
+    "n_citizens", "random_seed", "network_type",
     "communication_mode", "package_policies", "day0_anchor",
     "reach_a", "reach_b", "audience_cap",
 )
@@ -779,6 +861,19 @@ def _validate_resume_config(meta, cfg, nation):
                 f"(checkpoint={saved.get(key)!r}, new={new.get(key)!r}). "
                 f"This would invalidate prior agent state."
             )
+
+    # Network params: compared in *resolved* form so that a config which
+    # previously used legacy flat keys (``p_intra``/``p_inter``) and is
+    # later upgraded to ``network_params={...}`` (or vice versa) is not
+    # rejected for a difference that has no effect on the actual graph.
+    saved_net = _resolve_network_params(saved)
+    new_net = _resolve_network_params(new)
+    if saved_net != new_net:
+        raise ValueError(
+            f"Cannot resume: resolved network parameters changed "
+            f"(checkpoint={saved_net!r}, new={new_net!r}). "
+            f"This would invalidate the peer network."
+        )
 
     # Days schedule: the new config must extend (or match) the checkpoint's
     # already-completed prefix. We allow future days to grow / change, but

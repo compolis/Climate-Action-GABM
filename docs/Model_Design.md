@@ -2,6 +2,11 @@
 
 ## Full Design Specification — v1.0
 
+> **Append-only document.** This file is treated as an append-only design log.
+> Existing sections are not edited or rewritten; new design decisions are
+> added as new numbered sections at the end of the document so that the
+> historical record of decisions remains intact and reviewable.
+
 ---
 
 ## 1. Overview
@@ -781,3 +786,770 @@ Acceptance: existing 325 tests pass at `max_concurrent_agents=1`; new wall-time 
 
 *Specification version 1.0 — produced during iterative design session.*
 *All design decisions are documented and configurable for experimental variation.*
+
+---
+
+## 17. Pluggable Peer-Network Factory (v0.5, 2026-05-14)
+
+### 17.1 Motivation
+
+Through v0.4 the peer network was a single hard-coded 2-block stochastic block
+model (SBM) driven entirely by `political_exposure`, exposing only `p_intra`
+and `p_inter` as knobs. That bakes in three structural assumptions: (i)
+exposure category is the only homophily axis, (ii) the degree distribution
+is approximately Poisson, and (iii) there are no hubs and no clustering
+beyond what the block structure produces. These assumptions silently constrain
+exactly the dynamics the project wants to study (echo chambers, tipping,
+asymmetric reach by hubs), so the network model is promoted to a **first-class
+configurable component** with a registry of alternative topologies and a
+shared structural-diagnostics report.
+
+This is **not** a change to the broadcast contact structure (Priority 2 in the
+current planning cycle); only the peer-messaging graph.
+
+### 17.2 Design decisions (locked-in this cycle)
+
+1. **Five network types ship in v0.5**: `stochastic_block` (default,
+   back-compat), `erdos_renyi`, `watts_strogatz`, `barabasi_albert`,
+   `homophily_weighted`. Barabási–Albert is included from the start because
+   hub effects are central to upcoming reach-asymmetry experiments.
+2. **Raw parameters are exposed**, no auto-tuning of density. The
+   experimenter chooses the knobs per type; comparability across types is
+   reported via the diagnostics block, not enforced at construction time.
+3. **Homophily-weighted similarity** uses a config-controlled subset of
+   citizen attributes (default `["ukge2019_vote_id", "brexit_vote_id",
+   "region_id"]`). The day-0 climate-opinion vector is **excluded by default**
+   to avoid conflating with day-0 anchoring; experimenters may add it.
+4. **Diagnostics are always on** but bounded. Cheap structural metrics
+   always run; clustering / shortest-path / diameter run under per-metric
+   size caps **and** a single wall-clock cap (`diagnostics_timeout_s`,
+   default 30 s). On timeout, partial results are saved with
+   `"timed_out": true` rather than aborting the run.
+5. **Back-compat is preserved.** Legacy flat keys `p_intra`, `p_inter`
+   continue to work for `stochastic_block`; legacy
+   `nation.create_network(p_intra=..., p_inter=...)` calls continue to work
+   with a `DeprecationWarning` in the log.
+
+### 17.3 Network types (as built)
+
+| `network_type` | Builder | Parameters (raw, no tuning) | Notes |
+|---|---|---|---|
+| `stochastic_block` | `nx.stochastic_block_model` | `p_intra` (def 0.15), `p_inter` (def 0.02) | 2 blocks driven by `political_exposure`; swing round-robin. Identical to the v0.4 implementation. |
+| `erdos_renyi` | `nx.erdos_renyi_graph` | `p` (def 0.05) | Null model: no homophily, no clustering, no hubs. |
+| `watts_strogatz` | `nx.watts_strogatz_graph` | `k` (even int, def 6), `beta` (def 0.10) | Small-world: high clustering + short paths. Probes echo-chamber strength. |
+| `barabasi_albert` | `nx.barabasi_albert_graph` | `m` (def 3) | Scale-free / preferential attachment; hubs. Important for asymmetric-reach experiments. |
+| `homophily_weighted` | custom | `attributes` (list, default above), `weights` (list, default uniform), `scale` (def 6.0), `threshold` (def 3.0) | Edge prob = `sigmoid(scale·sim − threshold)`; per-attribute similarity is 1/0 for categorical and `1 − normalised distance` for numeric. Larger threshold ⇒ sparser graph. |
+
+All builders return an `nx.Graph` whose nodes are agent IDs, so
+`assign_network_blocks()` is unchanged and topology-agnostic.
+
+### 17.4 Diagnostics
+
+A single `compute_diagnostics(G, agents, timeout_s)` entry point produces
+one JSON record saved as `<run_dir>/network_diagnostics.json`.
+
+**Always reported** (cheap, O(n + m)):
+- `n_nodes`, `n_edges`, `density`
+- `mean_degree`, `median_degree`, `max_degree`, `degree_histogram` (20 bins)
+- `n_connected_components`, `largest_component_size`
+- `assortativity_political_exposure` (categorical)
+
+**Conditional, capped:**
+- `average_clustering` — skipped if `n > 5000`.
+- `average_shortest_path_length` — skipped if `n > 2000`; on disconnected
+  graphs computed on the largest CC; if the CC has > 500 nodes, estimated
+  from 500 sampled source nodes (recorded in the `_note` field).
+- `diameter` — skipped if `n > 2000` or largest-CC `n > 2000`.
+- A single wall-clock guard (`diagnostics_timeout_s`, default 30 s,
+  POSIX `SIGALRM`) wraps the whole conditional block; on expiry, the
+  record carries `"timed_out": true` and partial fields are kept.
+- Skipped metrics carry `<name>_skipped_reason`.
+
+The trailing `elapsed_s` field records wall time so anomalies are
+auditable.
+
+### 17.5 Configuration surface
+
+New / changed `SIM_CONFIG` keys:
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `network_type` | str | `"stochastic_block"` | One of the five registered types. |
+| `network_params` | dict \| None | `None` | Per-type parameters; defaults applied if `None`. |
+| `diagnostics_timeout_s` | float | `30.0` | Wall-clock cap for the conditional metrics block. `0` / `None` disables the wall-clock guard; per-metric size caps still apply. |
+
+**Back-compat:** `p_intra`, `p_inter`, and `block_sizes` remain in
+`SIM_CONFIG` and are folded into `network_params` when
+`network_type == "stochastic_block"` and the new dict does not already
+specify them.
+
+**Resume contract:** `network_params` is added to `_RESUME_HARD_KEYS`
+alongside the existing `network_type`, `p_intra`, `p_inter`. Changing it
+across a resume aborts.
+
+### 17.6 Code structure
+
+- **New module** `src/cag/abm/networks.py`
+  - `NETWORK_TYPES`, `DEFAULT_HOMOPHILY_ATTRIBUTES`
+  - `build_network(network_type, agents, params, seed) -> nx.Graph`
+  - `compute_diagnostics(G, agents, timeout_s) -> dict`
+- **Refactored** `SurveyedNation.create_network()` is a thin dispatcher
+  delegating to `build_network`; legacy `p_intra` / `p_inter` / `n_blocks`
+  kwargs trigger `DeprecationWarning`. Stores `self.network_type` and
+  `self.network_params` for diagnostics.
+- **`sim.py`** adds `_resolve_network_params()` and
+  `_safe_network_diagnostics()`; `_collect_results` attaches the
+  diagnostics dict to the results, and `save_results` writes
+  `network_diagnostics.json` next to `config.json`.
+- **`tests/test_networks.py`** — 17 new tests covering every builder,
+  invalid-parameter paths, seed reproducibility, perfect-homophily
+  separation, dispatch through `SurveyedNation`, legacy-kwargs
+  back-compat, and the diagnostics surface (basic keys, assortativity,
+  disconnected graphs, timeout disabled).
+- **Demo notebook** `notebooks/26_network_factory_demo.ipynb` — builds
+  all five types on the same 80-agent synthetic set, prints diagnostics
+  side-by-side, and renders graph layouts + degree histograms.
+
+### 17.7 Test status
+
+- 382 passed, 1 skipped (was 365 / 1) — 17 new tests, no regressions.
+- All five builders produce reproducible graphs at fixed `seed`.
+- Demo notebook executes end-to-end; visuals confirm expected structural
+  signatures (two communities for SBM and homophily, hubs for BA,
+  ring + shortcuts for WS, noise for ER).
+
+### 17.8 Out of scope (deferred)
+
+- **Degree-corrected SBM, multiplex / two-layer graphs, configuration
+  model, latent-space embeddings.** All flagged in the planning thread;
+  not required for the current research questions and easy to add later
+  via the same factory.
+- **Auto-tuned density / mean-degree calibration** so different topologies
+  share a target degree. Decided against this cycle (raw parameters were
+  preferred); the diagnostics report makes mismatches explicit instead.
+- **Broadcast contact structure** (Priority 2). Still uses
+  `political_agent.connected_citizens` filtered by `audience_cap` and
+  `reach_a` / `reach_b`; the network factory does **not** touch it.
+
+---
+
+## 18. Broadcast-Audience Assignment: Multi-Mode Rule + Calibration (v0.5, 2026-05-14)
+
+### 18.1 Purpose and scope
+
+This section specifies an upgrade to how each citizen is sorted into
+one of four political-exposure cells — `A-only`, `B-only`, `both`,
+`neither` — that decide who receives each political agent's broadcast
+messages.
+
+The upgrade has two independent parts:
+
+- **Phase A — three named assignment rules behind a `mode` switch.**
+  The existing 10-priority chain (kept frozen for back-compat) plus a
+  new signal-counting rule (the new default) plus a truly-random
+  baseline rule.
+- **Phase B — optional resampling-calibration layer.** Sub-samples the
+  YouGov pool so the realised four-cell marginals match a target
+  distribution. Applies on top of `rule_priority_chain` or
+  `rule_signal_count`; ignored under `rule_random` (which hits any
+  marginals directly).
+
+The function `assign_political_exposure()` in
+[`src/cag/abm/environment.py`](../src/cag/abm/environment.py) **keeps
+its name** (so existing notebooks continue to work). It becomes a
+dispatcher that takes a `mode` argument and delegates to one of three
+implementations.
+
+Nothing about the political agents, broadcast prompt, message-delivery
+loop, end-of-day survey, peer messaging, or the peer-network factory
+in §17 changes — only **which citizens land in which cell**.
+
+The supporting empirical evidence sits in
+[`docs/Literature_Political_Exposure.md`](Literature_Political_Exposure.md).
+
+> **Status (2026-05-14):** design only. No code, tests, or notebooks
+> in this section yet. The `rule_random` mode in §18.6 is flagged for
+> a team-discussion review before implementation; see §18.12.
+
+### 18.2 Why the current rule needs to change
+
+The current `assign_political_exposure()` is a 10-step priority chain
+over `(brexit_vote_id, ukge2019_vote_id, politics_id)`. It conflates
+three conceptually distinct questions under one routing logic:
+
+1. **Engagement** — does this person attend to political messaging at all?
+2. **Identity** — if engaged, which side?
+3. **Topic relevance** — does this person attend to *climate*
+   messaging specifically?
+
+Two consequences are visible in the data. Measured on the full YouGov
+pool (`YouGovProcessedData.csv`, N = 1483) on 2026-05-14:
+
+| Cell      | Count | Share  |
+|-----------|------:|-------:|
+| `A-only`  |   405 | 27.31% |
+| `B-only`  |   285 | 19.22% |
+| `both`    |   725 | **48.89%** |
+| `neither` |    68 |  **4.59%** |
+
+A-audience (`A-only ∪ both`) = 76.2 %; B-audience (`B-only ∪ both`)
+= 68.1 %; structural asymmetry ≈ +8 pp in agent A's favour.
+
+Two structural problems:
+
+1. **`both` is a residual catch-all (~49 %).** Rules 5–9 of the chain
+   route any citizen with a *single-direction* signal (e.g. Leave +
+   "don't know" GE2019; or "don't know" Brexit + Conservative GE2019)
+   into `both`, even though that signal points unambiguously one way.
+   The cell stops meaning "engaged with cross-cutting content" and
+   starts meaning "anything we couldn't cleanly classify".
+2. **`neither` is implausibly small (~5 %).** UK survey evidence
+   (Reuters Institute *Digital News Report*, Hansard *Audit*, climate
+   audience-segmentation work) puts the genuinely depoliticised /
+   news-avoidant share at ~35–50 % — see lit doc §2–§4. Almost every
+   YouGov respondent has *some* political signal in *some* dimension
+   because YouGov recruits politically engaged panellists by design;
+   the rule's catch-all then absorbs them into `both`.
+
+Problem (1) is a **rule-design** problem and is fixed by Phase A
+(`rule_signal_count`). Problem (2) is a **panel-selection** problem
+that no rule can fix on its own — it needs Phase B's resampling
+calibration to drop politically-engaged respondents in proportion.
+
+### 18.3 Locked design decisions
+
+The decisions below were taken in the planning thread of 2026-05-14
+and are fixed for the v0.5 implementation cycle.
+
+1. **Three named rules, default `rule_signal_count`.** No "legacy"
+   label — all three are first-class, documented modes. The renaming
+   is deliberate: in six months "legacy" will mean nothing to a new
+   reader, but `rule_priority_chain` describes how the rule actually
+   works.
+2. **`rule_priority_chain` is frozen.** Kept identical to the current
+   2026-04 implementation, byte-for-byte. Used for reproducing
+   pre-v0.5 results. Any future rule changes go into a new mode, not
+   into `priority_chain`.
+3. **Symmetric political reach is the *target* default for Phase B.**
+   When Phase B is enabled with no explicit `targets`, the dict used
+   is `{A-only: 0.225, B-only: 0.225, both: 0.20, neither: 0.35}` —
+   symmetric A vs B, lit-grounded `neither`. Asymmetric scenarios
+   (e.g. UK-realistic `B-only > A-only`) are explicit overrides, not
+   the default.
+4. **Phase B is opt-in on rule modes.** With `political_exposure_targets
+   = None` (the default), Phase B does nothing and the rule's natural
+   marginals stand. With a target dict supplied, the resampling layer
+   runs after Phase A.
+5. **`rule_random` is mutually exclusive with Phase B resampling.**
+   It hits any marginals directly in one shot; there is nothing to
+   resample. `political_exposure_targets` is *required* under
+   `rule_random`.
+6. **Replication regime defaults to "fixed counts, individuals vary".**
+   Each of K replications draws fresh individuals while keeping the
+   four cell *counts* equal to their targets. A "multinomial counts"
+   regime where counts also jitter is available as opt-in for
+   uncertainty audits. Applies to both `rule_random` label-assignment
+   and Phase B resampling.
+
+### 18.4 Mode `rule_priority_chain` (frozen)
+
+The existing 10-rule priority chain documented in §6. Implementation
+is moved out of `SurveyedNation.assign_political_exposure()` into a
+private helper `_assign_priority_chain()` in
+`src/cag/abm/exposure.py` but remains byte-equivalent. Used to
+reproduce all pre-v0.5 results.
+
+Realised marginals on full YouGov pool (measured 2026-05-14):
+A-only 27.3 %, B-only 19.2 %, both 48.9 %, neither 4.6 %.
+
+### 18.5 Mode `rule_signal_count` (new default)
+
+The new rule replaces the priority chain with a symmetric
+signal-counting procedure. For each citizen:
+
+```text
+LEFT_SIGNALS  = (Brexit == REMAIN)
+              + (GE2019 in {Labour, Green, LibDem})
+              + (politics_id in {very-left, fairly-left, slightly-left})
+
+RIGHT_SIGNALS = (Brexit == LEAVE)
+              + (GE2019 in {Conservative, Brexit Party})
+              + (politics_id in {slightly-right, fairly-right, very-right})
+
+ENGAGED       = (Brexit not in {DK, Unknown})
+             OR (GE2019 not in {DK, Unknown, Other})
+             OR (politics_id not in {DK, Unknown})
+              # politics_id == CENTRE (4) counts as engaged
+
+cell = "neither"               if not ENGAGED
+     = "A-only"                if LEFT_SIGNALS > 0 and RIGHT_SIGNALS == 0
+     = "B-only"                if RIGHT_SIGNALS > 0 and LEFT_SIGNALS == 0
+     = "both"                  otherwise
+                               # cross-pressured (Leave+Lab, Remain+Con, ...)
+                               # OR engaged-with-no-direction (centre, Other)
+```
+
+> **Provisional CENTRE routing (pending §18.12 Q2).** Citizens with
+> `politics_id == CENTRE` and no resolvable Brexit / GE2019 vote contribute
+> zero to both `LEFT_SIGNALS` and `RIGHT_SIGNALS`, so the `otherwise` branch
+> routes them to `both`. This is the working resolution of §18.12 Q2; the
+> alternative is to route them to `neither` (treat "engaged-but-centred"
+> as a non-audience). The team review of §18.12 will confirm or revise this
+> before the implementation lands.
+
+#### 18.5.1 Defensibility (the conceptual case)
+
+- **`A-only` and `B-only` aggregate strong-and-weak directional
+  signals into one cell.** A "Remain + Labour + politics=2" citizen
+  and a "Remain + DK + DK" citizen both end up in `A-only`. Both
+  legitimately lean left; the strength difference is real and
+  recoverable downstream as a covariate, but does not justify a cell
+  boundary. (The current chain instead routes the second citizen into
+  `both`, which is what makes `both` a dustbin.)
+- **`both` is reserved for genuine cross-pressure or engaged-no-direction.**
+  Cross-pressured = signals point *both* ways (Leave + Labour, Remain
+  + Conservative). Engaged-no-direction = explicit centrist
+  (`politics_id == CENTRE`) with no resolvable vote, or "Other" GE2019
+  voter with no other signal. The lit (Dubois & Blank 2018; Eady
+  et al. 2019) supports treating these as the cross-cutting-content
+  audience.
+- **Engagement uses revealed behaviour, not ideological extremity.**
+  We considered an "engagement = distance from centre" axis and
+  rejected it: a passionate centrist Lib Dem activist is engaged but
+  central, and a disaffected partisan can be politically marginal.
+  Engagement and extremity are independent dimensions in every UK
+  survey series we trust. The boundary that *does* work is "did this
+  person give us any non-DK signal at all?" — which is identical to
+  the existing rule's `neither` boundary, deliberately.
+
+#### 18.5.2 Realised marginals on YouGov (measured 2026-05-14)
+
+| Cell      | `priority_chain` | `signal_count` |
+|-----------|----------------:|---------------:|
+| `A-only`  | 27.3 %          | **41.9 %**     |
+| `B-only`  | 19.2 %          | **28.2 %**     |
+| `both`    | **48.9 %**      | **25.3 %**     |
+| `neither` | 4.6 %           | 4.6 %          |
+| A-audience| 76.2 %          | 67.2 %         |
+| B-audience| 68.1 %          | 53.5 %         |
+| A − B asymmetry | +8.1 pp   | **+13.8 pp**   |
+
+Three honest observations:
+
+1. **`both` drops from 49 % → 25 %**, exactly as designed. This is
+   the headline win of `rule_signal_count`.
+2. **`neither` is unchanged at 4.6 %.** The engagement boundary is
+   unchanged by design, so YouGov's panel-selection bias still binds.
+   This is a Phase B problem, not a rule problem.
+3. **A-vs-B asymmetry *increases* from +8 pp to +14 pp.** The
+   priority chain was hiding single-direction Remainers in `both`;
+   the new rule places them correctly in `A-only`, which makes the
+   YouGov panel's underlying Remain skew newly visible. Phase B is
+   needed to re-symmetrise if a symmetric baseline is wanted.
+
+#### 18.5.3 Per-replication variability at N = 100 (`signal_count`)
+
+Sub-sampling N = 100 from the 1483-row pool, five seeds:
+
+| seed  | A-only | B-only | both | neither |
+|------:|-------:|-------:|-----:|--------:|
+| 42    | 38     | 26     | 34   | 2       |
+| 7     | 44     | 32     | 20   | 4       |
+| 123   | 50     | 26     | 21   | 3       |
+| 2024  | 37     | 29     | 28   | 6       |
+| 9999  | 47     | 19     | 31   | 3       |
+
+Cell counts swing by ±5 across seeds, which is the binomial sampling
+noise we expect at N = 100. `neither` remains tiny in every replication.
+
+### 18.6 Mode `rule_random` (truly random; baseline / null model)
+
+> **Status:** scoped here for documentation; flagged for team review
+> before implementation (§18.12 Q3).
+
+> **Reading note on `neither` (applies to all three rules).** The
+> `neither` cell means "receives no direct *broadcast* from either
+> political agent on a given day" — it does **not** mean "receives no
+> political or climate information at all". `neither` citizens still
+> participate in peer messaging, the end-of-day survey, memory
+> updates and everything else. The lit-supported 35–45 % share is for
+> this *no-broadcast-receipt* reading; the genuinely
+> information-isolated share is ~2–9 %. See
+> [`Literature_Political_Exposure.md`](Literature_Political_Exposure.md)
+> §6.2 for the distinction and §18.14 below for why YouGov-`neither`
+> respondents are an imperfect proxy for the genuinely disengaged.
+
+A pure stratified-label assignment rule. Cell labels are assigned to
+citizens by RNG, conditional on a target proportions dict and a
+count-regime. The per-citizen `(brexit, ge2019, politics_id)` triple
+is **not consulted**.
+
+```text
+inputs:
+  citizens         : list of agents (length n_agents)
+  targets          : dict[cell -> proportion]  (sums to 1.0)
+  count_regime     : "fixed" | "multinomial"
+  seed             : int
+
+steps:
+  1. Compute cell counts:
+       if count_regime == "fixed":
+         n_c = round(targets[c] * n_agents)
+         (largest-remainder rounding so sum(n_c) == n_agents)
+       else:
+         (n_A, n_B, n_both, n_neither) ~ Multinomial(n_agents, targets)
+  2. Build a label vector of length n_agents:
+       [A-only] * n_A + [B-only] * n_B + [both] * n_both + [neither] * n_n
+  3. RNG-shuffle the label vector with the given seed.
+  4. Assign labels to citizens in agent_id-sorted order so the mapping
+     is reproducible across replications that share a seed.
+```
+
+#### 18.6.1 What `rule_random` is for
+
+A **null-model control** for the rule itself. If a research finding
+survives swapping `rule_signal_count` → `rule_random` *at matched
+marginals*, the result is driven by the **population mix** (cell
+counts) and not by *which specific individuals were where*. If it
+doesn't survive, the per-individual signal mattered — also
+publishable. This control is methodologically valuable and difficult
+to construct any other way.
+
+#### 18.6.2 What `rule_random` is *not* for
+
+`rule_random` cannot support per-individual claims. A citizen whose
+voting record screams "left" can land in `B-only` purely by RNG. Do
+not use this mode to claim "Reform's natural audience"; do not
+interpret cell membership as anything other than a randomly-assigned
+treatment label.
+
+#### 18.6.3 Open variants (deferred to team discussion)
+
+Two restricted-random variants are flagged for §18.12 review and
+**not** implemented in the first pass:
+
+- *Random-conditional-on-engagement*: assign `neither` strictly to
+  citizens with no political signal (so the engagement boundary is
+  preserved); randomly distribute the engaged remainder across A-only
+  / B-only / both at the requested proportions.
+- *Random-conditional-on-Brexit*: RNG-assign within Leavers and
+  Remainers separately so the Brexit-vote signal is preserved while
+  GE2019 and politics_id are ignored.
+
+Both are softer middle grounds between full `rule_random` and full
+`rule_signal_count`. The first-pass implementation ships only the
+fully-random version; variants are added if the team discussion
+endorses them.
+
+### 18.7 Phase B: Optional resampling-calibration layer
+
+When `political_exposure_targets` is supplied under
+`rule_priority_chain` or `rule_signal_count`, Phase B sub-samples the
+YouGov pool so the realised four-cell marginals match the target
+distribution. Algorithm:
+
+```text
+inputs:
+  nation                : SurveyedNation, agents_active fully populated
+  rule                  : the chosen Phase A rule
+  targets               : dict[cell -> proportion]  (sums to 1.0)
+  n_agents              : desired post-calibration agent count
+  count_regime          : "fixed" | "multinomial"
+  seed                  : int
+
+steps:
+  1. Run the Phase A rule on the full pool.
+  2. Group citizens by realised cell -> pools[cell].
+  3. Compute target counts per §18.5 / §18.6 rounding.
+  4. For each cell c:
+       if n_c <= len(pools[c]):
+         draw n_c citizens uniformly without replacement
+       else:
+         raise ValueError (pool exhaustion — see §18.9)
+  5. Replace nation.agents_active with the union of the four draws.
+  6. Re-run the Phase A rule on the reduced set so connected_citizens
+     lists reflect the calibrated population.
+  7. Emit exposure_diagnostics: requested vs realised proportions,
+     RNG seed, pool-exhaustion warnings, rule used.
+```
+
+Rationale: the Phase A rule labels each individual based on their own
+data; Phase B controls the *population mix* without changing those
+labels. Every retained citizen still carries a meaningful cell tag.
+
+### 18.8 Configuration surface
+
+```python
+# Additions to src/cag/abm/sim.py SIM_CONFIG. Defaults preserve
+# current behaviour exactly *except* for the rule itself: a v0.5 run
+# without specifying these keys uses rule_signal_count, not
+# priority_chain. Set political_exposure_rule="rule_priority_chain"
+# to reproduce pre-v0.5 results byte-for-byte.
+
+"political_exposure_rule": "rule_signal_count",
+    # "rule_priority_chain"  -> frozen 10-rule chain (§18.4)
+    # "rule_signal_count"    -> new symmetric signal counter (§18.5; default)
+    # "rule_random"          -> truly random label assignment (§18.6)
+
+"political_exposure_targets": None,
+    # Required when rule == "rule_random"; dict that sums to 1.0 and
+    # contains all four cells {"A-only","B-only","both","neither"}.
+    # Optional under rule_priority_chain / rule_signal_count: triggers
+    # Phase B resampling-calibration on top of that rule.
+    # None  -> use rule's natural marginals, no resampling.
+
+"exposure_count_regime": "fixed",
+    # "fixed"        -> cell counts deterministic per replication
+    # "multinomial"  -> cell counts drawn from Multinomial each replication
+    # Ignored when rule != "rule_random" and targets is None.
+
+"exposure_seed_offset": 0,
+    # Added to random_seed when drawing rule_random labels and Phase B
+    # resampling. Independent of network and broadcast RNG streams.
+```
+
+`political_exposure_rule` and `political_exposure_targets` go in
+`_RESUME_HARD_KEYS` (changing either invalidates the agent set);
+`exposure_count_regime` and `exposure_seed_offset` go in
+`_RESUME_SOFT_KEYS`.
+
+#### 18.8.1 Configuration cheat-sheet
+
+| Goal | `rule` | `targets` |
+|---|---|---|
+| Reproduce pre-v0.5 results byte-for-byte | `rule_priority_chain` | `None` |
+| New default research workflow | `rule_signal_count` | `None` |
+| Symmetric baseline with rule-grounded cells | `rule_signal_count` | `{0.225, 0.225, 0.20, 0.35}` |
+| UK-realistic asymmetric scenario | `rule_signal_count` | `{0.15, 0.30, 0.20, 0.35}` |
+| Maximum-control synthetic baseline | `rule_random` | any dict |
+| "Does the rule itself matter?" sensitivity | matched `rule_signal_count` vs `rule_random` | matched targets |
+
+### 18.9 Edge cases and gotchas
+
+- **Pool exhaustion (Phase B only).** If a target cell count exceeds
+  the matching YouGov rows, raise `ValueError`. No silent
+  with-replacement fallback — that would create duplicate personas
+  and break the one-citizen-per-respondent invariant the rest of the
+  codebase assumes. With the §18.3 default targets at `n_agents = 100`,
+  the binding cell under `rule_signal_count` is `neither` (35 needed
+  vs 68 available — 1.9× headroom; cf. §18.5.2).
+- **`rule_random` has no pool exhaustion.** Labels are assigned, not
+  resampled. The 1483-row pool supports any cell mix at any agent
+  count up to 1483.
+- **`neither` cells skip broadcasts.** They are absent from both
+  political agents' `connected_citizens` lists, so increasing
+  `neither` from 5 % to 35 % reduces the per-day political-message
+  volume by ≈ 30 % at fixed `reach_a` / `reach_b`. This is the
+  *intended* effect; experimenters should size `reach` knobs with
+  this in mind.
+- **`audience_cap` and `reach_a`/`reach_b` compose downstream.**
+  Phase A → Phase B → `audience_cap` → reach subsample → broadcast.
+  No interaction with peer messaging or end-of-day survey.
+- **`day0_anchor` interaction: none.** Both phases change only the
+  agent set, not what happens to those agents on Day 0.
+- **Strict targets validation.** Targets must sum to 1.0 ± 1e-6 and
+  contain all four canonical cell keys. We raise on typos rather than
+  silently renormalising — caught a typo costs less than discovering
+  a 0.95-summing dict ran an experiment with `neither` at 5 % when
+  35 % was meant.
+- **Largest-remainder rounding tie-break.** When two or more cells tie
+  on fractional remainder (e.g. targets `0.225 / 0.225 / 0.20 / 0.35`
+  at `n_agents = 100` produce two cells with remainder `.5`), ties are
+  broken by canonical cell order: `A-only`, `B-only`, `both`, `neither`.
+  This makes the integer cell counts deterministic across replications
+  regardless of dict iteration order or platform sort stability, and
+  fixes the §18.10 worked example (`A-only` rounds up to 23, `B-only`
+  rounds down to 22).
+
+### 18.10 Replication-variance interpretation
+
+For the user's intended use case "100 agents, 100 replications" with
+the §18.3 default targets, per-replication cell counts under the two
+regimes are:
+
+| Cell      | Target | Regime "fixed" | Regime "multinomial", ±1 SD |
+|-----------|-------:|---------------:|----------------------------:|
+| `A-only`  |  0.225 |             23 | 23 ± 4.2 |
+| `B-only`  |  0.225 |             22 | 22 ± 4.2 |
+| `both`    |  0.20  |             20 | 20 ± 4.0 |
+| `neither` |  0.35  |             35 | 35 ± 4.8 |
+
+(Largest-remainder rounding: 23+22+20+35 = 100. Standard deviations
+from the binomial marginals of the multinomial.)
+
+Implications for the headline 100-replication run:
+
+1. **Per-replication SE on a within-cell mean opinion** (scale −3..+3,
+   per-agent SD ≈ 1.5): SE ≈ 1.5 / √20 ≈ 0.34 for the smallest cell.
+   Across 100 replications the *mean of cell means* has SE
+   ≈ 0.34 / √100 ≈ 0.034. Cell-level mean differences of ~0.05 are
+   resolvable; ~0.10 is comfortable.
+2. **Condition-level mean** (pooling agents and replications, fixed
+   regime): SE ≈ 1.5 / √(100 × 100) ≈ 0.015 — much smaller than any
+   plausible LLM-driven effect (Run-4 condition contrasts in
+   `result_report.md` are ~0.3–0.9 scale points).
+3. **Multinomial regime widens condition-level CIs modestly.** Use as
+   an *audit*: report headline under "fixed" and a robustness CI
+   under "multinomial".
+4. **Pool exhaustion is not the bottleneck.** Smallest cell pool
+   (`neither`, 68 respondents under either rule) supports any
+   single-replication draw up to 68 agents in that cell.
+5. **Across-replication independence.** With `n_agents = 100` against
+   1483 rows, no two of 100 replications can be fully disjoint (only
+   ~14 disjoint 100-samples exist). For *bootstrap-of-the-pool*
+   uncertainty (how much would the headline change if we had a
+   different YouGov panel?), wrap the 100-replication run in an outer
+   loop that resamples 1483 rows *with replacement* before each inner
+   replication. That outer CI is the right number to report when
+   making external-validity claims.
+
+### 18.11 Code structure (planned)
+
+| Location | Purpose |
+|---|---|
+| `src/cag/abm/exposure.py` (NEW) | All three rule implementations + Phase B helper. Pure functions, no LLM calls. Public entry: `assign_exposure(nation, rule, targets, n_agents, count_regime, seed) -> exposure_diagnostics`. |
+| `src/cag/abm/environment.py` | `SurveyedNation.assign_political_exposure(rule="rule_signal_count", targets=None, ...)` becomes a thin dispatcher to `cag.abm.exposure.assign_exposure`. Existing call sites that pass no arguments default to `rule_signal_count`. |
+| `src/cag/abm/sim.py` | Four new SIM_CONFIG keys (§18.8); `_resolve_runtime` reads them and dispatches. `_collect_results()` writes `exposure_diagnostics` into the results dict; `save_results()` persists it as `exposure_diagnostics.json`. |
+| `tests/test_exposure.py` (NEW) | Per rule: byte-for-byte equivalence of `rule_priority_chain` against the current implementation; cell-count accuracy of `rule_signal_count` on a synthetic fixture; statistical validity of `rule_random` (targets hit in expectation); largest-remainder rounding sums to `n_agents`; pool-exhaustion raises under Phase B; Phase B invariance — every retained citizen's cell label is unchanged by resampling. |
+| `notebooks/27_exposure_assignment_demo.ipynb` (NEW) | Side-by-side demo of all three rules on the YouGov pool; Phase B calibration before/after; cell-count distribution across 100 replications under fixed vs multinomial regimes. |
+
+### 18.12 Open questions for team discussion
+
+Carried forward from the planning thread; these are questions the
+team should weigh in on before or shortly after implementation lands.
+
+1. **Default rule: hard flip or one-cycle deprecation?** Current plan
+   defaults to `rule_signal_count` from day one. Alternative: keep
+   `rule_priority_chain` as default for one cycle, then flip. Cleaner
+   migration vs less faff.
+2. **Centre treatment in `rule_signal_count`.** Currently
+   `politics_id == CENTRE` with no resolvable vote → `both`
+   (engaged-but-cross-cutting). Alternative: → `neither`. Defensible
+   either way; ours leans on Dubois & Blank's framing.
+3. **`rule_random` — fully random vs conditional variants?** First
+   pass ships fully random only. §18.6.3 lists two restricted
+   variants (random-conditional-on-engagement;
+   random-conditional-on-Brexit) as candidates. Need team view on
+   whether either is worth implementing.
+4. **Per-citizen reproducibility under `rule_random`.** Should a given
+   `agent_id` always receive the same label given a fixed
+   `random_seed`, or should labels re-shuffle per replication? Current
+   plan: reproducible per agent_id given seed (§18.6 step 4). Affects
+   whether replications trace different *populations* or different
+   *labellings of the same population* — material for the methodology
+   section of any paper using this mode.
+5. **Phase B + `rule_random` mutual exclusivity.** Current plan: hard
+   error if both `rule_random` and `political_exposure_targets` are
+   supplied (since random already hits any targets directly). Should
+   we instead allow `targets` under `rule_random` as the *required*
+   input that makes the assignment work? Cleaner semantically but
+   asymmetric with how `targets` works under the rule modes.
+6. **Asymmetric default for the calibration target.** §18.3 locks a
+   symmetric default. Alternative: lit-realistic asymmetric default
+   (`B-only > A-only`) with symmetric available as an explicit
+   override. Trade-off: defensibility vs cleanliness for null-condition
+   experiments.
+7. **Pool source for the `neither` cell.** §18.14 documents that our
+   68 YouGov `neither` rows are demographically not the same people
+   as the UK disengaged population (lit doc §6.2.1). v0.5 ships with
+   the YouGov-only Phase B resample anyway (Option A in §18.14),
+   accepting this as a documented limitation. Two near-term options
+   are essentially closed (Option D — within-YouGov reweighting —
+   blocked by the 68-row pool size; Option C — augmenting from UKHLS /
+   BSA / ONS OLS — blocked by our restriction to the YouGov panel for
+   ground-truth comparability). Option B (synthetic disengaged
+   personas) is open but tensions with the broader
+   real-data + ground-truth design philosophy and needs explicit team
+   discussion before any work begins.
+
+### 18.13 Out of scope (deferred to a future cycle)
+
+- **Per-cell joint calibration with demographics.** Phase B controls
+  the marginal four-cell distribution but lets YouGov's intra-cell
+  demographic composition flow through unchanged. Stratifying further
+  (age × cell × region) is possible but adds many rounding constraints.
+- **Continuous exposure-probability** `(p_A, p_B) ∈ [0,1]²` per
+  citizen drawn per-day. Cleaner conceptually; breaks every
+  cell-comparison experiment in NB 20 / 21. Defer.
+- **Joint calibration of broadcast targets and peer-network targets.**
+  Peer-network rule design is owned by the user's team this cycle.
+- **Climate-relevant psychometric rule** using EDO / Selftransc /
+  Openness etc. Discussed and rejected this cycle: it would confound
+  the dependent variable (climate-receptive citizens disproportionately
+  in `A-only` makes the broadcast trivially "succeed" by selection).
+  Documented as a possible robustness mode for a future cycle.
+- **Hooking Phase B into the controller / multi-policy setup.**
+  Single-policy and package modes both work unchanged because Phase B
+  runs once at simulation start, before any per-policy branching.
+
+### 18.14 Pool source for the `neither` cell — documented limitation and options
+
+This subsection records a known limitation of the v0.5 design and
+the options considered for addressing it. **The decision for v0.5 is
+Option A (ship as planned).** Options B–D are documented for a future
+cycle; Options C and D are essentially closed under our current
+constraints and are kept here as understanding-the-disengaged context,
+not as actionable next steps.
+
+#### 18.14.1 The limitation
+
+The lit (see [`Literature_Political_Exposure.md`](Literature_Political_Exposure.md)
+§6.2) supports a 35–45 % `neither` share when `neither` is read as
+"no direct broadcast receipt". Our Phase B resampling layer (§18.7)
+can hit that target. **However**, the 68 YouGov rows that the rule
+classifies as `neither` are not demographically representative of the
+UK disengaged population. YouGov recruits politically-engaged
+panellists by design, so its `neither` rows are best characterised as
+*engaged respondents who happened to give DK on the three
+political-signal variables*, not as the Hansard / Reuters / CAST
+disengaged cluster (lit doc §6.2.1). Resampling 35 % of agents from
+those 68 rows inflates a demographically-narrow subset.
+
+This matters for any analysis that interprets `neither`-cell agents as
+"the disengaged public". It does **not** affect analyses that interpret
+`neither` purely structurally as "agents who don't receive a broadcast
+on a given day".
+
+#### 18.14.2 Options considered
+
+| Option | Description | Status |
+|---|---|---|
+| **A** | Phase B resamples within YouGov, accepting the demographic skew. | **Selected for v0.5.** |
+| **B** | Synthetic disengaged personas — strip political signals from selected YouGov rows and reweight psychometric / demographic fields toward the disengaged profile. | **Open but unresolved.** Tensions with the project's real-data + ground-truth philosophy; needs team discussion before any work. |
+| **C** | Augment the `neither` slot with respondents from UKHLS (Understanding Society), British Social Attitudes, or ONS Opinions and Lifestyle Survey — surveys that probability-sample the disengaged. | **Closed for now.** We are restricted to the YouGov panel for ground-truth comparability with the current v0.5 result chain. |
+| **D** | Reweight the existing 68-row YouGov `neither` pool by age × education × non-voter targets so its internal composition matches the UK disengaged profile, even though the count stays small. | **Closed.** 68 rows is too thin to reweight on more than one or two demographic axes without producing extreme weights and effective-sample-size collapse. |
+
+#### 18.14.3 Why Options C and D are still documented
+
+Even though neither is actionable in the current cycle, both clarify
+*who* is missing from our `neither` cell. The candidate external pools
+in Option C (UKHLS Wave 12 + political-engagement and environment
+modules; BSA annual climate items; ONS OLS environment waves) are
+useful **as readings, not as data**: they describe the demographic
+signature of the disengaged that any future Option B work would need
+to target. Option D similarly fails on *count*, not on *concept* — the
+concept (post-stratify the disengaged subset to UK marginals) is
+sound, and would be the right move if the YouGov pool were 10× larger.
+
+#### 18.14.4 Option B — what would need resolving before implementing
+
+Synthetic personas conflict with the existing design choice that every
+simulated citizen corresponds to one real YouGov respondent (which is
+what makes the per-agent ground-truth comparison in `result_report.md`
+possible). Outstanding questions, none answered:
+
+1. **What does ground truth mean for a synthetic `neither` agent?**
+   Their Day-0 survey ground-truth values would have to be imputed,
+   which weakens the central calibration claim of the project.
+2. **Which fields can be safely synthesised?** Psychometric scales
+   (EDO, Self-transcendence, Openness) carry a lot of behavioural
+   weight in the prompts. Their joint distribution conditional on
+   "disengaged" is not well-characterised in any UK source we have.
+3. **How do we audit that synthetic `neither` agents behave
+   *differently* from engaged-but-DK YouGov `neither` agents?** If
+   the LLM treats them identically, the synthetic effort buys
+   nothing; if it treats them very differently, we need to show those
+   differences are realistic.
+
+These are research-design questions for the team, not implementation
+choices, and are flagged as §18.12 Q7.
