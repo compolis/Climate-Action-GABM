@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import math
 import signal
+import threading
 import time
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Iterable, List, Sequence
@@ -228,6 +229,11 @@ def _build_homophily_weighted(
     ranges: List[float] = []
     for attr in attributes:
         col = [getattr(a, attr, None) for a in agents]
+        # Note: an all-None column has no non-None values, so all(...) over
+        # an empty generator returns True and the attribute is treated as
+        # numeric. This is intentionally benign — the inner loop short-
+        # circuits to s = 0.0 when either operand is None, so all-None
+        # columns contribute zero similarity regardless of this flag.
         numeric = all(isinstance(v, (int, float)) and not isinstance(v, bool)
                       for v in col if v is not None)
         is_numeric.append(numeric)
@@ -297,9 +303,17 @@ class _DiagnosticsTimeout(Exception):
 @contextmanager
 def _wallclock_timeout(seconds: float):
     """SIGALRM-based wall-clock timeout. POSIX-only; falls back to no-op
-    elsewhere (Windows). Used as a hard ceiling on the conditional metric
-    block, separate from the per-metric size caps."""
-    if seconds is None or seconds <= 0 or not hasattr(signal, "SIGALRM"):
+    elsewhere (Windows). Also a no-op when called from a non-main thread
+    (signal handlers can only be installed from the main thread of the
+    main interpreter), so the per-metric size caps remain the only ceiling
+    in worker-thread / parallel-sim contexts. Used as a hard ceiling on
+    the conditional metric block, separate from the per-metric size caps."""
+    if (
+        seconds is None
+        or seconds <= 0
+        or not hasattr(signal, "SIGALRM")
+        or threading.current_thread() is not threading.main_thread()
+    ):
         yield
         return
 

@@ -1089,6 +1089,14 @@ cell = "neither"               if not ENGAGED
                                # OR engaged-with-no-direction (centre, Other)
 ```
 
+> **Provisional CENTRE routing (pending §18.12 Q2).** Citizens with
+> `politics_id == CENTRE` and no resolvable Brexit / GE2019 vote contribute
+> zero to both `LEFT_SIGNALS` and `RIGHT_SIGNALS`, so the `otherwise` branch
+> routes them to `both`. This is the working resolution of §18.12 Q2; the
+> alternative is to route them to `neither` (treat "engaged-but-centred"
+> as a non-audience). The team review of §18.12 will confirm or revise this
+> before the implementation lands.
+
 #### 18.5.1 Defensibility (the conceptual case)
 
 - **`A-only` and `B-only` aggregate strong-and-weak directional
@@ -1344,6 +1352,14 @@ labels. Every retained citizen still carries a meaningful cell tag.
   silently renormalising — caught a typo costs less than discovering
   a 0.95-summing dict ran an experiment with `neither` at 5 % when
   35 % was meant.
+- **Largest-remainder rounding tie-break.** When two or more cells tie
+  on fractional remainder (e.g. targets `0.225 / 0.225 / 0.20 / 0.35`
+  at `n_agents = 100` produce two cells with remainder `.5`), ties are
+  broken by canonical cell order: `A-only`, `B-only`, `both`, `neither`.
+  This makes the integer cell counts deterministic across replications
+  regardless of dict iteration order or platform sort stability, and
+  fixes the §18.10 worked example (`A-only` rounds up to 23, `B-only`
+  rounds down to 22).
 
 ### 18.10 Replication-variance interpretation
 
