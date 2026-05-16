@@ -53,6 +53,15 @@ SURVEY_COLUMN_MAP: dict[ClimatePolicyID, str] = {
     ClimatePolicyID.CLIMATE_COMPENSATION: "page5posttreatment6_11",
 }
 
+SURVEY_SHORT_LABELS: dict[ClimatePolicyID, str] = {
+    ClimatePolicyID.RENEWABLE_ENERGY: "Accelerate renewable energy roll-out",
+    ClimatePolicyID.BAN_FOSSIL_FUEL: "Ban new oil/gas/coal licences",
+    ClimatePolicyID.BAN_PETROL_CARS: "Ban new petrol cars by 2030",
+    ClimatePolicyID.GREEN_HOUSING: "Green standards for new housing",
+    ClimatePolicyID.CARBON_TAX: "Carbon fee and dividend",
+    ClimatePolicyID.CLIMATE_COMPENSATION: "Climate compensation for poorer countries",
+}
+
 SURVEY_QUESTIONS: dict[ClimatePolicyID, str] = {
     ClimatePolicyID.RENEWABLE_ENERGY: (
         "Please say how much you support or oppose government policies that do the following: "

@@ -1553,3 +1553,201 @@ possible). Outstanding questions, none answered:
 
 These are research-design questions for the team, not implementation
 choices, and are flagged as §18.12 Q7.
+
+---
+
+## 19. Per-Day Broadcast-Frequency Sugar (v0.5, 2026-05-15)
+
+### 19.1 Motivation
+
+The "competing committed minorities" research question naturally calls
+for varying the **resources** of each political agent — in particular,
+how many broadcasts per day each side can afford. The simulation loop
+already supports this: the per-day `phases` list is iterated literally,
+so `["P-A", "P-A", "P-A", "P-B", "C"]` already fires three P-A
+broadcasts and one P-B broadcast, with no deduplication. This section
+documents that contract and adds an ergonomic config surface around it.
+
+### 19.2 Public API
+
+New helper `cag.abm.sim.make_phases(broadcasts_a=1, broadcasts_b=1,
+peer=True, interleave=False, a_first=True) -> list[str]` builds a phases
+list from per-side broadcast counts. Examples:
+
+```python
+make_phases()                            # ['P-A', 'P-B', 'C']
+make_phases(broadcasts_a=3)              # ['P-A', 'P-A', 'P-A', 'P-B', 'C']
+make_phases(2, 1, interleave=True)       # ['P-A', 'P-B', 'P-A', 'C']
+make_phases(broadcasts_b=0, peer=False)  # ['P-A']
+```
+
+The same five arguments are accepted as **per-day sugar keys** in
+`SIM_CONFIG["days"]`:
+
+```python
+{"policy": ClimatePolicyID.CARBON_TAX,
+ "broadcasts_a": 3, "broadcasts_b": 1}
+# expanded internally to phases=['P-A','P-A','P-A','P-B','C']
+```
+
+Resolution is handled by the new `_resolve_day_phases(day_config)`
+helper, called at the top of `_run_one_day`. Precedence rules:
+
+1. If `"phases"` is present in the day entry, it is used verbatim
+   (full backward compatibility).
+2. Otherwise, any of the sugar keys are forwarded to `make_phases`.
+3. Mixing `"phases"` with any sugar key in the same day entry raises
+   `ValueError` — there is one canonical source of truth per day.
+
+Validation in `make_phases` rejects negative integers, non-int counts,
+and `bool` values for the count arguments (the latter to avoid the
+implicit `True == 1` foot-gun).
+
+### 19.3 Behavioural contract under repetition
+
+Three behaviours are intentional and fixed in tests:
+
+- **Same audience on repeats.** `apply_reach_subsample()` shrinks each
+  political agent's `connected_citizens` once at sim setup. Repeated
+  broadcasts therefore reach the **same** subsample on every call —
+  semantically "repeated TV ads to the same viewers," not a fresh
+  sample. A future variant could add a per-broadcast resample mode; the
+  current API leaves room for it without breaking existing configs.
+- **Stateless message generation.** Each `run_political_broadcast` call
+  invokes `political_agent.generate_message(...)` afresh, with no
+  awareness of earlier messages from the same agent on the same day.
+  Citizens, by contrast, *do* see their own prior reflections via the
+  `recent_reflections` block in `assemble_context()`, so message-level
+  variation accumulates on the receiver side.
+- **No deduplication.** `["P-A","P-A","P-B","C"]` calls
+  `run_political_broadcast` three times. This is locked in by
+  `TestPerDayPhaseSugarInRunSimulation.test_explicit_phases_duplicates_not_deduped`.
+
+### 19.4 Tests
+
+21 new unit tests in `tests/test_sim.py` across three classes:
+`TestMakePhases` (helper output and validation), `TestResolveDayPhases`
+(precedence and error paths), `TestPerDayPhaseSugarInRunSimulation`
+(end-to-end through `run_simulation`). Full suite: 403 passing,
+1 skipped.
+
+### 19.5 Out of scope (deferred)
+
+- Per-broadcast audience resampling under `reach < 1.0`.
+- Per-broadcast cost/budget accounting (the natural follow-on if
+  resource asymmetry becomes a primary research lens).
+- Cross-day broadcast budgets (`budget_a` / `budget_b` global caps).
+- A dedicated experiment notebook sweeping `broadcasts_a` ×
+  `broadcasts_b` (left for the next analysis pass).
+
+## 20. v0.5 Prompt audit and unification (post local-LLM)
+
+### 20.1 Motivation
+
+A full audit of every LLM-facing prompt in `agent.py` surfaced three
+chronic issues:
+
+1. **Perspective inconsistency.** The debias chain
+   (`_ANTI_SYCOPHANCY` / `_DEBIAS_STEP1_TEMPLATE` /
+   `_DEBIAS_STEP2_TEMPLATE`) and the Day-0 rationale prompt mixed
+   second- and third-person framings ("this person… their values…")
+   while every other citizen-side prompt was first-person ("you…
+   your values…"). The 3P framings were inherited from NB 12 / NB 13
+   experiments and never reconciled with the rest of the chain after
+   NB 13's Condition B was promoted to the default.
+2. **End-of-day surveys did not reference the in-context memory.**
+   The vanilla Day ≥ 1 framing said *"Consider how today's messages
+   and discussions have shaped your thinking."*; debias Step 1's
+   factor list named voting history, values, and life circumstances
+   but not the day's messages and reflections. Spot-checks showed
+   the LLM largely ignoring `assemble_context()`'s daily-summary and
+   recent-reflection blocks at survey time.
+3. **`get_persona()` and `get_narrative()` were two different things
+   in code but one concept ("the persona") in every doc and review.**
+   Plus a Day-0 rationale bullet bug: every label was
+   `SURVEY_QUESTIONS[pid][:60]`, which truncates inside the
+   84-character shared preamble of all six policy questions —
+   producing six identical-looking bullets.
+
+### 20.2 Changes
+
+All changes are confined to `src/cag/abm/agent.py` and a small
+addition to `src/cag/abm/attributes/opinion.py`. No changes to
+network construction, simulation loop, output, or LLM provider.
+
+- **Perspective flipped to consistent 1P** across `_ANTI_SYCOPHANCY`,
+  `_DEBIAS_STEP1_TEMPLATE`, `_DEBIAS_STEP2_TEMPLATE`, and
+  `seed_opinion_with_rationale`'s user prompt. NB 13's Condition B
+  bias-reduction number (~97% on Ban Petrol Cars, `gpt-4.1-mini`)
+  should **not** be assumed to transfer to the 1P chain; a
+  Condition B re-measurement is on the deferred backlog (Phase 5 of
+  the v0.5 prompt-overhaul plan).
+- **End-of-day surveys reference the memory explicitly.** Vanilla
+  framing rewritten to *"Consider your earlier reasoning, the daily
+  summaries, and your recent reflections above before answering."*
+  Debias Step 1's factor list extended with *"the messages and
+  reflections from today"*.
+- **Persona merge.** `get_persona()` is now the canonical public
+  method, returning demographics + values joined by a single
+  newline. The two old builders are now private:
+  `_build_demographics_text()` (rename of old `get_persona`) and
+  `_build_values_text()` (rename of old `get_narrative`). The
+  end-of-context "Remember your persona: …" line is renamed
+  *"Remember who you are: …"* and continues to use the
+  demographics-only block (intentionally — values text in the
+  reminder slot tends to dilute the focus signal).
+- **Day-0 rationale labels fixed.** New `SURVEY_SHORT_LABELS` dict
+  in `opinion.py` (≤ 5 words per policy). `_build_day0_rationales`
+  switched from `SURVEY_QUESTIONS[pid][:60]` to
+  `SURVEY_SHORT_LABELS[pid]`. Every bullet is now uniquely labelled.
+- **Phase tags stripped from in-context reflections.** Bullets in
+  `assemble_context`'s recent-reflections block are now `- <text>`
+  rather than `- [P-A] <text>`. The `phase` field is unchanged in
+  `self.reflections[i]["phase"]` and `reflections.csv` (full audit
+  trail preserved). Rationale: the broadcast source is intentionally
+  unlabelled (see §19.3 / §3 of [V2 Prompts Guide](Prompts_and_Personas_Guide_v2.md)),
+  and the LLM doesn't need a meta-tag it can't act on.
+- **Memory compression: more depth, phase-agnostic.**
+  `compress_memories`'s user prompt rewritten from
+  *"Concisely summarise the following in 2 sentences from a 1st
+  person perspective: {memories}"* to a 4–5-sentence first-person
+  brief that specifically asks about which received messages were
+  compelling vs. pushed back on, and whether thinking shifted. Two
+  sentences was too aggressive — cross-day continuity of *why*
+  opinions moved was being lost.
+- **Peer-message reflection symmetry.** The single-policy variant of
+  `receive_peer_messages` previously ended *"affect your thinking."*
+  while the package variant ended *"affect your thinking about the
+  overall package."* — extended the single-policy version to
+  *"affect your thinking about {policy_description}."* to mirror.
+
+### 20.3 Tests
+
+Five existing assertions in `tests/test_agent.py`,
+`tests/test_baseline.py`, `tests/test_endofday.py`, and
+`tests/test_memory.py` updated to track the new wording and the
+merged-persona semantics. No new tests added (changes are
+text-level; existing structural coverage is sufficient). Full suite:
+**403 passing, 1 skipped** (unchanged from §19.4).
+
+### 20.4 Documentation
+
+- New canonical guide:
+  [docs/Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md).
+  Verbatim prompt quotes from current code, worked example over
+  Day 0 / Day 2 / Day 5 using real data from
+  `data/output/experiments/20260425_082317/` (with a caveat that
+  that run pre-dates the overhaul — structure is unchanged, wording
+  inside each section differs).
+- The V1 guide
+  [docs/Prompts_and_Personas_Guide.md](Prompts_and_Personas_Guide.md)
+  is preserved as historical reference of pre-v0.5 prompts.
+
+### 20.5 Out of scope (deferred)
+
+- Condition B bias-reduction re-measurement on the new 1P debias
+  chain (NB 13 partial re-run, ~120 API calls).
+- USER_GUIDE.md rewrite.
+- `__version__` bump across the 12 source modules.
+- Day-0 anchoring discussion — see "DAY 0 ANCHORING DISCUSSION" in
+  the user's progress notes; orthogonal to this overhaul.

@@ -1,5 +1,17 @@
 # Climate-Action-GABM — Prompts & Personas Guide
 
+> **⚠️ Superseded.** This document describes the pre-v0.5 prompts and the
+> separate `get_persona()` / `get_narrative()` persona model. It is preserved
+> for historical reference of the prompt wording used in the experimental
+> runs under `data/output/experiments/` dated on or before 2026-05-15.
+>
+> The current canonical guide is
+> [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md),
+> which reflects the v0.5 prompt overhaul (consistent first-person framing,
+> merged persona, daily-context-aware end-of-day surveys, repaired Day-0
+> rationale labels, and phase-tag-free reflection memory). See
+> [Model_Design.md §20](Model_Design.md) for the change rationale.
+
 A reader-friendly tour of every prompt the simulation sends to the LLM, plus the persona text that gives each agent its identity. The goal is that anyone — modeller, reviewer, supervisor, social scientist — can read this in one sitting and form an opinion on the design.
 
 All quoted text is the **actual prompt template** used in code. Source files cited inline.

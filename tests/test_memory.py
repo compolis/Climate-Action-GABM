@@ -56,7 +56,6 @@ class TestAssembleContext:
         c = _make_citizen()
         ctx = c.assemble_context(day=0)
         assert "36 year old teacher" in ctx
-        assert "fairness" in ctx
         assert "reflections" not in ctx.lower()
 
     def test_day1_includes_recent_reflections(self):
@@ -139,10 +138,10 @@ class TestAssembleContext:
         c = _make_citizen()
         _add_reflections(c, day=3)
         ctx = c.assemble_context(day=3)
-        # Persona appears after reflections (at the bottom)
+        # Persona reminder ("Remember who you are: ...") appears after reflections.
         ref_pos = ctx.index("Reflection 0 from day 3")
-        persona_pos = ctx.rindex("36 year old teacher")
-        assert persona_pos > ref_pos
+        reminder_pos = ctx.rindex("Remember who you are:")
+        assert reminder_pos > ref_pos
 
 
 # ===================================================================

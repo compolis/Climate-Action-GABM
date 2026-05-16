@@ -70,6 +70,103 @@ SIM_CONFIG = {
 VALID_DAY0_ANCHORS = ("llm_survey", "ground_truth", "ground_truth_with_rationale")
 
 
+# Per-day phase-sugar keys understood by ``_resolve_day_phases``. Listed
+# here so the validator can detect mixing with the canonical ``phases``
+# key without depending on inspect.signature.
+_PHASE_SUGAR_KEYS = (
+    "broadcasts_a", "broadcasts_b", "peer", "interleave", "a_first",
+)
+
+
+def make_phases(broadcasts_a=1, broadcasts_b=1, peer=True,
+                interleave=False, a_first=True):
+    """Build a ``phases`` list from per-side broadcast counts.
+
+    This is sugar over the canonical ``phases`` list consumed by
+    :func:`_run_one_day`. The simulation loop iterates the produced list
+    literally, so repeated entries (e.g. ``["P-A", "P-A", "P-B", "C"]``)
+    cause the corresponding political agent to broadcast multiple times
+    on the same day.
+
+    Args:
+        broadcasts_a: non-negative int. Number of P-A broadcasts.
+        broadcasts_b: non-negative int. Number of P-B broadcasts.
+        peer: if True, append a single ``"C"`` (peer-messaging) phase at
+            the end.
+        interleave: if True, interleave A and B broadcasts (A first when
+            ``a_first`` is True). Leftovers from the longer side trail
+            after the shorter side is exhausted. If False, all A
+            broadcasts come first (or all B if ``a_first`` is False).
+        a_first: ordering hint. With ``interleave=False`` decides whether
+            P-A or P-B broadcasts come first; with ``interleave=True``
+            decides which side leads the interleave.
+
+    Returns:
+        list[str] of phase tokens drawn from {"P-A", "P-B", "C"}.
+
+    Examples:
+        >>> make_phases()
+        ['P-A', 'P-B', 'C']
+        >>> make_phases(broadcasts_a=3)
+        ['P-A', 'P-A', 'P-A', 'P-B', 'C']
+        >>> make_phases(2, 1, interleave=True)
+        ['P-A', 'P-B', 'P-A', 'C']
+        >>> make_phases(broadcasts_b=0, peer=False)
+        ['P-A']
+    """
+    for name, val in (("broadcasts_a", broadcasts_a),
+                      ("broadcasts_b", broadcasts_b)):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+            raise ValueError(
+                f"{name} must be a non-negative int, got {val!r}"
+            )
+    for name, val in (("peer", peer), ("interleave", interleave),
+                      ("a_first", a_first)):
+        if not isinstance(val, bool):
+            raise ValueError(f"{name} must be a bool, got {val!r}")
+
+    phases = []
+    if interleave:
+        first, second = ("P-A", "P-B") if a_first else ("P-B", "P-A")
+        n_first = broadcasts_a if a_first else broadcasts_b
+        n_second = broadcasts_b if a_first else broadcasts_a
+        for i in range(max(n_first, n_second)):
+            if i < n_first:
+                phases.append(first)
+            if i < n_second:
+                phases.append(second)
+    else:
+        if a_first:
+            phases.extend(["P-A"] * broadcasts_a)
+            phases.extend(["P-B"] * broadcasts_b)
+        else:
+            phases.extend(["P-B"] * broadcasts_b)
+            phases.extend(["P-A"] * broadcasts_a)
+    if peer:
+        phases.append("C")
+    return phases
+
+
+def _resolve_day_phases(day_config):
+    """Return the ``phases`` list for a day, expanding sugar keys.
+
+    Precedence: an explicit ``"phases"`` key always wins. Otherwise, any
+    of the keys in :data:`_PHASE_SUGAR_KEYS` are forwarded to
+    :func:`make_phases`. Mixing canonical ``phases`` with sugar keys is
+    rejected.
+    """
+    has_phases = "phases" in day_config
+    sugar = {k: day_config[k] for k in _PHASE_SUGAR_KEYS if k in day_config}
+    if has_phases and sugar:
+        raise ValueError(
+            "day_config cannot mix 'phases' with broadcast-frequency "
+            f"sugar keys ({sorted(sugar)}); use one or the other."
+        )
+    if has_phases:
+        return list(day_config["phases"])
+    return make_phases(**sugar)
+
+
 def _is_package_mode(config):
     return config.get("communication_mode") == "package"
 
@@ -248,7 +345,7 @@ def _resolve_runtime(cfg):
 
 def _run_one_day(nation, day, day_config, n_days, rt):
     """Run a single simulation day end-to-end (phases → EOD survey → memory)."""
-    phases = day_config["phases"]
+    phases = _resolve_day_phases(day_config)
     package_mode = rt["package_mode"]
     package_policies = rt["package_policies"]
 
@@ -344,8 +441,14 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
 
     Args:
         config: dict with simulation parameters (see SIM_CONFIG for keys).
-            config["days"] is a list where each entry is:
+            config["days"] is a list where each entry is either:
                 {"policy": ClimatePolicyID, "phases": ["P-A", "P-B", "C"]}
+            or, using the broadcast-frequency sugar (see
+            :func:`make_phases`):
+                {"policy": ClimatePolicyID, "broadcasts_a": 3,
+                 "broadcasts_b": 1, "peer": True}
+            ``phases`` and the sugar keys cannot be mixed in the same
+            day entry.
         nation: a SurveyedNation with agents already loaded.
         checkpoint_dir: optional Path; directory to read/write per-day
             checkpoints. Required when ``resume=True`` or
