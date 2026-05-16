@@ -30,7 +30,9 @@ from cag.abm.sim import (
     collect_ground_truth,
     collect_package_ground_truth,
     _collect_results,
+    _resolve_day_phases,
     _serialise_config,
+    make_phases,
     SIM_CONFIG,
 )
 
@@ -1289,6 +1291,179 @@ class TestDay0Anchor(unittest.TestCase):
                 agent.seed_opinion_from_ground_truth.call_count,
                 len(ALL_CLIMATE_POLICIES),
             )
+
+
+# ── make_phases / per-day phase sugar ───────────────────────────
+
+
+class TestMakePhases(unittest.TestCase):
+    def test_default_matches_canonical_three_phase_day(self):
+        self.assertEqual(make_phases(), ["P-A", "P-B", "C"])
+
+    def test_repeat_a_only(self):
+        self.assertEqual(
+            make_phases(broadcasts_a=3),
+            ["P-A", "P-A", "P-A", "P-B", "C"],
+        )
+
+    def test_repeat_b_only(self):
+        self.assertEqual(
+            make_phases(broadcasts_a=1, broadcasts_b=2),
+            ["P-A", "P-B", "P-B", "C"],
+        )
+
+    def test_b_first_no_interleave(self):
+        self.assertEqual(
+            make_phases(broadcasts_a=2, broadcasts_b=1, a_first=False),
+            ["P-B", "P-A", "P-A", "C"],
+        )
+
+    def test_interleave_balanced(self):
+        self.assertEqual(
+            make_phases(broadcasts_a=2, broadcasts_b=2, interleave=True),
+            ["P-A", "P-B", "P-A", "P-B", "C"],
+        )
+
+    def test_interleave_unbalanced_a_leads(self):
+        self.assertEqual(
+            make_phases(broadcasts_a=3, broadcasts_b=1, interleave=True),
+            ["P-A", "P-B", "P-A", "P-A", "C"],
+        )
+
+    def test_interleave_b_leads(self):
+        self.assertEqual(
+            make_phases(broadcasts_a=1, broadcasts_b=2, interleave=True,
+                        a_first=False),
+            ["P-B", "P-A", "P-B", "C"],
+        )
+
+    def test_no_peer(self):
+        self.assertEqual(
+            make_phases(broadcasts_a=1, broadcasts_b=0, peer=False),
+            ["P-A"],
+        )
+
+    def test_zero_broadcasts_zero_peer(self):
+        self.assertEqual(make_phases(0, 0, peer=False), [])
+
+    def test_negative_broadcast_count_rejected(self):
+        with self.assertRaises(ValueError):
+            make_phases(broadcasts_a=-1)
+        with self.assertRaises(ValueError):
+            make_phases(broadcasts_b=-2)
+
+    def test_non_int_broadcast_count_rejected(self):
+        with self.assertRaises(ValueError):
+            make_phases(broadcasts_a=1.5)
+        # bools are sneaky ints; explicitly reject them.
+        with self.assertRaises(ValueError):
+            make_phases(broadcasts_a=True)
+
+    def test_non_bool_flag_rejected(self):
+        with self.assertRaises(ValueError):
+            make_phases(peer="yes")
+        with self.assertRaises(ValueError):
+            make_phases(interleave=1)
+
+
+class TestResolveDayPhases(unittest.TestCase):
+    def test_explicit_phases_passthrough(self):
+        cfg = {"policy": ClimatePolicyID.CARBON_TAX,
+               "phases": ["P-A", "P-A", "P-B", "C"]}
+        self.assertEqual(
+            _resolve_day_phases(cfg),
+            ["P-A", "P-A", "P-B", "C"],
+        )
+
+    def test_explicit_phases_returns_copy(self):
+        original = ["P-A", "P-B", "C"]
+        cfg = {"policy": ClimatePolicyID.CARBON_TAX, "phases": original}
+        out = _resolve_day_phases(cfg)
+        out.append("XXX")
+        self.assertEqual(original, ["P-A", "P-B", "C"])
+
+    def test_sugar_keys_expand(self):
+        cfg = {
+            "policy": ClimatePolicyID.CARBON_TAX,
+            "broadcasts_a": 2,
+            "broadcasts_b": 1,
+        }
+        self.assertEqual(
+            _resolve_day_phases(cfg),
+            ["P-A", "P-A", "P-B", "C"],
+        )
+
+    def test_sugar_no_peer(self):
+        cfg = {"policy": ClimatePolicyID.CARBON_TAX,
+               "broadcasts_a": 1, "broadcasts_b": 0, "peer": False}
+        self.assertEqual(_resolve_day_phases(cfg), ["P-A"])
+
+    def test_no_phases_no_sugar_uses_defaults(self):
+        cfg = {"policy": ClimatePolicyID.CARBON_TAX}
+        self.assertEqual(_resolve_day_phases(cfg), ["P-A", "P-B", "C"])
+
+    def test_mixing_phases_and_sugar_raises(self):
+        cfg = {
+            "policy": ClimatePolicyID.CARBON_TAX,
+            "phases": ["P-A", "C"],
+            "broadcasts_a": 2,
+        }
+        with self.assertRaises(ValueError):
+            _resolve_day_phases(cfg)
+
+
+class TestPerDayPhaseSugarInRunSimulation(unittest.TestCase):
+    """End-to-end: sugar in days expands into the right broadcast calls."""
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_sugar_drives_repeated_broadcasts(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{
+                "policy": ClimatePolicyID.CARBON_TAX,
+                "broadcasts_a": 3,
+                "broadcasts_b": 1,
+                "peer": False,
+            }],
+        }
+        run_simulation(config, nation)
+        broadcast_phases = [
+            c[0][0] for c in nation.run_political_broadcast.call_args_list
+        ]
+        self.assertEqual(broadcast_phases, ["P-A", "P-A", "P-A", "P-B"])
+        nation.run_peer_messaging.assert_not_called()
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_explicit_phases_duplicates_not_deduped(
+        self, mock_pa_cls, mock_api
+    ):
+        """Locks in the canonical 'phases is a literal sequence' behaviour."""
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{
+                "policy": ClimatePolicyID.CARBON_TAX,
+                "phases": ["P-A", "P-A", "P-B", "C"],
+            }],
+        }
+        run_simulation(config, nation)
+        self.assertEqual(nation.run_political_broadcast.call_count, 3)
+        self.assertEqual(nation.run_peer_messaging.call_count, 1)
+
+    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
+    @patch("cag.abm.sim.PoliticalAgent")
+    def test_mixing_phases_and_sugar_raises(self, mock_pa_cls, mock_api):
+        nation = _make_mock_nation(2)
+        config = {
+            "days": [{
+                "policy": ClimatePolicyID.CARBON_TAX,
+                "phases": ["P-A", "C"],
+                "broadcasts_a": 2,
+            }],
+        }
+        with self.assertRaises(ValueError):
+            run_simulation(config, nation)
 
 
 if __name__ == "__main__":

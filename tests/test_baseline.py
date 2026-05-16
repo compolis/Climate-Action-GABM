@@ -125,8 +125,9 @@ class TestAdministerSurvey:
         citizen.administer_survey(ClimatePolicyID.GREEN_HOUSING)
         call_args = mock_send.call_args
         system_prompt = call_args[0][0] if call_args[0] else call_args[1].get("system_prompt")
+        # get_persona() now returns merged demographics + values in a single string;
+        # _make_citizen_with_env mocks it to return only the demographics line.
         assert "36 year old female" in system_prompt
-        assert "environment" in system_prompt
 
     @mock.patch("cag.abm.agent.send_chat", return_value="D")
     def test_user_prompt_contains_question_and_options(self, mock_send):

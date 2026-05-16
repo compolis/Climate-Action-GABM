@@ -275,7 +275,7 @@ class TestDay0Seeding(unittest.TestCase):
         citizen.seed_opinion_with_rationale(policy, day=0)
         user_prompt = mock_send.call_args_list[0][0][1]
         self.assertIn("Somewhat support", user_prompt)
-        self.assertIn("first person", user_prompt)
+        self.assertIn("your background", user_prompt)
 
 
 if __name__ == "__main__":

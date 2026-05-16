@@ -18,6 +18,7 @@ from cag.abm.attributes.opinion import (
     RESPONSE_SCALE,
     SURVEY_COLUMN_MAP,
     SURVEY_QUESTIONS,
+    SURVEY_SHORT_LABELS,
     survey_to_numeric,
 )
 
@@ -26,25 +27,25 @@ NUMERIC_TO_LETTER = {-3: "A", -2: "B", -1: "C", 0: "D", 1: "E", 2: "F", 3: "G"}
 # ── Debias prompt templates (Condition B from NB 13) ────────────────────────
 
 _ANTI_SYCOPHANCY = (
-    "Your task is to faithfully simulate how this specific person would respond, "
+    "Your task is to faithfully simulate how you would respond as the person described above, "
     "NOT to give the 'correct' or socially desirable answer. "
-    "Real people with this profile hold a WIDE range of views on climate policy, "
+    "Real people like you hold a WIDE range of views on climate policy, "
     "including strong opposition. That is expected and acceptable."
 )
 
 _DEBIAS_STEP1_TEMPLATE = (
     "{anti_sycophancy}\n\n"
-    "Given this person's demographic profile, political history, and psychological values, "
-    "what factors would shape their view on the following policy?\n\n"
+    "Given your demographic profile, political history, and psychological values, "
+    "what factors would shape your view on the following policy?\n\n"
     "{policy_question}\n\n"
-    "Consider factors that might lead them to SUPPORT this policy AND factors that might "
-    "lead them to OPPOSE it. Think about their voting history, their values, their life "
-    "circumstances, and how these might interact.\n\n"
+    "Consider factors that might lead you to SUPPORT this policy AND factors that might "
+    "lead you to OPPOSE it. Think about your voting history, your values, your life "
+    "circumstances, the messages and reflections from today, and how these might interact.\n\n"
     "Provide your reasoning in 2-3 sentences."
 )
 
 _DEBIAS_STEP2_TEMPLATE = (
-    "Based on the reasoning above, how would this person respond to the following "
+    "Based on the reasoning above, how would you respond to the following "
     "survey question?\n\n"
     "{policy_question}\n\n"
     "{response_options}\n\n"
@@ -148,11 +149,24 @@ class SurveyedCitizen():
         return r
 
     def get_persona(self) -> str:
-        """
-        Returns a persona based on attributes.
+        """Return the agent's full persona (demographics + values) as one string.
 
-        Returns:
-            A string representing the persona.
+        This is the canonical persona used in the main system-prompt block.
+        Internally composed from :meth:`_build_demographics_text` and
+        :meth:`_build_values_text`. If values text is empty, returns
+        demographics alone (no trailing newline).
+        """
+        demographics = self._build_demographics_text()
+        values = self._build_values_text()
+        if values:
+            return demographics + "\n" + values
+        return demographics
+
+    def _build_demographics_text(self) -> str:
+        """
+        Returns the demographic/biographical portion of the persona
+        (age, gender, region, ethnicity, education, income, family,
+        politics, voting history).
         """
         sn = self.environment
         age = date.today().year - self.year_of_birth
@@ -190,12 +204,11 @@ class SurveyedCitizen():
             r += f"I {brexit_vote} in the 2016 EU Referendum."
         return r
  
-    def get_narrative(self) -> str:
+    def _build_values_text(self) -> str:
         """
-        Returns a narrative based on attributes.
-
-        Returns:
-            A string representing the narrative.
+        Returns the values/worldview portion of the persona
+        (self-transcendence, self-enhancement, openness, conformity,
+        SDO, EDO, RWA).
         """
         sn = self.environment
         def safe_get(attr_map, attr_id):
@@ -233,9 +246,7 @@ class SurveyedCitizen():
         5. Persona reminder
         """
         sections = []
-        persona = self.get_persona()
-        narrative = self.get_narrative()
-        sections.append(persona + "\n" + narrative)
+        sections.append(self.get_persona())
 
         if day == 0:
             return "\n\n".join(sections)
@@ -255,7 +266,7 @@ class SurveyedCitizen():
                               if r["day"] in recent_days
                               and (policy_id is None or r.get("policy_id") == policy_id)]
         if recent_reflections:
-            ref_lines = [f"- [{r['phase']}] {r['text']}" for r in recent_reflections]
+            ref_lines = [f"- {r['text']}" for r in recent_reflections]
             sections.append("Your recent reflections following received messages:\n" + "\n".join(ref_lines))
 
         rationale_policy = None if policy_id == PACKAGE_SCOPE else policy_id
@@ -263,8 +274,8 @@ class SurveyedCitizen():
         if rationales:
             sections.append("Your earlier reasoning on these policies:\n" + rationales)
 
-        # remind about their persona:
-        sections.append("Remember your persona: " + persona)
+        # remind about their persona (demographics-only, for focus):
+        sections.append("Remember who you are: " + self._build_demographics_text())
 
         return "\n\n".join(sections)
 
@@ -288,7 +299,7 @@ class SurveyedCitizen():
             text = _day0_text(history)
             if text is None:
                 return ""
-            policy_name = SURVEY_QUESTIONS.get(policy_id, str(policy_id))[:60]
+            policy_name = SURVEY_SHORT_LABELS.get(policy_id, str(policy_id))
             return f"- {policy_name}: {text}"
 
         lines = []
@@ -296,13 +307,19 @@ class SurveyedCitizen():
             text = _day0_text(history)
             if text is None:
                 continue
-            policy_name = SURVEY_QUESTIONS.get(pid, str(pid))[:60]
+            policy_name = SURVEY_SHORT_LABELS.get(pid, str(pid))
             lines.append(f"- {policy_name}: {text}")
         return "\n".join(lines)
 
     def compress_memories(self, memories, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
 
-        user_prompt = "Concisely summarise the following in 2 sentences from a 1st person perspective: {}".format(memories)
+        user_prompt = (
+            "Concisely summarise the following reflections from your day in "
+            "4–5 first-person sentences. Focus on which received messages you "
+            "found compelling and which you pushed back on, and whether your "
+            "thinking shifted on any aspect of the policy.\n\n"
+            "Reflections:\n{}"
+        ).format(memories)
         system_prompt = "You are a concise summariser."
 
         summary = send_chat(system_prompt, user_prompt, api_key=api_key, model=model, provider=provider, temperature=temperature)
@@ -334,7 +351,11 @@ class SurveyedCitizen():
             response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
             return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
         else:   
-            framing = "Please answer the following survey question. Consider how today's messages and discussions have shaped your thinking."
+            framing = (
+                "Please answer the following survey question. Consider your "
+                "earlier reasoning, the daily summaries, and your recent "
+                "reflections above before answering."
+            )
 
             policy_question = SURVEY_QUESTIONS.get(policy_id)
 
@@ -456,7 +477,7 @@ class SurveyedCitizen():
             f"Here is what they said:\n\n"
             f"{numbered}\n\n"
             f"In a few sentences, reflect on how these peer messages affect "
-            f"your thinking.\n"
+            f"your thinking about {policy_description}.\n"
             f"Do not state a final position — just think out loud."
         )
         reflection_text = send_chat(system_prompt, user_prompt, api_key=api_key,
@@ -514,9 +535,8 @@ class SurveyedCitizen():
         user_prompt = (
             f"Your considered position on the following policy is "
             f"\"{response_label}\":\n\n{policy_question}\n\n"
-            "In 2-3 sentences, explain why someone with your background and "
-            "values might genuinely hold this position. Speak in the first "
-            "person."
+            "In 2-3 sentences, explain why, given your background and "
+            "values, you genuinely hold this position."
         )
         rationale = send_chat(
             system_prompt, user_prompt, api_key=api_key, model=model,
