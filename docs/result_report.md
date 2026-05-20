@@ -26,6 +26,84 @@ Notes:
 
 ---
 
+## Affinity-based political exposure: NB 27 — committed-minority audience sanity check
+
+**Date:** 2026-05-20
+**Notebook:** [notebooks/27_affinity_exposure_demo.ipynb](../notebooks/27_affinity_exposure_demo.ipynb)
+**Code under test:** [src/cag/abm/environment.py](../src/cag/abm/environment.py) — `assign_political_exposure`, `_green_affinity_score`, `_reform_affinity_score`, `_safe_int`
+**Pool:** full YouGov, N = 1483 (`data/yougov_survey_data/YouGovProcessedData.csv`)
+
+The v0.5 committed-minority reframe replaced the vote-only `priority_chain` exposure rule with an **affinity-rank** assignment: each citizen receives a continuous green-affinity and Reform-affinity score, and a cell label (`A-only` / `B-only` / `both` / `neither`) is allocated by deterministic top-K on the two scores so that realised cell shares match a configurable target preset. NB 27 is the structural sanity check: no LLM calls, no simulation — just verify that on the real YouGov pool (i) the rank mode hits its targets exactly, (ii) the cell-level demographic profile is interpretable, and (iii) the weight presets are not collapsed.
+
+### Configuration
+
+| Parameter | Value |
+|---|---|
+| Pool | YouGov processed, N = 1483 |
+| Modes compared | `rule_priority_chain` (legacy), `rule_affinity_rank` (new default) |
+| Target presets | `committed_minority_symmetric` (`A=0.11, B=0.11, both=0.33, neither=0.45`), `committed_minority_uk_2024` (`A=0.08, B=0.14, both=0.33, neither=0.45`) |
+| Weight presets | `balanced` (default), `vote_dominant`, `values_dominant` |
+| LLM calls | None |
+
+### Headline results
+
+**Affinity-score distributions.** `corr(score_A, score_B) = -0.975` on the YouGov pool. Mirror-symmetric, as designed — that anti-correlation is the structural reason rank-mode hits the symmetric target cleanly and is, separately, the reason the previously-shipped `rule_affinity_logistic` mode was removed (see "Bug fixes" below).
+
+**Realised cell shares (rank mode).**
+
+| Mode / target | A-only | B-only | both | neither |
+|---|---:|---:|---:|---:|
+| `priority_chain` (legacy, targets ignored) | 0.105 | 0.105 | 0.342 | 0.448 |
+| `rule_affinity_rank` (symmetric) | **0.110** | **0.110** | **0.330** | **0.450** |
+| `rule_affinity_rank` (uk_2024) | **0.080** | **0.140** | **0.330** | **0.450** |
+
+The rank mode hits both target presets to within rounding (≤ 0.001 pp). The legacy `priority_chain` is incidentally close to the symmetric target on this pool, but does not respond to the `targets=` knob at all.
+
+**Per-cell demographic profile** (rank mode, symmetric default; weights = `balanced`):
+
+| cell | openness | selftransc | rwa | sdo | age | degree | green_region | Remain | Leave | Green vote | Brexit vote |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| A-only | **2.24** | **2.68** | 1.33 | 1.03 | 40.4 | 0.93 | 0.41 | **0.96** | 0.00 | 0.26 | 0.00 |
+| both | 2.01 | 2.42 | 1.71 | 1.13 | 49.3 | 0.58 | 0.32 | 0.53 | 0.31 | 0.02 | 0.00 |
+| B-only | 1.69 | 2.09 | **2.06** | **1.36** | **65.5** | 0.07 | 0.14 | 0.00 | **0.98** | 0.00 | 0.07 |
+| neither | 1.92 | 2.33 | 1.81 | 1.16 | 44.7 | 0.35 | 0.28 | 0.33 | 0.24 | 0.01 | 0.00 |
+
+All four pre-registered validation gates pass:
+
+| Gate | Threshold | Realised | Pass? |
+|---|---|---|:---:|
+| A-only mean openness > pool mean + 0.5 SD | > 2.22 | **2.24** | ✓ |
+| A-only Remain-share > 80 % | > 0.80 | **96.3 %** | ✓ |
+| B-only mean RWA > pool mean + 0.5 SD | > 1.99 | **2.06** | ✓ |
+| B-only Leave-share > 80 % | > 0.80 | **98.2 %** | ✓ |
+
+The cells are substantively interpretable: `A-only` is younger, university-educated, high-openness, high-self-transcendence, almost entirely Remain-voting; `B-only` is the oldest cell, low-education, high-RWA, high-SDO, almost entirely Leave-voting. `both` and `neither` sit between them on every dimension.
+
+**Weight-preset sensitivity.** Holding the target fixed at `committed_minority_symmetric`, swapping the affinity weight preset changes which citizens land in each cell, while keeping the cell shares pinned at target:
+
+| balanced vs vote_dominant | balanced vs values_dominant | vote_dominant vs values_dominant |
+|---:|---:|---:|
+| 84.2 % | 78.2 % | 65.8 % |
+
+The cell shares are identical across presets by construction (top-K is share-preserving), but only 66 % of citizens get the same label under `vote_dominant` vs `values_dominant`. The weight knob is therefore real — it shifts cell membership without distorting marginals — and is not collapsed to a no-op.
+
+### Bug fixes triggered by this notebook
+
+NB 27 surfaced two issues. Both are resolved.
+
+1. **`_safe_int` silently returned 0 on every GABM ordinal attribute.** The psychometric IDs (`openness_id`, `rwa_id`, `sdo_id`, `selftransc_id`) are `GABMAttributeID` enum subclasses that expose their ordinal via `.id`. The previous `_safe_int` body did a bare `int(attr_id)`, which raises `TypeError` on a `GABMAttributeID`, was swallowed by the `except`, and silently returned `0`. The full psych-scale weight bucket therefore multiplied zero on every `build_nation` citizen, making the three weight presets produce bit-identical cell shares on the first pass of this notebook. The unit-test suite missed the bug because its synthetic fixtures pass raw `int` ordinals, on which `int(v)` works.
+   - **Fix.** `_safe_int` now reads `.id` first, then `.value`, then falls back to `int()`. A new `TestSafeInt` regression class in [tests/test_exposure.py](../tests/test_exposure.py) exercises the GABM-attribute path directly and includes an integration-level guard (`test_psych_scales_contribute_to_score`) that builds two otherwise-identical citizens differing only on `openness_id` and asserts their green-affinity scores differ.
+2. **`rule_affinity_logistic` systematically missed cell-share targets by ±18 pp.** Independent Bernoulli sampling on two anti-correlated affinity scores (`corr = -0.975` on this pool) collapses the `both` cell and inflates the singleton cells, even though per-side marginals are individually correct. Across 30 seeds the mode produced `{A: 0.287, B: 0.290, both: 0.151, neither: 0.272}` against a symmetric target of `{0.11, 0.11, 0.33, 0.45}`. The unit-test suite missed this because the original `TestAffinityLogistic` tests only checked per-side marginals on a synthetic n=400 fixture with uncorrelated scores.
+   - **Fix.** The `rule_affinity_logistic` mode has been removed entirely — from `VALID_EXPOSURE_MODES`, the dispatcher, `_assign_affinity_logistic`, the `affinity_logistic_temperature` SIM_CONFIG key, the `_RESUME_HARD_KEYS` list, and the test suite. v0.5 ships with two modes only: `rule_priority_chain` (legacy) and `rule_affinity_rank` (new default).
+
+After both fixes the test suite is **432 passed, 1 skipped** (430 → 432 = -2 logistic tests + 4 new `TestSafeInt` tests).
+
+### Status and next steps
+
+The v0.5 committed-minority audience reframe is structurally sound on the real YouGov pool: targets are hit exactly, cells are demographically interpretable, validation gates pass, and the weight knob is non-trivial. The audience layer is therefore ready to be exercised end-to-end inside a simulation run — that integration-level experiment (NB 28 / Run 9) is the next planned step. Outstanding caveats are documented in [docs/Literature_Political_Exposure.md](Literature_Political_Exposure.md) §6.2.2 — most importantly that the YouGov pool is panel-engaged, so the `neither` cell is best read as "engaged respondents who score lowest on both affinities", not as the Hansard / Reuters / CAST disengaged cluster.
+
+---
+
 ## v0.5 Integration Parity: NB 25 — Qwen3 8B 4-bit via integrated `provider="local"`
 
 **Date:** 2026-05-09

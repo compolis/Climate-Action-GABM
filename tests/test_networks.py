@@ -205,7 +205,7 @@ class TestEnvironmentDispatch(unittest.TestCase):
                 politics_id=PoliticsID.CENTRE,
             )
             sn.agents_active[c.id] = c
-        sn.assign_political_exposure()
+        sn.assign_political_exposure(mode="rule_priority_chain")
         return sn
 
     def test_default_call_still_builds_sbm(self):

@@ -56,7 +56,7 @@ def _make_nation():
         )
         sn.agents_active[citizen.id] = citizen
 
-    sn.assign_political_exposure()
+    sn.assign_political_exposure(mode="rule_priority_chain")
     return sn
 
 
@@ -361,7 +361,7 @@ class TestApplyReachSubsample(unittest.TestCase):
                 )
                 sn.agents_active[citizen.id] = citizen
                 cid += 1
-        sn.assign_political_exposure()
+        sn.assign_political_exposure(mode="rule_priority_chain")
         return sn
 
     def test_full_reach_no_change(self):
@@ -433,7 +433,7 @@ class TestApplyAudienceCap(unittest.TestCase):
                 )
                 sn.agents_active[citizen.id] = citizen
                 cid += 1
-        sn.assign_political_exposure()
+        sn.assign_political_exposure(mode="rule_priority_chain")
         return sn
 
     def test_none_cap_no_change(self):

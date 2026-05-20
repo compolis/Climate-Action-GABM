@@ -244,25 +244,65 @@ Modal cell on a niche topic like climate is `Neither`, not `Both`. The
 `B-only` cell is structurally larger than the `A-only` cell under
 current UK media conditions.
 
-### 6.1 What the current code actually produces (measured 2026-05-14)
+The v0.5 implementation operationalises this section as a set of
+named **target presets** consumed by
+`assign_political_exposure(mode='rule_affinity_rank', targets=...)`
+in [`src/cag/abm/environment.py`](../src/cag/abm/environment.py). The
+two presets actually shipped in v0.5 are:
 
-For comparison, running the existing `assign_political_exposure()` on
-the full YouGov pool (`YouGovProcessedData.csv`, N = 1483):
+| Preset | A-only | B-only | both | neither | Rationale |
+|---|---:|---:|---:|---:|---|
+| `committed_minority_symmetric` (**default**) | 0.11 | 0.11 | 0.33 | 0.45 | Symmetric committed minorities; used as the *baseline* condition that holds reach equal so any A-vs-B asymmetry in the dynamics is attributable to message content, not audience size. |
+| `committed_minority_uk_2024` | 0.08 | 0.14 | 0.33 | 0.45 | The same 33 / 45 backbone but with `B-only > A-only` (1.75×), matching the right-press / GB News skew described in §5. Used as the *UK-realistic* condition. |
 
-| Cell      | Count | Share  |
-|-----------|------:|-------:|
-| `A-only`  |   405 | 27.31% |
-| `B-only`  |   285 | 19.22% |
-| `both`    |   725 | **48.89%** |
-| `neither` |    68 |  **4.59%** |
+A third preset, `legacy_v05` (`A=0.225, B=0.225, both=0.20,
+neither=0.35`), is retained only for back-compat with experiments run
+before 2026-05-14 and is not the default. The earlier value
+`neither=0.35` is no longer the default — see §6.3 for the change.
 
-A-audience = 76.2 %, B-audience = 68.1 % — i.e. the YouGov-driven
-rule produces an **A > B** asymmetry of ~8 pp, which is the *opposite*
-of the UK media reality summarised in Section 5, and a `neither` share
-roughly an order of magnitude smaller than the lit-supported range.
+### 6.1 What the affinity-rank mode actually produces (measured 2026-05-20)
 
-This is the gap the calibration mechanism in `Model_Design.md` §18 is
-designed to close.
+NB 27 (`notebooks/27_affinity_exposure_demo.ipynb`) runs the v0.5
+`rule_affinity_rank` mode on the full YouGov pool (N = 1483). Realised
+cell shares hit both target presets to within rounding:
+
+| Mode / preset | A-only | B-only | both | neither |
+|---|---:|---:|---:|---:|
+| `priority_chain` (legacy, targets ignored) | 0.105 | 0.105 | 0.342 | 0.448 |
+| `rule_affinity_rank` (symmetric) | 0.110 | 0.110 | 0.330 | 0.450 |
+| `rule_affinity_rank` (uk_2024) | 0.080 | 0.140 | 0.330 | 0.450 |
+
+The per-cell demographic profile is in the direction the literature
+predicts: `A-only` is younger (mean age 40), 93 % degree-holders,
+highest on openness and self-transcendence, 96 % Remain-voting;
+`B-only` is the oldest cell (mean age 66), 7 % degree-holders, highest
+on RWA and SDO, 98 % Leave-voting. All four pre-registered validation
+gates (A-only openness, A-only Remain share, B-only RWA, B-only Leave
+share) pass. Full numbers and figures are in
+[`docs/result_report.md`](result_report.md) §"Affinity-based political
+exposure: NB 27".
+
+Two pre-2026-05-20 figures previously quoted in this section are
+**superseded**:
+
+- The earlier 4.6 % YouGov-native `neither` count (and the
+  corresponding 27 / 19 / 49 split) was produced by the pre-v0.5
+  `priority_chain`-only rule and is no longer the audience the
+  simulation runs with. The same rule, re-measured after the
+  2026-05-20 `_safe_int` bugfix, now produces the
+  10.5 / 10.5 / 34.2 / 44.8 split shown above; the bug had been
+  silently zeroing psych-scale contributions to the affinity scores
+  but does not affect the `priority_chain` cell counts since that mode
+  ignores affinity scores entirely. (The earlier reported numbers are
+  recoverable from the un-bugfixed code on the same pool; the
+  discrepancy is unrelated to the bug.)
+- The earlier A-audience = 76.2 % / B-audience = 68.1 % asymmetry was
+  produced by the same legacy rule. Under v0.5
+  `rule_affinity_rank` with `committed_minority_symmetric` the A and
+  B audiences are equal by construction (44 % each); under
+  `committed_minority_uk_2024` the B audience exceeds the A audience
+  by ~6 pp (47 % vs 41 %), restoring the `B > A` direction reported
+  in §5.
 
 ### 6.2 Two senses of `neither` and who is actually in it
 
@@ -341,10 +381,55 @@ Our YouGov pool currently contributes 68 `neither` rows out of 1483
 those 68 are best characterised as "engaged respondents who happened
 to give DK on three questions", **not** as the Hansard / Reuters /
 CAST disengaged cluster described above. When we resample to hit a
-35 % `neither` target (`Model_Design.md` §18.7), we are inflating that
+45 % `neither` target (`Model_Design.md` §18.7), we are inflating that
 same demographically-narrow subset. This is a known limitation of the
 v0.5 design and is documented as a deferred research question in
 `Model_Design.md` §18.14, not a v0.5 blocker.
+
+### 6.3 `committed_minority_uk_2024` — derivation of the asymmetric preset
+
+The asymmetric preset shipped in v0.5 is
+`{A-only: 0.08, B-only: 0.14, both: 0.33, neither: 0.45}`, derived from
+the literature in §5 plus the synthesis in §6 as follows. Treat all
+numbers as **central estimates within the lit-supported bands**, not
+as point identifications:
+
+- **`neither = 0.45`.** Reuters DNR 2024 UK selective news avoidance
+  is 46 %; news interest has roughly halved 2015 → 2024 (70 % → 38 %);
+  Hansard 2019 reports ~40 % "not much / not at all interested in
+  politics"; CAST tracker disengaged segments sit at 25–30 %
+  *climate-specifically* but the broader political-information-skipping
+  share is larger. Forty-five percent is the midpoint of the 35–50 %
+  band synthesised in §6 and aligns with the Reuters-DNR midpoint for
+  the UK panel in 2024.
+- **`both = 0.33`.** Dubois & Blank's non-echo-chamber majority sits
+  in the 30–40 % range for the politically attentive; on a niche topic
+  like climate the cross-cutting share is slightly *higher* than for
+  general politics because the issue is less party-coded than Brexit
+  or immigration. Thirty-three percent is the centre of the §6
+  synthesis band (15–25 % is the floor; the Whitmarsh "knows both
+  sides" item supports a ceiling closer to 35 %), and is identical to
+  the value used in the symmetric preset so the two presets differ
+  *only* in how the remaining 22 % is split between A-only and B-only.
+- **`A-only = 0.08, B-only = 0.14`.** Together these account for the
+  remaining 22 %, with a `B / A ≈ 1.75` ratio. This is the
+  conservative end of the asymmetry implied by §5: the *Britain Talks
+  Climate* engaged-sceptic segments alone are 12–18 % of UK adults,
+  the right-wing press circulation skew is larger still, and GB News
+  has grown roughly 3× since the 2024 election. We deliberately
+  under-weight the `B > A` skew rather than over-weight it, because
+  (i) the ratio is contested across sources and (ii) the rank-mode
+  cell allocation is a hard partition — anything more aggressive
+  forces a structurally larger right-aligned audience than the *most
+  defensible* lit reading supports.
+
+The 11 / 11 / 33 / 45 symmetric preset is `(A + B) / 2 = 0.11`
+holding `both + neither` fixed at the same backbone. Both presets
+therefore agree on **what the population is** (45 % out of reach,
+33 % cross-cutting) and disagree only on **how the engaged minorities
+split between the two sides**. This makes the
+symmetric-vs-asymmetric comparison the cleanest possible test of
+audience-size effects, holding everything else constant.
 
 ---
 
@@ -356,13 +441,22 @@ Summarised here:
 1. **Default condition: symmetric reach.** Equal audience size for
    `A-only` and `B-only`. This isolates the dynamics of two-sided
    committed-minority influence from the confounding effect of audience
-   asymmetry. The §18.4 default is
-   `{A-only: 0.225, B-only: 0.225, both: 0.20, neither: 0.35}`.
+   asymmetry. The v0.5 shipped default is the
+   `committed_minority_symmetric` preset —
+   `{A-only: 0.11, B-only: 0.11, both: 0.33, neither: 0.45}` — applied
+   via `mode='rule_affinity_rank'` (see §6 and `Model_Design.md` §18).
+   The earlier `legacy_v05` defaults
+   (`{A: 0.225, B: 0.225, both: 0.20, neither: 0.35}`) are still
+   selectable via `targets='legacy_v05'` for back-compat with pre-v0.5
+   experiments but are no longer the default; the `neither` target was
+   raised from 0.35 to 0.45 to align with the Reuters DNR / Hansard /
+   CAST midpoint discussed in §6.3.
 
-2. **UK-realistic condition: asymmetric reach.** Use the Section 6
-   bands (with the `B-only` > `A-only` skew) as a configurable
-   experimental condition to study how audience asymmetry interacts
-   with the message-frequency asymmetry planned in Priority 3.
+2. **UK-realistic condition: asymmetric reach.** The shipped
+   `committed_minority_uk_2024` preset
+   (`{A-only: 0.08, B-only: 0.14, both: 0.33, neither: 0.45}`)
+   implements the `B-only > A-only` skew from §5/§6 as a directly
+   selectable target. See §6.3 for the per-cell derivation.
 
 3. **Calibration rather than sample inheritance.** Re-sample the YouGov
    pool to hit target marginals from the population-level evidence

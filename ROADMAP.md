@@ -3,19 +3,49 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
-4. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
-5. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
+3. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
+4. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
+5. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
+6. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
 
 ## Overview
 This file outlines planned next steps and future goals.
 
-Version 0.5 has not been planned yet. This roadmap therefore records the completed v0.4 surface and the longer-term 1.0 backlog only.
+Version 0.5 was opened mid-stream rather than as a single planned sprint; this roadmap therefore records the completed v0.5 surface as it actually landed, alongside the earlier releases.
 
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
 Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
+
+
+## 0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe
+
+A mid-stream release line: a first-class `provider="local"` branch in `cag.io.llm` (any OpenAI-compatible server), an end-to-end audit of every citizen-side prompt for consistency, and the v0.5 committed-minority audience reframe replacing the vote-only `priority_chain` rule with a configurable `rule_affinity_rank` mode driven by named target presets. Notebooks 24–27 cover local-LLM smoke + integrated parity, the demo run referenced in the prompt audit, and the affinity-exposure sanity check; experiment write-ups are appended to `docs/result_report.md`.
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | Local-LLM provider (`provider="local"`, `_MODEL_REGISTRY` for Qwen3 / Llama / Apertus / Mistral / DeepSeek-R1; `configure_local()` / `ping_local()`; empty-thinking retry guard; `load_api_key("local")` short-circuit) | ✅ Done |
+| 2 | Local-LLM `SIM_CONFIG` keys (`local_base_url`, `local_extra_body`, `local_timeout_s`) + `_resolve_runtime` integration + `_RESUME_SOFT_KEYS` entries | ✅ Done |
+| 3 | NB 24 — first end-to-end local-LLM smoke (Qwen3 8B 4-bit, M1 16 GB, Ban Petrol Cars) | ✅ Done |
+| 4 | NB 25 — integrated-provider parity (bit-for-bit identical metrics vs NB 24 monkey-patch) | ✅ Done |
+| 5 | Per-day broadcast-frequency sugar (`broadcasts_a` / `broadcasts_b` / `peer` / `interleave` / `a_first` keys; `make_phases()`; `_resolve_day_phases()`) | ✅ Done |
+| 6 | Prompt audit and unification — every citizen-side prompt brought into consistent 1P framing; `get_persona()` canonical merge; `SURVEY_SHORT_LABELS`; reflection-bullet cleanup; `compress_memories` rewrite; `Prompts_and_Personas_Guide_v2.md` | ✅ Done |
+| 7 | Committed-minority audience reframe (`rule_affinity_rank` mode, target presets `committed_minority_symmetric` / `committed_minority_uk_2024` / `legacy_v05`, weight presets `balanced` / `vote_dominant` / `values_dominant`) | ✅ Done |
+| 8 | NB 27 — affinity-exposure sanity check on full YouGov pool (N = 1483); all four validation gates pass | ✅ Done |
+| 9 | `_safe_int` GABM-attribute bugfix + `TestSafeInt` regression class | ✅ Done |
+| 10 | `rule_affinity_logistic` mode removed (systematic ±18 pp target miss on anti-correlated A/B scores) | ✅ Done |
+
+**432 tests passing, 1 skipped across 16 test files.**
+
+### v0.5 backlog (carried into 1.0 unless taken up sooner)
+
+- Condition B bias re-measurement on the new 1P debias chain (NB 13 partial rerun, ~120 API calls)
+- 30–50-agent Qwen3 rerun to resolve per-agent persona ρ ≈ 0 question from NB 24/25
+- Qwen3 14B 4-bit / 4B 2507 / 32B on HPC
+- Async/parallel dispatch (§16 of `Model_Design.md`)
+- End-to-end simulation run exercising the committed-minority audience reframe (Run 9 / NB 28)
+- README current-status table + `__version__` bump across source modules
 
 
 ## 0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls
@@ -126,5 +156,5 @@ Issues 1, 2  (independent)
 - Calibration against longitudinal survey panel data
 - Parallelisation of agent-local LLM calls
 - Additional LLM providers and model comparisons
-- **Local LLM provider (v0.5, in flight)** — `provider="local"` for any OpenAI-compatible server (mlx-lm, Ollama, vLLM, sglang, llama.cpp). First end-to-end validated with Qwen3 8B 4-bit on M1 16 GB (NB 24). Next: 30–50-agent persona-fidelity rerun, then HPC scale-out with vLLM/sglang and async dispatch.
+- **Local LLM provider (v0.5, ✅ landed)** — `provider="local"` for any OpenAI-compatible server (mlx-lm, Ollama, vLLM, sglang, llama.cpp). First end-to-end validated with Qwen3 8B 4-bit on M1 16 GB (NB 24); integrated-provider parity confirmed in NB 25. Open work tracked in the v0.5 backlog above.
 - Publication-ready analysis and visualisation pipeline

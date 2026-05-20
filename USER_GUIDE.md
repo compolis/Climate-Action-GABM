@@ -4,6 +4,7 @@
 ## Table of Contents
 - [Overview](#overview)
 - [Getting Started](#getting-started)
+- [v0.5 configuration keys (committed-minority audience reframe)](#v05-configuration-keys-committed-minority-audience-reframe)
 - [Troubleshooting](#troubleshooting)
 - [Running Models](#running-models)
 - [Managing Logs and Caches](#managing-logs-and-caches)
@@ -91,6 +92,31 @@ the main program for Climate-Action-GABM is executed. This will:
 - Save logs and data for further analysis or reproducibility.
 
 The specific output and behavior may depend on your configuration, model parameters, and any customizations you have made. For more details, check the logs and output files generated in the `data/output/` directory after running the command.
+
+
+## v0.5 configuration keys (committed-minority audience reframe)
+
+v0.5 introduces three `SIM_CONFIG` keys controlling political-broadcast audience assignment. The defaults are chosen so that an existing v0.4 config keeps working unchanged; explicitly set these to opt into the new behaviour.
+
+| Key | Default | Allowed values | Meaning |
+|---|---|---|---|
+| `political_exposure_mode` | `"rule_affinity_rank"` | `"rule_priority_chain"` (legacy) / `"rule_affinity_rank"` (new default) | Which assignment rule decides which citizens go into the `A-only` / `B-only` / `both` / `neither` audience cells. The new `rule_affinity_rank` mode is deterministic top-K on per-citizen affinity scores and respects `political_exposure_targets`. The legacy `rule_priority_chain` mode is vote-only and ignores the targets. |
+| `political_exposure_targets` | `None` (resolves to `"committed_minority_symmetric"`) | preset name (`"committed_minority_symmetric"` / `"committed_minority_uk_2024"` / `"legacy_v05"`) **or** a dict with keys `{"A-only", "B-only", "both", "neither"}` that sum to 1.0 | Target shares for the four cells. Symmetric is the v0.5 baseline (`0.11 / 0.11 / 0.33 / 0.45`); `committed_minority_uk_2024` is the UK-realistic asymmetric preset (`0.08 / 0.14 / 0.33 / 0.45`); `legacy_v05` retains the earlier `0.225 / 0.225 / 0.20 / 0.35` defaults. Custom dicts are also accepted. |
+| `affinity_weights` | `None` (resolves to `"balanced"`) | preset name (`"balanced"` / `"vote_dominant"` / `"values_dominant"`) **or** a dict with the per-signal weight buckets | How the green-affinity and Reform-affinity scores combine vote history, psychometric scales, demographics, region, age, and education. Only consulted in `rule_affinity_rank` mode. |
+
+Brief sketch — opting into the UK-realistic asymmetric preset:
+
+```python
+SIM_CONFIG = {
+    # ...existing keys...
+    # political_exposure_mode defaults to "rule_affinity_rank" in v0.5,
+    # so it only needs to be set explicitly to opt back into the legacy rule.
+    "political_exposure_targets": "committed_minority_uk_2024",
+    "affinity_weights": "balanced",
+}
+```
+
+Full design rationale is in [docs/Model_Design.md](docs/Model_Design.md) §18 (especially §18.15 for the v0.5 sanity-check write-up and the two bug fixes that landed alongside it). Literature support for the target presets is in [docs/Literature_Political_Exposure.md](docs/Literature_Political_Exposure.md) §6 and §6.3. The end-to-end structural sanity check on the YouGov pool is [notebooks/27_affinity_exposure_demo.ipynb](notebooks/27_affinity_exposure_demo.ipynb), summarised in [docs/result_report.md](docs/result_report.md).
 
 
 ## Troubleshooting

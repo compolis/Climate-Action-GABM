@@ -44,13 +44,13 @@ Citizen agents are constructed from real **YouGov survey data** (UK, April 2024)
 
 ## Current Status
 
-**v0.4 — package communication, Day-0 anchoring, checkpoint/resume, and reach-control tooling.**
+**v0.5 — local LLM provider, prompt audit and unification, and the committed-minority audience reframe.**
 
 | Metric | Value |
 |--------|-------|
-| Tests | 340 collected; 339 passing, 1 skipped |
-| Runtime extensions | package mode, Day-0 anchoring, checkpoint/resume, `reach_a` / `reach_b`, `audience_cap` |
-| Notebooks | 23 (01–23) |
+| Tests | 433 collected; 432 passing, 1 skipped |
+| Runtime extensions (v0.5) | `provider="local"` for OpenAI-compatible servers (`mlx-lm` / Ollama / vLLM / sglang / `llama.cpp`); per-day broadcast-frequency sugar; first-class affinity-rank political-exposure mode with named target presets (`committed_minority_symmetric` / `committed_minority_uk_2024` / `legacy_v05`) and weight presets (`balanced` / `vote_dominant` / `values_dominant`); unified first-person prompt stack |
+| Notebooks | 27 (01–27) |
 | Source files | 21 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.

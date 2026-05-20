@@ -58,6 +58,13 @@ SIM_CONFIG = {
     "reach_a": 1.0,             # fraction of A-audience reached by political agent A broadcasts (0.0-1.0)
     "reach_b": 1.0,             # fraction of B-audience reached by political agent B broadcasts (0.0-1.0)
     "audience_cap": None,       # if int, cap each political agent's audience to this many citizens (uniform random) BEFORE reach subsample. None = no cap.
+    # Political-exposure assignment. See cag.abm.environment for full
+    # mode/preset semantics. Defaults: affinity-rank mode with the new
+    # committed-minority symmetric target preset and the "balanced"
+    # weight set.
+    "political_exposure_mode": "rule_affinity_rank",
+    "political_exposure_targets": None,       # None → committed_minority_symmetric. Accepts preset name or literal dict.
+    "affinity_weights": None,                 # None → balanced. Accepts preset name or literal {"A":..., "B":...}.
     "random_seed": 42,
     "output_dir": "data/output/experiments",
     # Local-LLM provider (provider="local"). All optional.
@@ -503,7 +510,12 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
     # Setup deterministic structure (same on fresh run and on resume)
     nation.political_agent_a = PoliticalAgent("agent_a", "pro_climate")
     nation.political_agent_b = PoliticalAgent("agent_b", "anti_climate")
-    nation.assign_political_exposure()
+    nation.assign_political_exposure(
+        mode=cfg.get("political_exposure_mode"),
+        targets=cfg.get("political_exposure_targets"),
+        weights=cfg.get("affinity_weights"),
+        seed=cfg["random_seed"],
+    )
     nation.apply_audience_cap(
         cap=audience_cap,
         seed=cfg["random_seed"],
@@ -897,6 +909,8 @@ _RESUME_HARD_KEYS = (
     "n_citizens", "random_seed", "network_type",
     "communication_mode", "package_policies", "day0_anchor",
     "reach_a", "reach_b", "audience_cap",
+    "political_exposure_mode", "political_exposure_targets",
+    "affinity_weights",
 )
 # Config keys we tolerate changing on resume but log a warning for.
 _RESUME_SOFT_KEYS = (

@@ -1554,6 +1554,92 @@ possible). Outstanding questions, none answered:
 These are research-design questions for the team, not implementation
 choices, and are flagged as §18.12 Q7.
 
+### 18.15 Sanity-check execution and post-implementation revisions (2026-05-20)
+
+NB 27 (`notebooks/27_affinity_exposure_demo.ipynb`) is the structural
+sanity check for the §18 reframe, run end-to-end on the full YouGov
+pool (N = 1483). It validated three of the four pre-registered design
+claims — exact target marginals, interpretable cell-level demographic
+profile (A-only youngest / highest openness / 96 % Remain;
+B-only oldest / highest RWA / 98 % Leave; all four validation gates
+passed), and a non-trivial weight-knob (66 % cell-level agreement
+between `vote_dominant` and `values_dominant` at fixed target). Full
+numbers are in [result_report.md](result_report.md) §"Affinity-based
+political exposure: NB 27".
+
+Two changes to the §18 design were made as a direct result of running
+this notebook. Both are documented here for traceability rather than
+back-edited into the earlier subsections, so the v0.5 design history
+remains an honest record of what was tried, what failed, and why.
+
+#### 18.15.1 `rule_affinity_logistic` removed (was §18.3, option C)
+
+The originally-shipped third mode — independent Bernoulli draws on
+z-scored affinity, calibrated so per-side marginals match the target —
+**systematically missed cell-share targets by ±18 pp on real data** and
+has been removed entirely (from `VALID_EXPOSURE_MODES`, the dispatcher,
+the `_assign_affinity_logistic` method, the
+`affinity_logistic_temperature` SIM_CONFIG key, the `_RESUME_HARD_KEYS`
+list, and the corresponding test class). The failure mode is purely
+structural and is *guaranteed* by the §18.3 design choice that both
+scorers reuse the same demographic + vote signals with opposite signs:
+`corr(score_A, score_B) = −0.975` on the YouGov pool, and two
+independent Bernoullis on strongly anti-correlated scores collapse the
+joint `both` cell and inflate the singleton cells, even though each
+side's individual marginal is correct. The unit-test suite missed it
+because the original `TestAffinityLogistic` only checked per-side
+marginals on a synthetic n=400 fixture with uncorrelated scores.
+
+The lesson is design-level, not implementation-level: any future
+sampling-based mode for this audience layer must validate the **joint
+cell distribution**, not the side marginals, on a fixture that
+preserves the empirical `corr(A, B)`. The `rule_affinity_rank` mode
+sidesteps the issue entirely by allocating the joint cells directly
+via deterministic top-K. v0.5 therefore ships with two modes only:
+`rule_priority_chain` (legacy) and `rule_affinity_rank` (new default).
+
+#### 18.15.2 `_safe_int` bugfix (silent zeroing of psych-scale signals)
+
+The first pass of NB 27 surfaced a silent bug in `environment._safe_int`
+that affected **every affinity score computed on `build_nation`-built
+citizens**. The four psychometric IDs (`openness_id`, `rwa_id`,
+`sdo_id`, `selftransc_id`) are `GABMAttributeID` enum subclasses that
+expose their ordinal via `.id` only — `int()` raises `TypeError` on
+them. The previous `_safe_int` body was a bare `int(attr_id)` inside
+`try/except`, so every psych-scale contribution was silently zeroed
+and the entire `psych_scales` weight bucket multiplied zero. The
+visible symptom in NB 27 was that the three weight presets
+(`balanced`, `vote_dominant`, `values_dominant`) produced **bit-identical
+cell shares** on the first pass, which is structurally impossible if
+the weight knob is doing anything.
+
+The fix is small (`getattr(attr_id, "id", None)` first, then `.value`,
+then `int()`, then `0`) but the **unit-test gap was the real lesson**:
+the existing `tests/test_exposure.py` fixtures passed raw `int`
+ordinals via a synthetic `_make_citizen` helper, so `int(v)` worked
+inside the helper and the bug never reached the assertions. The new
+`TestSafeInt` regression class in `tests/test_exposure.py` closes the
+gap with both unit-level tests on real `PoliticsID` instances and an
+integration-level guard (`test_psych_scales_contribute_to_score`) that
+builds two otherwise-identical citizens differing only on
+`openness_id` and asserts their green-affinity scores differ. Any
+future bug of the same shape — silently treating a GABM enum as a raw
+int — will now be caught by the regression test rather than producing
+plausible-looking but signal-free affinity scores.
+
+After both fixes the suite is **432 passed, 1 skipped** (430 → 432:
+−2 logistic tests, +4 `TestSafeInt` tests).
+
+#### 18.15.3 Status of §18 as a whole
+
+The §18 reframe is structurally validated on real data: rank-mode
+targets are hit exactly, cells are demographically interpretable in
+the direction the literature predicts (§18.7 / §18.8), and the
+weight knob is non-trivial. The audience layer is therefore ready to
+be exercised end-to-end inside a simulation run; that integration
+experiment (Run 9) is the next planned step and is **not** covered by
+NB 27.
+
 ---
 
 ## 19. Per-Day Broadcast-Frequency Sugar (v0.5, 2026-05-15)
@@ -1751,3 +1837,53 @@ text-level; existing structural coverage is sufficient). Full suite:
 - `__version__` bump across the 12 source modules.
 - Day-0 anchoring discussion — see "DAY 0 ANCHORING DISCUSSION" in
   the user's progress notes; orthogonal to this overhaul.
+
+### 20.6 Political-agent prompt de-identification (2026-05-20)
+
+Follow-up to §20.2 covering the political-agent side (citizen-side
+prompts were already audited in §20.2). The two campaign briefs
+`_DEFAULT_PRO_CLIMATE_PROMPT` and `_DEFAULT_ANTI_CLIMATE_PROMPT` in
+[`src/cag/abm/agent.py`](../src/cag/abm/agent.py) previously read
+"campaigning in the style of the Green Party of England and Wales /
+Reform UK" and named real politicians (Zack Polanski, Caroline Lucas,
+Nigel Farage, Richard Tice). For the v0.5 paper this is reframed as a
+*fallback* path:
+
+- **Why.** The next research step is to broadcast real-world political
+  messages (party press releases, MP speeches, campaign material) that
+  have been collected and stored, not LLM-generated party-style
+  messages. The provisional briefs remain available for users who want
+  a self-contained LLM-only setup but should not advertise themselves
+  as faithful renderings of named UK parties — both because the
+  briefs are not validated against the parties' own messaging and
+  because the model is exemplar-of-a-pair, not Reform-vs-Green
+  specifically (see [Literature_Political_Exposure.md](Literature_Political_Exposure.md)
+  §5.3).
+- **What was removed.** All party and politician names. From the
+  pro-climate brief: water companies, NHS, free public transport,
+  the "For the Common Good" slogan, the wealth-tax-on-the-super-rich
+  content, and the "disillusioned Labour voters / public sector
+  workers" audience segments. Parallel cuts to the anti-climate brief.
+  Result: both briefs are now tighter and climate-policy-focused
+  rather than generic UK-political-spectrum.
+- **Other prompt tightening done in the same pass.** `_ANTI_SYCOPHANCY`
+  drops the trailing "Real people like you hold a WIDE range of
+  views, including strong opposition. That is expected and
+  acceptable." sentence; the prior wording was over-leading and could
+  legitimise extreme positions the underlying persona would not
+  endorse. `_DEBIAS_STEP1_TEMPLATE` updated from "the messages and
+  reflections from today, and how these might interact" to "the
+  messages and reflections from today and previous days" so the
+  factor list matches the v0.5.1 multi-day daily-context surveys
+  (§20.2 (b)).
+- **Documentation.** [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md)
+  status banner rewritten as fallback framing with an explicit note
+  about the de-identification and the real-message-ingestion direction;
+  §3.1, §3.2, and the debias step-1 verbatim quotes regenerated to
+  match the trimmed source. The worked example in §6 is unchanged —
+  it pre-dates this pass and the structural section markers it cites
+  are unaffected by wording changes.
+- **Out of scope.** Re-running NB 13 (Condition B bias measurement)
+  against the trimmed prompts. The trimming removes leading content
+  and is expected to *reduce* baseline sycophancy slightly, but this
+  is not measured.
