@@ -99,14 +99,14 @@ class TestCitizenNetworkAttributes(unittest.TestCase):
 
 
 # ===================================================================
-# Tests: assign_political_exposure()
+# Tests: assign_political_exposure(mode="rule_priority_chain")
 # ===================================================================
 
 class TestAssignPoliticalExposure(unittest.TestCase):
 
     def setUp(self):
         self.sn = _make_nation_with_citizens(_PROFILES)
-        self.sn.assign_political_exposure()
+        self.sn.assign_political_exposure(mode="rule_priority_chain")
 
     # --- Rules 1-2: echo chamber ---
 
@@ -198,7 +198,7 @@ class TestCreateNetwork(unittest.TestCase):
         # Create a larger population for meaningful network stats
         self.profiles = _PROFILES * 15  # 210 agents
         self.sn = _make_nation_with_citizens(self.profiles)
-        self.sn.assign_political_exposure()
+        self.sn.assign_political_exposure(mode="rule_priority_chain")
         self.sn.create_network(seed=42)
 
     def test_node_count_equals_agents(self):
@@ -215,7 +215,7 @@ class TestCreateNetwork(unittest.TestCase):
     def test_seed_reproducibility(self):
         """Same seed → identical graph."""
         sn2 = _make_nation_with_citizens(self.profiles)
-        sn2.assign_political_exposure()
+        sn2.assign_political_exposure(mode="rule_priority_chain")
         sn2.create_network(seed=42)
         self.assertEqual(
             set(self.sn.network.edges()),
@@ -225,7 +225,7 @@ class TestCreateNetwork(unittest.TestCase):
     def test_different_seed_different_graph(self):
         """Different seed → different edges."""
         sn2 = _make_nation_with_citizens(self.profiles)
-        sn2.assign_political_exposure()
+        sn2.assign_political_exposure(mode="rule_priority_chain")
         sn2.create_network(seed=99)
         self.assertNotEqual(
             set(self.sn.network.edges()),
@@ -257,7 +257,7 @@ class TestAssignNetworkBlocks(unittest.TestCase):
     def setUp(self):
         self.profiles = _PROFILES * 15  # 210 agents
         self.sn = _make_nation_with_citizens(self.profiles)
-        self.sn.assign_political_exposure()
+        self.sn.assign_political_exposure(mode="rule_priority_chain")
         self.sn.create_network(seed=42)
         self.sn.assign_network_blocks()
 

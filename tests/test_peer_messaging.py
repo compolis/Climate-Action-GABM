@@ -56,7 +56,7 @@ def _make_nation():
         )
         sn.agents_active[citizen.id] = citizen
 
-    sn.assign_political_exposure()
+    sn.assign_political_exposure(mode="rule_priority_chain")
     sn.create_network(seed=42)
     sn.assign_network_blocks()
     return sn
