@@ -224,6 +224,55 @@ class TestAffinityRank(unittest.TestCase):
         e2 = [sn2.agents_active[i].political_exposure for i in range(150)]
         self.assertEqual(e1, e2)
 
+    def test_tie_break_uses_stable_citizen_identifier(self):
+        targets = {
+            "A-only": 0.2,
+            "B-only": 0.2,
+            "both": 0.3,
+            "neither": 0.3,
+        }
+
+        def _make_all_ties(insertion_order):
+            sn = SurveyedNation()
+            sn.political_agent_a = PoliticalAgent("a", "pro_climate")
+            sn.political_agent_b = PoliticalAgent("b", "anti_climate")
+            for cid in insertion_order:
+                _make_citizen(
+                    sn,
+                    agent_id=str(cid),
+                    year_of_birth=1980,
+                    region_id=RegionID.LONDON,
+                    education_id=EducationID.UNKNOWN,
+                    politics_id=PoliticsID.CENTRE,
+                    ukge2019_vote_id=UKGE2019VoteID.UNKNOWN,
+                    brexit_vote_id=BrexitVoteID.UNKNOWN,
+                    openness_id=3,
+                    selftransc_id=3,
+                    conformtrad_id=3,
+                    sdo_id=4,
+                    rwa_id=3,
+                )
+            return sn
+
+        ids = [str(i) for i in range(10)]
+        sn1 = _make_all_ties(ids)
+        sn2 = _make_all_ties(list(reversed(ids)))
+
+        sn1.assign_political_exposure(mode="rule_affinity_rank", targets=targets)
+        sn2.assign_political_exposure(mode="rule_affinity_rank", targets=targets)
+
+        labels1 = {str(c.id): c.political_exposure for c in sn1.agents_active.values()}
+        labels2 = {str(c.id): c.political_exposure for c in sn2.agents_active.values()}
+
+        expected = {
+            "0": "B-only", "1": "B-only",
+            "2": "A-only", "3": "A-only",
+            "4": "both", "5": "both", "6": "both",
+            "7": "neither", "8": "neither", "9": "neither",
+        }
+        self.assertEqual(labels1, expected)
+        self.assertEqual(labels2, expected)
+
 
 # ---------------------------------------------------------------------------
 # Dispatcher + presets

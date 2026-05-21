@@ -770,8 +770,8 @@ class SurveyedNation(Nation):
         because (a) the asymmetric April-2024 preset has K_B > K_A, and
         (b) the reform-side signature is sharper (vote + Leave + RWA
         align tightly), so locking B first avoids contaminating it with
-        cross-pressured citizens. Tie-break uses ``hash(str(id))`` for
-        deterministic ordering independent of dict iteration order.
+        cross-pressured citizens. Tie-break and membership keys are the
+        citizen's persistent identifier string.
         """
         citizens = list(self.agents_active.values())
         n = len(citizens)
@@ -794,27 +794,29 @@ class SurveyedNation(Nation):
         k_a = max(0, min(n - k_b, k_a))
         k_both = max(0, min(n - k_b - k_a, k_both))
 
-        # Stable tie-break key
-        def _tie(c): return hash(str(c.id))
+        # Stable key used for tie-break and membership tracking.
+        def _key(c):
+            return str(c.id)
 
         # B-only: top k_b by score_b
-        by_b = sorted(scored, key=lambda t: (-t[2], _tie(t[0])))
-        b_only_ids = {id(t[0]) for t in by_b[:k_b]}
-        rem1 = [t for t in scored if id(t[0]) not in b_only_ids]
+        by_b = sorted(scored, key=lambda t: (-t[2], _key(t[0])))
+        b_only_keys = {_key(t[0]) for t in by_b[:k_b]}
+        rem1 = [t for t in scored if _key(t[0]) not in b_only_keys]
         # A-only: top k_a by score_a
-        by_a = sorted(rem1, key=lambda t: (-t[1], _tie(t[0])))
-        a_only_ids = {id(t[0]) for t in by_a[:k_a]}
-        rem2 = [t for t in rem1 if id(t[0]) not in a_only_ids]
+        by_a = sorted(rem1, key=lambda t: (-t[1], _key(t[0])))
+        a_only_keys = {_key(t[0]) for t in by_a[:k_a]}
+        rem2 = [t for t in rem1 if _key(t[0]) not in a_only_keys]
         # both: top k_both by max(score_a, score_b)
-        by_both = sorted(rem2, key=lambda t: (-max(t[1], t[2]), _tie(t[0])))
-        both_ids = {id(t[0]) for t in by_both[:k_both]}
+        by_both = sorted(rem2, key=lambda t: (-max(t[1], t[2]), _key(t[0])))
+        both_keys = {_key(t[0]) for t in by_both[:k_both]}
 
         for c, _sa, _sb in scored:
-            if id(c) in b_only_ids:
+            key = _key(c)
+            if key in b_only_keys:
                 c.political_exposure = "B-only"
-            elif id(c) in a_only_ids:
+            elif key in a_only_keys:
                 c.political_exposure = "A-only"
-            elif id(c) in both_ids:
+            elif key in both_keys:
                 c.political_exposure = "both"
             else:
                 c.political_exposure = "neither"

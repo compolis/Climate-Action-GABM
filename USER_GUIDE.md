@@ -96,7 +96,7 @@ The specific output and behavior may depend on your configuration, model paramet
 
 ## v0.5 configuration keys (committed-minority audience reframe)
 
-v0.5 introduces three `SIM_CONFIG` keys controlling political-broadcast audience assignment. The defaults are chosen so that an existing v0.4 config keeps working unchanged; explicitly set these to opt into the new behaviour.
+v0.5 introduces three `SIM_CONFIG` keys controlling political-broadcast audience assignment. Existing v0.4 configs still run unchanged, but when `political_exposure_mode` is omitted the new default is `"rule_affinity_rank"`. Set `political_exposure_mode="rule_priority_chain"` to preserve the legacy assignment rule.
 
 | Key | Default | Allowed values | Meaning |
 |---|---|---|---|
