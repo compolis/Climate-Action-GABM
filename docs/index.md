@@ -20,6 +20,7 @@ API_KEYS.md
 ROADMAP.md
 CHANGE_LOG.md
 DEVELOPMENT_HISTORY.md
+Simulation_Configuration_Guide.md
 SECURITY.md
 CONTACT.md
 ```

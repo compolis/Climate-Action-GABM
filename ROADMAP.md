@@ -3,10 +3,11 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
-4. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
-5. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
-6. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
+3. [0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs](#06--canonical-defaults-offline-political-messages-and-full-stack-smoke-docs)
+4. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
+5. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
+6. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
+7. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
 
 ## Overview
@@ -17,6 +18,35 @@ Version 0.5 was opened mid-stream rather than as a single planned sprint; this r
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
 Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
+
+
+## 0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs
+
+v0.6 consolidates the runtime path that was previously spread across incremental v0.5 work: canonical SIM defaults are now explicit in `sim.py`, offline political messages are first-class with strict startup validation, and the full-stack smoke acceptance flow is documented through NB28/NB29 and the new simulation configuration guide.
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | Canonical default profile in `SIM_CONFIG` (`n_citizens=100`, package alternating day plan, `local` Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`, offline political messages) | ✅ Done |
+| 2 | Offline political-message subsystem (`src/cag/abm/political_messages.py`, `data/political_messages/messages_v1.csv`, `data/political_messages/sources_v1.csv`) | ✅ Done |
+| 3 | Strict startup validation of required offline message cells; explicit `political_message_source` mode checks | ✅ Done |
+| 4 | Broadcast provenance surfaced in outputs (`political_message_id` in `messages.csv`) | ✅ Done |
+| 5 | Resume hard-key expansion for message-source consistency (`political_message_source`, `political_message_set`) | ✅ Done |
+| 6 | Test harness alignment for local-provider startup mocks (`tests/conftest.py`) and default-shifted sim tests | ✅ Done |
+| 7 | New message-pool test coverage (`tests/test_political_messages.py`) | ✅ Done |
+| 8 | NB28 offline-message smoke notebook | ✅ Done |
+| 9 | NB29 canonical full-stack smoke notebook | ✅ Done |
+| 10 | `docs/Simulation_Configuration_Guide.md` (supervisor brief + developer config matrix) | ✅ Done |
+| 11 | Runtime wording/default corrections in docs (YouGov April 2024 dataset context; current default population 100) | ✅ Done |
+
+**Current integration suite context:** 465 passed, 1 skipped (latest full-run state during v0.6 consolidation).
+
+### v0.6 carry-forward backlog (toward 1.0)
+
+- Condition B bias re-measurement on the unified 1P chain (NB13 partial rerun).
+- 30–50-agent Qwen3 rerun and seed-sweep stability checks.
+- Async/parallel dispatch implementation from `Model_Design.md` §16.
+- Package-message v2 authoring (replace concatenated placeholders with bespoke package-level copy).
+- Source `__version__` alignment and release-tag cleanup (explicitly deferred from v0.6 docs pass).
 
 
 ## 0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe

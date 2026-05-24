@@ -3,6 +3,7 @@
 
 ## Table of Contents
 - [Overview](#overview)
+- [0.6](#06)
 - [0.4](#04)
 - [0.3](#03)
 - [0.2](#02)
@@ -11,6 +12,16 @@
 
 ## Overview
 Notable changes are to be documented in this file.
+
+
+## [0.6]
+- **Canonical SIM defaults refresh** — `SIM_CONFIG` in `src/cag/abm/sim.py` now defaults to the current research-canon profile: `n_citizens=100`; package-mode alternating day plan (`["P-A","P-B","C"]` / `["P-B","P-A","C"]`); `llm_provider="local"`; `llm_model="mlx-community/Qwen3-8B-4bit"`; `debias=True`; `day0_anchor="ground_truth_with_rationale"`; `political_message_source="offline"`; `political_message_set="v1"`.
+- **Offline political-message subsystem promoted to first-class runtime path** — new loader/module `src/cag/abm/political_messages.py`, curated datasets under `data/political_messages/`, strict startup validation of required message cells, and deterministic selection/rotation behavior. Offline remains explicit default and there is no silent fallback when required cells are missing.
+- **Broadcast provenance in outputs** — `messages.csv` now includes `political_message_id` so every political broadcast row can be traced back to a concrete entry in the message pool.
+- **Resume contract tightened for message-source consistency** — `_RESUME_HARD_KEYS` now includes `political_message_source` and `political_message_set`, preventing incompatible resume mixes between curated/offline and generated/LLM political-message regimes.
+- **Test-suite and harness alignment for new defaults** — added `tests/conftest.py` local-provider startup mocks and updated `tests/test_sim.py` assumptions where legacy defaults were hard-coded; added dedicated pool coverage in `tests/test_political_messages.py`.
+- **New canonical docs/notebooks** — added `docs/Simulation_Configuration_Guide.md` (two-layer audience design: supervisor brief + developer matrix), `notebooks/28_offline_political_messages_smoke.ipynb`, and `notebooks/29_canonical_full_smoke.ipynb`.
+- **Dataset/default wording correction** — documentation now reflects the source cohort as **YouGov April 2024** (not 2022 in runtime-context references) and aligns current default-population references to 100 where they describe active defaults.
 
 
 ## [0.5]

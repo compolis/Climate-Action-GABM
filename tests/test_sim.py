@@ -756,7 +756,11 @@ class TestRunSimulation(unittest.TestCase):
     def test_baseline_survey_called(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(3)
         policy = ClimatePolicyID.CARBON_TAX
-        config = {"days": [{"policy": policy, "phases": ["P-A"]}]}
+        config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
+            "days": [{"policy": policy, "phases": ["P-A"]}],
+        }
         run_simulation(config, nation)
         for agent in nation.agents_active.values():
             self.assertTrue(agent.administer_survey.called)
@@ -766,7 +770,11 @@ class TestRunSimulation(unittest.TestCase):
     def test_all_three_phases_called(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(3)
         policy = ClimatePolicyID.CARBON_TAX
-        config = {"days": [{"policy": policy, "phases": ["P-A", "P-B", "C"]}]}
+        config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
+            "days": [{"policy": policy, "phases": ["P-A", "P-B", "C"]}],
+        }
         run_simulation(config, nation)
 
         broadcast_phases = [c[0][0] for c in nation.run_political_broadcast.call_args_list]
@@ -781,7 +789,11 @@ class TestRunSimulation(unittest.TestCase):
         nation = _make_mock_nation(3)
         policy = ClimatePolicyID.CARBON_TAX
         # C first, then P-B only
-        config = {"days": [{"policy": policy, "phases": ["C", "P-B"]}]}
+        config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
+            "days": [{"policy": policy, "phases": ["C", "P-B"]}],
+        }
         call_order = []
         nation.run_peer_messaging.side_effect = lambda *a, **kw: call_order.append("C")
         nation.run_political_broadcast.side_effect = lambda phase, *a, **kw: call_order.append(phase)
@@ -795,6 +807,8 @@ class TestRunSimulation(unittest.TestCase):
     def test_multi_day_calls_correct_policies(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [
                 {"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]},
                 {"policy": ClimatePolicyID.GREEN_HOUSING, "phases": ["P-B"]},
@@ -859,6 +873,8 @@ class TestRunSimulation(unittest.TestCase):
         """Daily loop days should be 1-indexed (day 0 = baseline)."""
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [
                 {"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]},
                 {"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]},
@@ -875,6 +891,7 @@ class TestRunSimulation(unittest.TestCase):
         nation = _make_mock_nation(2)
         config = {
             "communication_mode": "package",
+            "day0_anchor": "llm_survey",
             "package_policies": list(ALL_CLIMATE_POLICIES),
             "days": [{"phases": []}],
         }
@@ -992,7 +1009,11 @@ class TestAllPhaseOrderings(unittest.TestCase):
             nation.run_political_broadcast.side_effect = lambda phase, *a, **kw: call_order.append(phase)
             nation.run_end_of_day_survey.side_effect = lambda *a, **kw: None
 
-            config = {"days": [{"policy": policy, "phases": list(phases)}]}
+            config = {
+                "communication_mode": "single_policy",
+                "day0_anchor": "llm_survey",
+                "days": [{"policy": policy, "phases": list(phases)}],
+            }
             run_simulation(config, nation)
             call_sequences[phases] = tuple(call_order)
 
@@ -1015,18 +1036,19 @@ class TestSimConfig(unittest.TestCase):
         for key in required:
             self.assertIn(key, SIM_CONFIG, f"Missing key: {key}")
 
-    def test_days_entries_have_policy_and_phases(self):
+    def test_days_entries_have_phases(self):
+        # Default day plan is package-mode: no per-day ``policy`` key.
         for entry in SIM_CONFIG["days"]:
-            self.assertIn("policy", entry)
             self.assertIn("phases", entry)
             self.assertIsInstance(entry["phases"], list)
             for phase in entry["phases"]:
                 self.assertIn(phase, ("P-A", "P-B", "C"),
                               f"Unexpected phase in SIM_CONFIG: {phase}")
 
-    def test_debias_default_false(self):
+    def test_debias_default_true(self):
+        # Research canon since v0.3 (NB15 / Run 4).
         self.assertIn("debias", SIM_CONFIG)
-        self.assertIs(SIM_CONFIG["debias"], False)
+        self.assertIs(SIM_CONFIG["debias"], True)
 
     def test_thinking_default_false(self):
         self.assertIn("thinking", SIM_CONFIG)
@@ -1040,8 +1062,8 @@ class TestSimConfig(unittest.TestCase):
         self.assertIn("survey_provider", SIM_CONFIG)
         self.assertIsNone(SIM_CONFIG["survey_provider"])
 
-    def test_communication_mode_default_single_policy(self):
-        self.assertEqual(SIM_CONFIG["communication_mode"], "single_policy")
+    def test_communication_mode_default_package(self):
+        self.assertEqual(SIM_CONFIG["communication_mode"], "package")
 
     def test_package_policies_default_all_climate_policies(self):
         self.assertEqual(SIM_CONFIG["package_policies"], ALL_CLIMATE_POLICIES)
@@ -1057,6 +1079,8 @@ class TestSurveyModelOverride(unittest.TestCase):
     def test_baseline_uses_survey_model(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
             "survey_model": "gpt-4o",
             "survey_provider": "openai",
@@ -1071,6 +1095,8 @@ class TestSurveyModelOverride(unittest.TestCase):
     def test_eod_survey_uses_survey_model(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]}],
             "survey_model": "gpt-4o",
             "survey_provider": "openai",
@@ -1084,6 +1110,8 @@ class TestSurveyModelOverride(unittest.TestCase):
     def test_fallback_to_main_model_when_none(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
             "survey_model": None,
         }
@@ -1097,6 +1125,8 @@ class TestSurveyModelOverride(unittest.TestCase):
     def test_broadcast_uses_main_model(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]}],
             "survey_model": "gpt-4o",
             "survey_provider": "openai",
@@ -1110,14 +1140,17 @@ class TestSurveyModelOverride(unittest.TestCase):
     def test_different_provider_loads_separate_key(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
             "survey_model": "claude-sonnet-4-20250514",
             "survey_provider": "anthropic",
         }
         run_simulation(config, nation)
-        # load_api_key called twice: once for main ("openai"), once for survey ("anthropic")
+        # load_api_key called once per distinct provider: the main provider
+        # (research-canon default: "local") and the survey provider ("anthropic").
         providers_called = [c[0][0] for c in mock_api.call_args_list]
-        self.assertIn("openai", providers_called)
+        self.assertIn(SIM_CONFIG["llm_provider"], providers_called)
         self.assertIn("anthropic", providers_called)
 
 
@@ -1189,20 +1222,26 @@ class TestDay0Anchor(unittest.TestCase):
 
     @patch("cag.abm.sim.load_api_key", return_value="fake-key")
     @patch("cag.abm.sim.PoliticalAgent")
-    def test_default_is_llm_survey(self, mock_pa_cls, mock_api):
+    def test_default_is_ground_truth_with_rationale(self, mock_pa_cls, mock_api):
+        # Research-canon default: seed Day-0 numeric opinion from YouGov
+        # ground truth and have the LLM write only the rationale.
         nation = _make_mock_nation(2)
-        config = {"days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}]}
+        config = {
+            "communication_mode": "single_policy",
+            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
+        }
         run_simulation(config, nation)
         for agent in nation.agents_active.values():
-            agent.administer_survey.assert_called_once()
+            agent.administer_survey.assert_not_called()
             agent.seed_opinion_from_ground_truth.assert_not_called()
-            agent.seed_opinion_with_rationale.assert_not_called()
+            agent.seed_opinion_with_rationale.assert_called_once()
 
     @patch("cag.abm.sim.load_api_key", return_value="fake-key")
     @patch("cag.abm.sim.PoliticalAgent")
     def test_ground_truth_seeds_no_llm_survey(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
             "day0_anchor": "ground_truth",
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
         }
@@ -1219,6 +1258,7 @@ class TestDay0Anchor(unittest.TestCase):
     def test_ground_truth_with_rationale_calls_seed_with_rationale(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
             "day0_anchor": "ground_truth_with_rationale",
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
         }
@@ -1420,6 +1460,8 @@ class TestPerDayPhaseSugarInRunSimulation(unittest.TestCase):
     def test_sugar_drives_repeated_broadcasts(self, mock_pa_cls, mock_api):
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [{
                 "policy": ClimatePolicyID.CARBON_TAX,
                 "broadcasts_a": 3,
@@ -1442,6 +1484,8 @@ class TestPerDayPhaseSugarInRunSimulation(unittest.TestCase):
         """Locks in the canonical 'phases is a literal sequence' behaviour."""
         nation = _make_mock_nation(2)
         config = {
+            "communication_mode": "single_policy",
+            "day0_anchor": "llm_survey",
             "days": [{
                 "policy": ClimatePolicyID.CARBON_TAX,
                 "phases": ["P-A", "P-A", "P-B", "C"],
@@ -1464,6 +1508,205 @@ class TestPerDayPhaseSugarInRunSimulation(unittest.TestCase):
         }
         with self.assertRaises(ValueError):
             run_simulation(config, nation)
+
+
+class TestPoliticalMessageSourceWiring(unittest.TestCase):
+    """Wiring of the offline political-message pool into the runtime."""
+
+    def test_sim_config_defaults_offline(self):
+        self.assertEqual(SIM_CONFIG["political_message_source"], "offline")
+        self.assertEqual(SIM_CONFIG["political_message_set"], "v1")
+
+    def test_resume_hard_keys_include_message_source(self):
+        from cag.abm.sim import _RESUME_HARD_KEYS
+        self.assertIn("political_message_source", _RESUME_HARD_KEYS)
+        self.assertIn("political_message_set", _RESUME_HARD_KEYS)
+
+    def test_resolve_runtime_offline_loads_pool(self):
+        from cag.abm.sim import _resolve_runtime
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["days"] = [
+            {"policy": ClimatePolicyID.RENEWABLE_ENERGY, "phases": ["P-A"]},
+            {"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]},
+        ]
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            rt = _resolve_runtime(cfg)
+        self.assertIsNotNone(rt["message_pool"])
+        # Should be usable for the policies in the days list.
+        mid, txt = rt["message_pool"].next("A", ClimatePolicyID.RENEWABLE_ENERGY)
+        self.assertTrue(mid.startswith("A_"))
+        self.assertTrue(txt)
+
+    def test_resolve_runtime_llm_source_returns_none_pool(self):
+        from cag.abm.sim import _resolve_runtime
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["political_message_source"] = "llm"
+        cfg["days"] = [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]}]
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            rt = _resolve_runtime(cfg)
+        self.assertIsNone(rt["message_pool"])
+
+    def test_resolve_runtime_invalid_source_raises(self):
+        from cag.abm.sim import _resolve_runtime
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["political_message_source"] = "bogus"
+        cfg["days"] = [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]}]
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            with self.assertRaises(ValueError):
+                _resolve_runtime(cfg)
+
+    def test_resolve_runtime_missing_set_raises(self):
+        from cag.abm.sim import _resolve_runtime
+        from cag.abm.political_messages import MessagePoolError
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["political_message_set"] = "does_not_exist"
+        cfg["days"] = [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A"]}]
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            with self.assertRaises(MessagePoolError):
+                _resolve_runtime(cfg)
+
+    def test_resolve_runtime_package_mode_requires_package_cells(self):
+        from cag.abm.sim import _resolve_runtime
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["communication_mode"] = "package"
+        cfg["days"] = [{"phases": ["P-A"]}]
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            rt = _resolve_runtime(cfg)
+        # v1 ships with PACKAGE cells for both sides → should load fine
+        mid, txt = rt["message_pool"].next("A", "PACKAGE")
+        self.assertTrue(mid.startswith("A_PKG"))
+        self.assertTrue(txt)
+
+
+class TestBroadcastUsesOfflinePool(unittest.TestCase):
+    """run_political_broadcast / run_package_broadcast pool integration."""
+
+    def test_political_broadcast_uses_pool(self):
+        # Real environment method called against a tiny fake setup.
+        from cag.abm.environment import SurveyedNation
+        from cag.abm.political_messages import load_message_pool
+
+        nation = SurveyedNation.__new__(SurveyedNation)
+        nation.message_log = []
+
+        pol_agent = MagicMock()
+        pol_agent.id = "pa_A"
+        pol_agent.side = "A"
+        pol_agent.generate_message = MagicMock(
+            side_effect=AssertionError("LLM must not be called in offline mode")
+        )
+        recipient = MagicMock()
+        recipient.id = "c1"
+        recipient.receive_political_message = MagicMock(return_value="reflection")
+        pol_agent.connected_citizens = [recipient]
+
+        nation.political_agent_a = pol_agent
+        nation.political_agent_b = MagicMock()
+
+        pool = load_message_pool("v1", seed=0)
+        result = nation.run_political_broadcast(
+            "P-A", ClimatePolicyID.CARBON_TAX, day=1, message_pool=pool,
+        )
+
+        # Message text came from the pool, not the LLM.
+        self.assertTrue(result["message"])
+        pol_agent.generate_message.assert_not_called()
+        # Logged event carries political_message_id.
+        self.assertEqual(len(nation.message_log), 1)
+        ev = nation.message_log[0]
+        self.assertTrue(ev["political_message_id"].startswith("A_"))
+        self.assertEqual(ev["message_text"], result["message"])
+
+    def test_political_broadcast_llm_path_logs_empty_id(self):
+        from cag.abm.environment import SurveyedNation
+
+        nation = SurveyedNation.__new__(SurveyedNation)
+        nation.message_log = []
+
+        pol_agent = MagicMock()
+        pol_agent.id = "pa_A"
+        pol_agent.side = "A"
+        pol_agent.generate_message = MagicMock(return_value="live llm text")
+        recipient = MagicMock()
+        recipient.id = "c1"
+        recipient.receive_political_message = MagicMock(return_value="reflection")
+        pol_agent.connected_citizens = [recipient]
+
+        nation.political_agent_a = pol_agent
+        nation.political_agent_b = MagicMock()
+
+        nation.run_political_broadcast(
+            "P-A", ClimatePolicyID.CARBON_TAX, day=1, message_pool=None,
+        )
+        ev = nation.message_log[0]
+        self.assertEqual(ev["political_message_id"], "")
+        self.assertEqual(ev["message_text"], "live llm text")
+
+    def test_package_broadcast_uses_pool(self):
+        from cag.abm.environment import SurveyedNation
+        from cag.abm.political_messages import load_message_pool
+
+        nation = SurveyedNation.__new__(SurveyedNation)
+        nation.message_log = []
+
+        pol_agent = MagicMock()
+        pol_agent.id = "pa_B"
+        pol_agent.side = "B"
+        pol_agent.generate_package_message = MagicMock(
+            side_effect=AssertionError("LLM must not be called in offline mode")
+        )
+        recipient = MagicMock()
+        recipient.id = "c1"
+        recipient.receive_package_political_message = MagicMock(return_value="r")
+        pol_agent.connected_citizens = [recipient]
+
+        nation.political_agent_a = MagicMock()
+        nation.political_agent_b = pol_agent
+
+        pool = load_message_pool("v1", seed=0)
+        result = nation.run_package_broadcast(
+            "P-B", list(ALL_CLIMATE_POLICIES), day=1, message_pool=pool,
+        )
+        self.assertTrue(result["message"])
+        pol_agent.generate_package_message.assert_not_called()
+        ev = nation.message_log[0]
+        self.assertTrue(ev["political_message_id"].startswith("B_PKG"))
+
+
+class TestCollectResultsIncludesMessageId(unittest.TestCase):
+
+    def test_political_message_id_in_messages_frame(self):
+        nation = _make_mock_nation(1)
+        agent = list(nation.agents_active.values())[0]
+        policy = ClimatePolicyID.CARBON_TAX
+        agent.opinion_history = {policy: [(0, 1)]}
+        agent.reflections = []
+        agent.survey_reasoning = {}
+        agent.daily_summaries = {}
+        nation.message_log = [{
+            "day": 1,
+            "phase": "P-A",
+            "message_type": "political_broadcast",
+            "sender_type": "political_agent",
+            "sender_id": "pa_A",
+            "sender_side": "A",
+            "recipient_id": agent.id,
+            "recipient_scope": "broadcast",
+            "policy_id": policy,
+            "package_scope": "",
+            "policy_ids": [],
+            "message_text": "msg",
+            "political_message_id": "A_02_01",
+        }]
+        results = _collect_results(nation, {})
+        df = results["messages"]
+        self.assertIn("political_message_id", df.columns)
+        self.assertEqual(df.iloc[0]["political_message_id"], "A_02_01")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 ## Table of Contents
 - [Overview](#overview)
 - [Getting Started](#getting-started)
-- [v0.5 configuration keys (committed-minority audience reframe)](#v05-configuration-keys-committed-minority-audience-reframe)
+- [v0.6 Configuration Path](#v06-configuration-path)
 - [Troubleshooting](#troubleshooting)
 - [Running Models](#running-models)
 - [Managing Logs and Caches](#managing-logs-and-caches)
@@ -94,7 +94,16 @@ the main program for Climate-Action-GABM is executed. This will:
 The specific output and behavior may depend on your configuration, model parameters, and any customizations you have made. For more details, check the logs and output files generated in the `data/output/` directory after running the command.
 
 
-## v0.5 configuration keys (committed-minority audience reframe)
+## v0.6 Configuration Path
+
+For day-to-day runs, treat [`docs/Simulation_Configuration_Guide.md`](docs/Simulation_Configuration_Guide.md) as the canonical source of truth.
+
+- **Supervisor path (quick read):** Sections 1-3 explain the canonical run profile and what is frozen vs tunable.
+- **Operator/developer path (detailed):** Sections 4 onward provide a key-by-key matrix for every active `SIM_CONFIG` option, valid values, interactions, and tested defaults.
+
+Current canonical runtime defaults are package mode + local Qwen3 + offline political messages, with Day-0 ground-truth-with-rationale anchoring and `debias=True`. If you need legacy behavior (for example single-policy runs or LLM-generated political messages), switch explicitly in `SIM_CONFIG` and record that override in your run notes.
+
+### Political-exposure controls (introduced in v0.5, still active in v0.6)
 
 v0.5 introduces three `SIM_CONFIG` keys controlling political-broadcast audience assignment. Existing v0.4 configs still run unchanged, but when `political_exposure_mode` is omitted the new default is `"rule_affinity_rank"`. Set `political_exposure_mode="rule_priority_chain"` to preserve the legacy assignment rule.
 

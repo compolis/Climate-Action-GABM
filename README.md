@@ -44,18 +44,19 @@ Citizen agents are constructed from real **YouGov survey data** (UK, April 2024)
 
 ## Current Status
 
-**v0.5 — local LLM provider, prompt audit and unification, and the committed-minority audience reframe.**
+**v0.6 — canonical defaults consolidation, offline political messages, and full-stack smoke documentation.**
 
 | Metric | Value |
 |--------|-------|
-| Tests | 433 collected; 432 passing, 1 skipped |
-| Runtime extensions (v0.5) | `provider="local"` for OpenAI-compatible servers (`mlx-lm` / Ollama / vLLM / sglang / `llama.cpp`); per-day broadcast-frequency sugar; first-class affinity-rank political-exposure mode with named target presets (`committed_minority_symmetric` / `committed_minority_uk_2024` / `legacy_v05`) and weight presets (`balanced` / `vote_dominant` / `values_dominant`); unified first-person prompt stack |
-| Notebooks | 27 (01–27) |
+| Tests | 466 collected; 465 passing, 1 skipped |
+| Runtime extensions (v0.6) | Canonical SIM defaults now align with research runs (`n_citizens=100`, package-mode alternating phases, local Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`); offline political-message source is first-class with strict startup validation and message-level provenance (`political_message_id`) |
+| Notebooks | 29 (01–29) |
 | Source files | 21 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
 See [docs/Model_Design.md](docs/Model_Design.md) for the design specification.
 See [docs/result_report.md](docs/result_report.md) for experiment results and analysis.
+See [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) for canonical configuration options (supervisor brief + developer matrix).
 
 
 ## Architecture
