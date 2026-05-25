@@ -22,14 +22,18 @@ from cag.abm.attributes.opinion import (
     SURVEY_QUESTIONS,
     compute_package_index,
 )
+from cag.abm.political_messages import load_message_pool
 from cag.io.llm import configure_local, load_api_key, ping_local
 
 
 SIM_CONFIG = {
-    "n_citizens": 200,
+    "n_citizens": 100,
+    # Default day plan is package-mode (alternating P-A/P-B order to
+    # balance recency). No per-day ``policy`` key — that is single-policy
+    # sugar and is silently ignored under ``communication_mode='package'``.
     "days": [
-        {"policy": ClimatePolicyID.RENEWABLE_ENERGY, "phases": ["P-A", "P-B", "C"]},
-        {"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A", "P-B","C"]},
+        {"phases": ["P-A", "P-B", "C"]},
+        {"phases": ["P-B", "P-A", "C"]},
     ],
     "k_peers_per_day": 3,
     "network_type": "stochastic_block",
@@ -45,16 +49,32 @@ SIM_CONFIG = {
     # diagnostics (clustering / shortest-path / diameter). 0 or None
     # disables; per-metric size caps still apply.
     "diagnostics_timeout_s": 30.0,
-    "llm_model": "gpt-5-mini",
-    "llm_provider": "openai",
+    # Research-canon LLM defaults: local mlx_lm.server with Qwen3-8B-4bit.
+    # API providers (openai / anthropic / google) remain supported as an
+    # outsider option; override these two keys to use them.
+    "llm_model": "mlx-community/Qwen3-8B-4bit",
+    "llm_provider": "local",
     "llm_temperature": 0.5,
     "survey_model": None,       # override model for surveys (None → use llm_model)
     "survey_provider": None,    # override provider for surveys (None → use llm_provider)
     "thinking": False,
-    "debias": False,
-    "communication_mode": "single_policy",
+    # Research-canon since v0.3 (NB15 / Run 4): Condition B 2-step survey
+    # to reduce LLM pro-climate bias on Day 0.
+    "debias": True,
+    # Research direction: all policies broadcast together each phase.
+    "communication_mode": "package",
     "package_policies": ALL_CLIMATE_POLICIES,
-    "day0_anchor": "llm_survey",
+    # Source of political-broadcast text. "offline" (default) pulls
+    # pre-authored quotes/summaries from a versioned message set under
+    # ``data/political_messages/``; "llm" generates messages live via the
+    # configured LLM provider. There is no silent fallback: "offline" with
+    # missing cells aborts the run at start.
+    "political_message_source": "offline",
+    "political_message_set": "v1",
+    # Research canon: seed Day-0 numeric opinion from YouGov ground truth
+    # (LLM only writes the rationale). Use "llm_survey" to preserve the
+    # bias-measurement story (NB11-14) on new models.
+    "day0_anchor": "ground_truth_with_rationale",
     "reach_a": 1.0,             # fraction of A-audience reached by political agent A broadcasts (0.0-1.0)
     "reach_b": 1.0,             # fraction of B-audience reached by political agent B broadcasts (0.0-1.0)
     "audience_cap": None,       # if int, cap each political agent's audience to this many citizens (uniform random) BEFORE reach subsample. None = no cap.
@@ -334,6 +354,39 @@ def _resolve_runtime(cfg):
     survey_api_key = (
         load_api_key(survey_provider) if survey_provider != provider else api_key
     )
+
+    # Offline political-broadcast pool. Loaded once per run and validated
+    # eagerly against the policies/sides the run will exercise so that any
+    # missing cell aborts before the first API call.
+    message_pool = None
+    source = cfg.get("political_message_source", "offline")
+    if source not in ("offline", "llm"):
+        raise ValueError(
+            f"political_message_source must be 'offline' or 'llm', "
+            f"got {source!r}"
+        )
+    if source == "offline":
+        message_pool = load_message_pool(
+            cfg["political_message_set"],
+            seed=cfg["random_seed"],
+        )
+        if _is_package_mode(cfg):
+            policy_ids_for_validation = []
+            include_package = True
+        else:
+            seen = []
+            for day_cfg in cfg["days"]:
+                pid = day_cfg.get("policy")
+                if pid is not None and pid not in seen:
+                    seen.append(pid)
+            policy_ids_for_validation = seen
+            include_package = False
+        message_pool.validate_required(
+            sides=("A", "B"),
+            policy_ids=policy_ids_for_validation,
+            include_package=include_package,
+        )
+
     return {
         "api_key": api_key,
         "model": cfg["llm_model"],
@@ -347,6 +400,7 @@ def _resolve_runtime(cfg):
         "survey_provider": survey_provider,
         "package_mode": _is_package_mode(cfg),
         "package_policies": _get_package_policies(cfg),
+        "message_pool": message_pool,
     }
 
 
@@ -372,6 +426,7 @@ def _run_one_day(nation, day, day_config, n_days, rt):
                     phase, package_policies, day,
                     api_key=rt["api_key"], model=rt["model"],
                     provider=rt["provider"], temperature=rt["temperature"],
+                    message_pool=rt["message_pool"],
                 )
             elif phase == "C":
                 nation.run_package_peer_messaging(
@@ -387,6 +442,7 @@ def _run_one_day(nation, day, day_config, n_days, rt):
                     phase, policy, day,
                     api_key=rt["api_key"], model=rt["model"],
                     provider=rt["provider"], temperature=rt["temperature"],
+                    message_pool=rt["message_pool"],
                 )
             elif phase == "C":
                 nation.run_peer_messaging(
@@ -625,6 +681,7 @@ def _collect_results(nation, config):
             "package_scope": event.get("package_scope", ""),
             "policy_ids_json": json.dumps([str(pid) for pid in policy_ids]),
             "message_text": event.get("message_text", ""),
+            "political_message_id": event.get("political_message_id", ""),
         })
 
     for agent in agents:
@@ -731,6 +788,7 @@ def _collect_results(nation, config):
                 "package_scope",
                 "policy_ids_json",
                 "message_text",
+                "political_message_id",
             ],
         ),
         "survey_reasoning": pd.DataFrame(
@@ -815,6 +873,7 @@ _RESULT_CSV_SCHEMAS = {
         "day", "phase", "message_type", "sender_type", "sender_id",
         "sender_side", "recipient_id", "recipient_scope", "policy_id",
         "package_scope", "policy_ids_json", "message_text",
+        "political_message_id",
     ],
     "survey_reasoning": ["agent_id", "day", "policy_id", "reasoning"],
     "daily_summaries": ["agent_id", "day", "policy_id", "summary"],
@@ -911,6 +970,7 @@ _RESUME_HARD_KEYS = (
     "reach_a", "reach_b", "audience_cap",
     "political_exposure_mode", "political_exposure_targets",
     "affinity_weights",
+    "political_message_source", "political_message_set",
 )
 # Config keys we tolerate changing on resume but log a warning for.
 _RESUME_SOFT_KEYS = (
@@ -1168,6 +1228,7 @@ def _load_checkpoint(nation, checkpoint_dir):
             "recipient_id": row.recipient_id,
             "recipient_scope": _str(row.recipient_scope),
             "message_text": _str(row.message_text),
+            "political_message_id": _str(getattr(row, "political_message_id", "")),
         })
 
     return last_day

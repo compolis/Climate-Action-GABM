@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
@@ -104,6 +106,44 @@ class TestCheckpointRoundtrip(unittest.TestCase):
 
             # nation.message_log restored.
             self.assertEqual(len(fresh.message_log), len(nation.message_log))
+
+    def test_checkpoint_roundtrip_preserves_political_message_id(self, _pa, _key):
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt = Path(tmp) / "checkpoint"
+            cfg = _base_config(tmp)
+            nation = _make_mock_nation(n_agents=1)
+
+            nation.agents_active[0].opinion_history = {
+                ClimatePolicyID.CARBON_TAX: [(0, 1)]
+            }
+            nation.message_log = [{
+                "day": 1,
+                "phase": "P-A",
+                "message_type": "political_broadcast",
+                "sender_type": "political_agent",
+                "sender_id": "agent_a",
+                "sender_side": "A",
+                "recipient_id": 0,
+                "recipient_scope": "citizen",
+                "policy_id": ClimatePolicyID.CARBON_TAX,
+                "package_scope": "",
+                "policy_ids": [],
+                "message_text": "hello",
+                "political_message_id": "A_05_01",
+            }]
+
+            _write_checkpoint(nation, cfg, last_day=1, checkpoint_dir=ckpt)
+
+            msgs = pd.read_csv(ckpt / "messages.csv", keep_default_na=False)
+            self.assertIn("political_message_id", msgs.columns)
+            self.assertEqual(msgs.iloc[0]["political_message_id"], "A_05_01")
+
+            fresh = _make_mock_nation(n_agents=1)
+            _load_checkpoint(fresh, ckpt)
+            self.assertEqual(
+                fresh.message_log[0]["political_message_id"],
+                "A_05_01",
+            )
 
 
 @patch("cag.abm.sim.load_api_key", return_value="mock-key")

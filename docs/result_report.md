@@ -26,6 +26,60 @@ Notes:
 
 ---
 
+## Run 10: NB 29 — Canonical Full-Scale Smoke (offline broadcasts + local LLM, package mode)
+
+**Date:** 2026-05-22 (run), 2026-05-24 (fresh-kernel replay of headline metrics)
+**Notebook:** [notebooks/29_canonical_full_smoke.ipynb](../notebooks/29_canonical_full_smoke.ipynb)
+**Result files:** [data/output/experiments/20260522_234958/](../data/output/experiments/20260522_234958/)
+
+NB 29 is the canonical end-to-end smoke reference for the current research default stack: offline political-message pool (`v1`) + local Qwen3 + package mode. The notebook now includes a load-from-disk cell so Section 8 can be rerun in a fresh kernel without rerunning the full simulation.
+
+### Configuration (as printed in notebook output)
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 10 (smoke) |
+| days | 2 (alternating `P-A/P-B/C` and `P-B/P-A/C`) |
+| k_peers_per_day | 2 (smoke) |
+| communication_mode | `package` |
+| package_policies | all 6 climate policies |
+| political_message_source / set | `offline` / `v1` |
+| llm_provider / llm_model | `local` / `mlx-community/Qwen3-8B-4bit` |
+| local_base_url | `http://localhost:8080/v1` |
+| debias | `True` |
+| day0_anchor | `ground_truth_with_rationale` |
+| random_seed | 42 |
+
+### Headline results
+
+| Check | Output |
+|---|---|
+| Local server ping | Reachable; `/v1/models` returned `mlx-community/Qwen3-8B-4bit` |
+| Offline pool sanity | `Total cells: 14`; `Empty cells: 0` |
+| Population load | `Citizens loaded: 10 (target 10)` |
+| Full simulation runtime | `251.1 min (15067s)` |
+| Political broadcast LLM tripwire | `generate_message calls: 0`; `generate_package_message calls: 0` |
+| Saved artifacts | Run saved to `.../20260522_234958` + 4 canonical plots emitted |
+| Broadcast round-trip integrity | `political_broadcast rows: 16`; `mismatches: 0` |
+| Example message IDs used | `A_PKG_20`, `B_PKG_05`, `B_PKG_04`, `A_PKG_10` (each count 4) |
+| Reloaded row counts (fresh kernel) | `opinion_trajectories=180`, `package_index_trajectories=30`, `reflections=32`, `messages=36`, `survey_reasoning=180`, `ground_truth=60`, `package_ground_truth=10`, `daily_summaries=0` |
+| Day-0 anchor invariant | `0 mismatches of 60` (agent, policy) pairs |
+| Reflection budget | `n=32`, median tokens `168`, min `98`, max `389` |
+| Package-index trajectory (plot) | Mean pro-climate index rises Day0→Day1 and stays elevated Day2 (approx. `0.75 -> 1.45 -> 1.45`) |
+
+### Interpretation
+
+Run 10 passes all smoke gates for the canonical profile:
+
+- offline broadcast sourcing is active and stable (zero political-broadcast LLM calls),
+- package-mode run/output schema is internally consistent,
+- Day-0 anchoring is exact,
+- and the artifact bundle is complete and replayable from disk.
+
+This is now a reliable acceptance template before scaling `n_citizens` or day count.
+
+---
+
 ## Affinity-based political exposure: NB 27 — committed-minority audience sanity check
 
 **Date:** 2026-05-20

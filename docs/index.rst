@@ -12,6 +12,7 @@
 
    ROADMAP.md
    CHANGE_LOG.md
+   Simulation_Configuration_Guide.md
    CODE_OF_CONDUCT.md
    SETUP_GUIDE.md
    CONTRIBUTORS.md
