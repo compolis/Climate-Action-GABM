@@ -2,7 +2,7 @@
 
 A two-layer reference for the dict you pass to [`run_simulation(config, nation)`](../src/cag/abm/sim.py).
 
-- **Layer 1 — Supervisor brief** (§1–§3): a short narrative of what the canonical run does, which six defaults define the research design, and what is frozen versus tunable. A supervisor can stop reading after Layer 1 and have a defensible mental model.
+- **Layer 1 — Supervisor brief** (§1–§3): a short narrative of what the canonical run does, which six defaults define the research design, and what is frozen versus tunable. 
 - **Layer 2 — Developer / operator matrix** (§4 onward): every active `SIM_CONFIG` key with source location, type, valid values, validating notebook, interactions with other keys, and copy-paste canonical profiles.
 
 > **Companion docs.** Prompts and persona text: [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md). Output artefacts: [Run_Output_Guide.md](Run_Output_Guide.md). Local-LLM server setup: [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md). Design rationale and decision history: [Model_Design.md](Model_Design.md).
@@ -17,7 +17,7 @@ Out of the box `SIM_CONFIG` ([sim.py L29–L99](../src/cag/abm/sim.py#L29-L99)) 
 
 1. Simulate **100 citizens** drawn from the YouGov April 2024 climate survey.
 2. Use **local Qwen3-8B-4bit** served from `http://localhost:8080/v1` (an `mlx_lm.server` process) as the LLM for every prompt — citizen reflections, peer messages, surveys, Day-0 rationales. API providers (OpenAI / Anthropic / Google) are supported but treated as an *outsider path*: documented and tested, but not the research default.
-3. Run **package mode**: every broadcast and peer message addresses **all 6 climate policies at once** (Carbon Tax, Ban Petrol Cars, Climate Compensation, Government Subsidies, Renewable Energy, Local Forest Protection). Days alternate phase order — odd days `[P-A, P-B, C]`, even days `[P-B, P-A, C]` — to balance recency effects across sides.
+3. Run **package mode**: every broadcast and peer message addresses **all 6 climate policies at once** (Renewable Energy, Ban Fossil Fuel Licenses, Ban Petrol Cars, Green Housing, Carbon Tax, Climate Compensation). Days alternate phase order — odd days `[P-A, P-B, C]`, even days `[P-B, P-A, C]` — to balance recency effects across sides.
 4. Pull political-broadcast text from the **offline pool** under `data/political_messages/messages_v1.csv` (40 package cells, 20 per side, plus single-policy cells). No LLM call is made on the political-agent side; the run aborts at start if any required cell is missing.
 5. Seed **Day-0 opinions from YouGov ground truth** and ask the LLM only to write the rationale (`day0_anchor='ground_truth_with_rationale'`). This eliminates the Day-0 pro-climate bias the LLM otherwise exhibits (NB11–14) without throwing away the qualitative narrative trace.
 6. Apply **Condition B debias** to every end-of-day survey (`debias=True`) — a two-step prompt chain validated in NB13–15 to remove most of the LLM's residual pro-climate inflation on end-of-day surveys.

@@ -51,7 +51,7 @@ Citizen agents are constructed from real **YouGov survey data** (UK, April 2024)
 | Tests | 466 collected; 465 passing, 1 skipped |
 | Runtime extensions (v0.6) | Canonical SIM defaults now align with research runs (`n_citizens=100`, package-mode alternating phases, local Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`); offline political-message source is first-class with strict startup validation and message-level provenance (`political_message_id`) |
 | Notebooks | 29 (01–29) |
-| Source files | 21 under `src/cag/` |
+| Source files | 23 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
 See [docs/Model_Design.md](docs/Model_Design.md) for the design specification.
@@ -64,15 +64,17 @@ See [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide
 ```
 src/cag/
 ├── abm/
-│   ├── agent.py           # SurveyedCitizen, PoliticalAgent
-│   ├── environment.py     # SurveyedNation (network, broadcast, peer messaging)
-│   ├── sim.py             # run_simulation(), SIM_CONFIG, collect_ground_truth()
+│   ├── agent.py               # SurveyedCitizen, PoliticalAgent
+│   ├── environment.py         # SurveyedNation (network, broadcast, peer messaging)
+│   ├── sim.py                 # run_simulation(), SIM_CONFIG, collect_ground_truth()
+│   ├── output.py              # CSV/JSON export, share aggregations, plotting
+│   ├── political_messages.py  # Offline political-message loader, validation, selection
 │   ├── attributes/
-│   │   └── opinion.py     # ClimatePolicyID, survey constants, clamping
-│   └── democracy/         # Brexit & UKGE2019 vote enums (from gabm)
+│   │   └── opinion.py         # ClimatePolicyID, survey constants, clamping, package index
+│   └── democracy/             # Brexit & UKGE2019 vote enums (from gabm)
 ├── io/
-│   ├── llm.py             # send_chat() (openai/genai/anthropic/local), load_api_key(), parse_letter_response(), configure_local(), ping_local()
-│   └── survey.py          # Survey loading utilities
+│   ├── llm.py                 # send_chat() (openai/genai/anthropic/local), load_api_key(), parse_letter_response(), configure_local(), ping_local()
+│   └── survey.py              # Survey loading utilities
 └── __main__.py
 ```
 
@@ -106,6 +108,12 @@ Interactive demos live in `notebooks/`. Each covers one simulation component:
 | 21 | Broadcast-Only Asymmetry | Reach sweep with peers disabled and `audience_cap` mirror control |
 | 22 | Day-0 Accuracy (Sonnet) | Survey-path audit against ground truth under the production survey stack |
 | 23 | Persona Signal Test | Null-model comparison for persona signal and higher-power calibration |
+| 24 | Local Qwen3 Smoke Test | First end-to-end local-LLM run (Qwen3 8B 4-bit / mlx-lm / Apple Silicon) |
+| 25 | Local LLM Integrated Smoke | Bit-for-bit parity check between monkey-patched prototype and first-class `provider="local"` path |
+| 26 | Network Factory Demo | Stochastic block model factory and topology configurability walkthrough |
+| 27 | Affinity Exposure Demo | `rule_affinity_rank` validation on the full YouGov pool (target presets, weight presets, validation gates) |
+| 28 | Offline Political Messages Smoke | Curated offline message pool: loader, validation, selection/rotation, and `political_message_id` provenance |
+| 29 | Canonical Full Smoke | End-to-end canonical defaults run (package mode, local Qwen3, debias, ground-truth anchor, offline messages) |
 
 
 ## License
