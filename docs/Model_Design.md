@@ -787,104 +787,7 @@ Acceptance: existing 325 tests pass at `max_concurrent_agents=1`; new wall-time 
 *Specification version 1.0 — produced during iterative design session.*
 *All design decisions are documented and configurable for experimental variation.*
 
----
 
-## 21. v0.6 Canonical Runtime Consolidation (2026-05-24)
-
-### 21.1 Scope
-
-v0.6 is a consolidation release for runtime truth and documentation consistency.
-It does not introduce a new opinion-dynamics mechanism; it promotes an
-operationally-complete path to canonical status and makes that path explicit in
-code defaults, smoke notebooks, and user-facing documentation.
-
-Core v0.6 surfaces:
-
-1. Canonical `SIM_CONFIG` defaults moved to the research path currently used in
-  production-style runs.
-2. Offline political-message ingestion promoted to a first-class default mode.
-3. Strict startup validation for offline political-message availability.
-4. Message-level provenance surfaced in outputs (`political_message_id`).
-5. Resume compatibility contract extended for message-source consistency.
-6. Canonical smoke/docs workflow established via NB28 + NB29 and
-  `docs/Simulation_Configuration_Guide.md`.
-
-### 21.2 Canonical defaults (authoritative for v0.6)
-
-In v0.6, the canonical defaults in `src/cag/abm/sim.py` are:
-
-| Key | v0.6 canonical default | Rationale |
-|---|---|---|
-| `n_citizens` | `100` | practical default balancing cost and trajectory stability |
-| `days` | alternating package-mode phases: `[{"phases":["P-A","P-B","C"]}, {"phases":["P-B","P-A","C"]}]` | mitigates fixed first-speaker recency |
-| `llm_provider` | `"local"` | reproducible local runtime, no API spend |
-| `llm_model` | `"mlx-community/Qwen3-8B-4bit"` | validated local baseline |
-| `communication_mode` | `"package"` | package-level dynamics are the active research direction |
-| `debias` | `True` | retain Condition-B mitigation by default |
-| `day0_anchor` | `"ground_truth_with_rationale"` | zero Day-0 numeric drift from survey mean, keep rationale trace |
-| `political_message_source` | `"offline"` | curated political-message corpus as default broadcast source |
-| `political_message_set` | `"v1"` | pinned versioned corpus |
-
-### 21.3 Offline political-message runtime flow
-
-`run_simulation()` now resolves political-broadcast source mode in
-`_resolve_runtime()`:
-
-1. Validate `political_message_source ∈ {"offline", "llm"}`.
-2. When source is `"offline"`, load a versioned message pool from
-  `data/political_messages/`.
-3. Validate required cells (side × policy or side × package scope depending on
-  communication mode) before the day loop begins.
-4. Abort early if required cells are missing; do not silently fallback to LLM.
-
-Broadcast methods receive `message_pool=` and select messages from the pool when
-offline mode is active. LLM-generated political messages remain available as an
-explicit opt-in path (`political_message_source="llm"`).
-
-### 21.4 Output schema delta (v0.6)
-
-`messages.csv` now includes a `political_message_id` column for political
-broadcast events. This enables row-level provenance from runtime logs back to
-the exact curated corpus record used for that broadcast.
-
-### 21.5 Resume contract delta (v0.6)
-
-Resume hard-fail compatibility keys now include:
-
-- `political_message_source`
-- `political_message_set`
-
-This prevents checkpoint continuation across incompatible broadcast-message
-regimes (e.g., switching from curated offline corpus to live generated
-political messages mid-run).
-
-### 21.6 Validation notebooks and roles
-
-- **NB28** (`notebooks/28_offline_political_messages_smoke.ipynb`): verifies
-  offline political-message plumbing and message-pool round-trip checks.
-- **NB29** (`notebooks/29_canonical_full_smoke.ipynb`): validates canonical
-  full-stack configuration and outputs under smoke-scale run settings.
-
-NB29 is a canonical run-path smoke test, not a resume/checkpoint regression.
-Resume/checkpoint behavior remains primarily validated by NB18.
-
-### 21.7 Corrections to stale defaults in earlier sections
-
-This document is append-only, so earlier default tables are preserved as
-historical records. For current runtime behavior, this addendum supersedes those
-older defaults where they conflict.
-
-Specifically, if an earlier table states `n_citizens = 200` as a current
-default, treat it as historical context; the v0.6 active default is
-`n_citizens = 100`.
-
-### 21.8 Dataset timing wording
-
-For runtime-cohort references in v0.6 docs, use **YouGov April 2024** wording.
-Literature citations that include 2022 publication years are unchanged and not
-part of this correction.
-
----
 
 ## 17. Pluggable Peer-Network Factory (v0.5, 2026-05-14)
 
@@ -1984,3 +1887,102 @@ Nigel Farage, Richard Tice). For the v0.5 paper this is reframed as a
   against the trimmed prompts. The trimming removes leading content
   and is expected to *reduce* baseline sycophancy slightly, but this
   is not measured.
+
+  ---
+
+## 21. v0.6 Canonical Runtime Consolidation (2026-05-24)
+
+### 21.1 Scope
+
+v0.6 is a consolidation release for runtime truth and documentation consistency.
+It does not introduce a new opinion-dynamics mechanism; it promotes an
+operationally-complete path to canonical status and makes that path explicit in
+code defaults, smoke notebooks, and user-facing documentation.
+
+Core v0.6 surfaces:
+
+1. Canonical `SIM_CONFIG` defaults moved to the research path currently used in
+  production-style runs.
+2. Offline political-message ingestion promoted to a first-class default mode.
+3. Strict startup validation for offline political-message availability.
+4. Message-level provenance surfaced in outputs (`political_message_id`).
+5. Resume compatibility contract extended for message-source consistency.
+6. Canonical smoke/docs workflow established via NB28 + NB29 and
+  `docs/Simulation_Configuration_Guide.md`.
+
+### 21.2 Canonical defaults (authoritative for v0.6)
+
+In v0.6, the canonical defaults in `src/cag/abm/sim.py` are:
+
+| Key | v0.6 canonical default | Rationale |
+|---|---|---|
+| `n_citizens` | `100` | practical default balancing cost and trajectory stability |
+| `days` | alternating package-mode phases: `[{"phases":["P-A","P-B","C"]}, {"phases":["P-B","P-A","C"]}]` | mitigates fixed first-speaker recency |
+| `llm_provider` | `"local"` | reproducible local runtime, no API spend |
+| `llm_model` | `"mlx-community/Qwen3-8B-4bit"` | validated local baseline |
+| `communication_mode` | `"package"` | package-level dynamics are the active research direction |
+| `debias` | `True` | retain Condition-B mitigation by default |
+| `day0_anchor` | `"ground_truth_with_rationale"` | zero Day-0 numeric drift from survey mean, keep rationale trace |
+| `political_message_source` | `"offline"` | curated political-message corpus as default broadcast source |
+| `political_message_set` | `"v1"` | pinned versioned corpus |
+
+### 21.3 Offline political-message runtime flow
+
+`run_simulation()` now resolves political-broadcast source mode in
+`_resolve_runtime()`:
+
+1. Validate `political_message_source ∈ {"offline", "llm"}`.
+2. When source is `"offline"`, load a versioned message pool from
+  `data/political_messages/`.
+3. Validate required cells (side × policy or side × package scope depending on
+  communication mode) before the day loop begins.
+4. Abort early if required cells are missing; do not silently fallback to LLM.
+
+Broadcast methods receive `message_pool=` and select messages from the pool when
+offline mode is active. LLM-generated political messages remain available as an
+explicit opt-in path (`political_message_source="llm"`).
+
+### 21.4 Output schema delta (v0.6)
+
+`messages.csv` now includes a `political_message_id` column for political
+broadcast events. This enables row-level provenance from runtime logs back to
+the exact curated corpus record used for that broadcast.
+
+### 21.5 Resume contract delta (v0.6)
+
+Resume hard-fail compatibility keys now include:
+
+- `political_message_source`
+- `political_message_set`
+
+This prevents checkpoint continuation across incompatible broadcast-message
+regimes (e.g., switching from curated offline corpus to live generated
+political messages mid-run).
+
+### 21.6 Validation notebooks and roles
+
+- **NB28** (`notebooks/28_offline_political_messages_smoke.ipynb`): verifies
+  offline political-message plumbing and message-pool round-trip checks.
+- **NB29** (`notebooks/29_canonical_full_smoke.ipynb`): validates canonical
+  full-stack configuration and outputs under smoke-scale run settings.
+
+NB29 is a canonical run-path smoke test, not a resume/checkpoint regression.
+Resume/checkpoint behavior remains primarily validated by NB18.
+
+### 21.7 Corrections to stale defaults in earlier sections
+
+This document is append-only, so earlier default tables are preserved as
+historical records. For current runtime behavior, this addendum supersedes those
+older defaults where they conflict.
+
+Specifically, if an earlier table states `n_citizens = 200` as a current
+default, treat it as historical context; the v0.6 active default is
+`n_citizens = 100`.
+
+### 21.8 Dataset timing wording
+
+For runtime-cohort references in v0.6 docs, use **YouGov April 2024** wording.
+Literature citations that include 2022 publication years are unchanged and not
+part of this correction.
+
+---

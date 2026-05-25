@@ -139,6 +139,11 @@ class TestSyntheticPool(unittest.TestCase):
             seqs.append(tuple(self._load(seed=s).next("A", 1)[0] for _ in range(3)))
         self.assertGreater(len(set(seqs)), 1)
 
+    def test_seed_11_has_stable_expected_order(self):
+        pool = self._load(seed=11)
+        seq = tuple(pool.next("A", 1)[0] for _ in range(3))
+        self.assertEqual(seq, ("A_01_03", "A_01_02", "A_01_01"))
+
     def test_peek_does_not_advance(self):
         pool = self._load(seed=0)
         first = pool.peek("A", 1)

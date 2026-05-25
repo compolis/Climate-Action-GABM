@@ -32,6 +32,7 @@ __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University
 
 # Standard library imports
 import csv
+import hashlib
 import logging
 import random
 from dataclasses import dataclass, field
@@ -381,7 +382,10 @@ def _shuffle_cells(
         # Sort first by message_id for a deterministic baseline order regardless
         # of CSV row order, then shuffle with a per-cell seed.
         bucket_sorted = sorted(bucket, key=lambda r: r.message_id)
-        cell_seed = hash((seed, key[0], key[1])) & 0xFFFFFFFF
+        seed_material = f"{seed}:{key[0]}:{key[1]}".encode("utf-8")
+        cell_seed = int.from_bytes(
+            hashlib.sha256(seed_material).digest()[:8], "big"
+        )
         rng = random.Random(cell_seed)
         rng.shuffle(bucket_sorted)
         out[key] = bucket_sorted

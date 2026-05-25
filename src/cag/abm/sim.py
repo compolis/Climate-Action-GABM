@@ -873,6 +873,7 @@ _RESULT_CSV_SCHEMAS = {
         "day", "phase", "message_type", "sender_type", "sender_id",
         "sender_side", "recipient_id", "recipient_scope", "policy_id",
         "package_scope", "policy_ids_json", "message_text",
+        "political_message_id",
     ],
     "survey_reasoning": ["agent_id", "day", "policy_id", "reasoning"],
     "daily_summaries": ["agent_id", "day", "policy_id", "summary"],
@@ -1227,6 +1228,7 @@ def _load_checkpoint(nation, checkpoint_dir):
             "recipient_id": row.recipient_id,
             "recipient_scope": _str(row.recipient_scope),
             "message_text": _str(row.message_text),
+            "political_message_id": _str(getattr(row, "political_message_id", "")),
         })
 
     return last_day
