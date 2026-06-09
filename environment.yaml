@@ -1,0 +1,40 @@
+# Conda environment for running Climate-Action-GABM on AIRE (University of
+# Leeds HPC). Build the CLIENT environment that runs the simulation:
+#
+#     module load miniforge
+#     conda env create -f environment.yaml
+#     conda activate cag
+#
+# Update an existing env after editing this file (the --prune keeps the env
+# from bloating the 65 GB $HOME quota):
+#
+#     conda env update --file environment.yaml --prune
+#
+# NOTE: This env does NOT include the LLM server (vLLM). On AIRE the model is
+# served from a vLLM Apptainer container on a GPU node — see
+# scripts/aire/smoke.sh and docs/RunningLLMsOnAire.md. The simulation here is
+# only a *client* that talks to that server over HTTP, so it needs no GPU
+# libraries.
+name: cag
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  # Core scientific stack (conda-forge names).
+  - numpy
+  - pandas
+  - networkx
+  - scipy
+  - matplotlib
+  - requests
+  # Test runner (so `pytest` can validate the env on AIRE).
+  - pytest
+  - pip
+  - pip:
+      # GABM base framework (PyPI only).
+      - gabm==0.2.18
+      # LLM provider clients. `openai` is REQUIRED even for the default
+      # provider="local" path: the local backend talks to the vLLM server
+      # through the openai SDK. `anthropic` is optional (cloud fallback).
+      - openai
+      - anthropic

@@ -183,9 +183,10 @@ bump-version:
 	bump2version --allow-dirty --list $${part:-patch}
 
 # Run cag using local source (development mode)
+# Writes all artefacts under data/output/experiments/<timestamp>/.
 run-local:
-	PYTHONPATH=src python3 -m cag
+	PYTHONPATH=src python3 -m cag --outdir data/output/experiments
 
 # Run cag using installed package (production mode)
 run-installed:
-	python3 -m cag
+	python3 -m cag --outdir data/output/experiments
