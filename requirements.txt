@@ -5,8 +5,17 @@
 gabm==0.2.18
 
 # For climate-action specific development
+numpy==2.4.2
 pandas==3.0.1
 networkx==3.6.1
 scipy==1.17.1
 matplotlib==3.10.8
 anthropic
+
+# LLM provider clients
+# `openai` is REQUIRED even for the default provider="local" path: the local
+# backend (cag.io.llm._send_local) talks to any OpenAI-compatible server
+# (mlx-lm / vLLM / Ollama) through the openai SDK. `requests` backs
+# ping_local() (the fail-fast server health check at simulation start).
+openai
+requests
