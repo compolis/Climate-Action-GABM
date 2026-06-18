@@ -1,0 +1,56 @@
+{
+  "n_citizens": 10,
+  "days": [
+    {
+      "phases": [
+        "P-A",
+        "P-B",
+        "C"
+      ]
+    },
+    {
+      "phases": [
+        "P-B",
+        "P-A",
+        "C"
+      ]
+    }
+  ],
+  "k_peers_per_day": 2,
+  "network_type": "stochastic_block",
+  "network_params": null,
+  "p_intra": 0.15,
+  "p_inter": 0.02,
+  "block_sizes": null,
+  "diagnostics_timeout_s": 30.0,
+  "llm_model": "Qwen/Qwen3-8B",
+  "llm_provider": "local",
+  "llm_temperature": 0.5,
+  "survey_model": null,
+  "survey_provider": null,
+  "thinking": false,
+  "debias": true,
+  "communication_mode": "package",
+  "package_policies": [
+    "ClimatePolicyID(1)",
+    "ClimatePolicyID(2)",
+    "ClimatePolicyID(3)",
+    "ClimatePolicyID(4)",
+    "ClimatePolicyID(5)",
+    "ClimatePolicyID(6)"
+  ],
+  "political_message_source": "offline",
+  "political_message_set": "v1",
+  "day0_anchor": "ground_truth_with_rationale",
+  "reach_a": 1.0,
+  "reach_b": 1.0,
+  "audience_cap": null,
+  "political_exposure_mode": "rule_affinity_rank",
+  "political_exposure_targets": null,
+  "affinity_weights": null,
+  "random_seed": 42,
+  "output_dir": "data/output/experiments",
+  "local_base_url": "http://localhost:8000/v1",
+  "local_extra_body": null,
+  "local_timeout_s": null
+}
