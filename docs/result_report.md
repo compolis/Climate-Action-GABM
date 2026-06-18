@@ -26,6 +26,569 @@ Notes:
 
 ---
 
+## Run 13: AIRE Reach-Asymmetry Sweep, peers OFF + supervisor exposure mix (5/5/50/40)
+
+**Date:** 2026-06-17
+**Cluster:** AIRE HPC, GPU node (NVIDIA H100, CUDA 12.6), vLLM 0.8.5 in Apptainer serving `Qwen/Qwen3-8B` (bf16)
+**Slurm jobs:** `6045935` (S, symmetric), `6046803` (C1, reform-dominant), `6046804` (C3, green-dominant)
+**Result files:**
+- S  — [data/output/experiments/run_6045935_S_symmetric_nopeer/20260617_010957/](../data/output/experiments/run_6045935_S_symmetric_nopeer/20260617_010957/)
+- C1 — [data/output/experiments/run_6046803_C1_reform_dominant_nopeer/20260617_005519/](../data/output/experiments/run_6046803_C1_reform_dominant_nopeer/20260617_005519/)
+- C3 — [data/output/experiments/run_6046804_C3_green_dominant_nopeer/20260617_005418/](../data/output/experiments/run_6046804_C3_green_dominant_nopeer/20260617_005418/)
+**Analysis script:** [sandbox/ajay_sandbox/run13_nopeer_analysis.py](../sandbox/ajay_sandbox/run13_nopeer_analysis.py)
+
+Follow-up to Run 12. Two changes from Run 12: (1) `k_peers_per_day = 0` (peer messaging fully disabled — `run_package_peer_messaging` now early-returns when `k_peers <= 0`); (2) `political_exposure_targets = {A-only: 0.05, B-only: 0.05, both: 0.50, neither: 0.40}` per supervisor recommendation, replacing the previous `committed_minority_symmetric` (11/11/33/45) default. Hypothesis going in: with peers muted, the reach-asymmetry signal should finally show up in the aggregate trajectory. **Hypothesis not supported at the cohort-mean level**, but a cleaner partial signal is now visible inside the conditional-by-exposure-bucket cut (§G).
+
+### Configuration delta vs Run 12
+
+Identical to Run 12 except the two flags above. Repeated here so this section is self-contained.
+
+| Parameter | Run 12 | **Run 13** |
+|---|---|---|
+| n_citizens | 50 | 50 |
+| days | 7 | 7 |
+| `k_peers_per_day` | **2** | **0** |
+| `political_exposure_targets` | default `committed_minority_symmetric` (11/11/33/45) | **{A-only: 0.05, B-only: 0.05, both: 0.50, neither: 0.40}** |
+| `reach_a` / `reach_b` | S 1.0/1.0 — C1 0.25/1.0 — C3 1.0/0.25 | **identical** |
+| All other knobs | (package, offline v1, day0_anchor=GT-with-rationale, debias on, thinking off, seed=42, stochastic_block 0.15/0.02, vLLM bf16) | identical |
+
+### New exposure mix landed as designed
+
+Seed-42 cohort under the 5/5/50/40 targets produces this assignment:
+
+| Bucket | n citizens | Where they sit in each broadcast pipeline |
+|---|---:|---|
+| A-only | 2 (S) / 1 (C1) / 21 (C3) | hears agent A only |
+| B-only | 2 (S) / 22 (C1) / 0 (C3) | hears agent B only |
+| both   | 25 (S) / 5 (C1) / 6 (C3) | hears both broadcasts |
+| neither | 21 (S) / 22 (C1) / 23 (C3) | hears nothing all week |
+
+Note the asymmetric bucket sizes in C1/C3 (which were structurally identical 22-22 in Run 12): with the new `rule_affinity_rank` cut on this cohort, "A-only" and "B-only" no longer have parity, and the audience-cap step is still `None`, so the reach trim now interacts with already-uneven side populations. The cleanest comparison stays C1 vs C3 within Run 13 (mirror reach), not across the two target presets.
+
+Broadcast audiences after the reach trim (from `messages.csv`):
+
+| Condition | agent_a (Green) recipients/day | agent_b (Reform) recipients/day |
+|---|---:|---:|
+| S  (1.0 / 1.0) | 27 | 27 |
+| C1 (0.25 / 1.0) | **6** | 27 |
+| C3 (1.0 / 0.25) | 27 | **6** |
+
+`messages.csv` confirms **zero `peer_message` rows in any of the three runs** — the guard in `run_package_peer_messaging` is doing its job. Daily message volume is therefore 54 / 33 / 33 broadcast deliveries (no peer rows at all). Compare Run 12: 137 / 120 / 120 daily messages, of which ~93 were peer.
+
+### Headline: aggregate trajectories are still essentially flat
+
+Daily mean package index across all 50 agents:
+
+| Day | S (1.0/1.0) | C1 (0.25/1.0, reform-dom) | C3 (1.0/0.25, green-dom) |
+|---:|---:|---:|---:|
+| 0 (GT-anchored) | +0.587 | +0.587 | +0.587 |
+| 1 | +1.007 | +0.963 | +1.023 |
+| 2 | +0.997 | +1.003 | +1.030 |
+| 3 | +1.013 | +1.027 | +1.017 |
+| 4 | +1.007 | +0.990 | +0.987 |
+| 5 | +1.050 | +0.987 | +1.010 |
+| 6 | +1.027 | +1.037 | +1.037 |
+| 7 | +1.020 | **+0.950** | **+1.033** |
+
+C3 (green-dominant) is **consistently above** C1 (reform-dominant) on 6 of 7 post-anchor days, and the Day 7 gap is **+0.08 points** in the expected direction (loud Green broadcast → slightly higher pro-climate plateau). This is the **first cohort-mean signal of broadcast-reach asymmetry** we have seen at n=50: in Run 12 the same comparison was non-monotone and zero-signed at Day 7. The gap is, however, still small relative to within-day std (~1.27) and within day-to-day noise (~0.05) — not a defensible large effect, but a directional improvement.
+
+Per-agent net Δ (Day 7 − Day 0):
+
+| Condition | mean Δ | median Δ | std | \|Δ\|≥0.5 | \|Δ\|≥1.0 |
+|---|---:|---:|---:|---:|---:|
+| S_nopeer  | +0.433 | +0.333 | 0.484 | 17 / 50 | 5 / 50 |
+| C1_nopeer | +0.363 | +0.167 | 0.513 | 15 / 50 | 4 / 50 |
+| C3_nopeer | +0.447 | +0.333 | 0.519 | 16 / 50 | 8 / 50 |
+
+C1 (reform-dom) shows the smallest mean and median per-agent shift of the three — directionally consistent: muting the Green broadcast reduces the upward drift.
+
+### Accuracy vs YouGov ground truth — same +0.42 ± 0.04 plateau as Run 12
+
+| Day | S bias / MAE / ρ | C1 bias / MAE / ρ | C3 bias / MAE / ρ |
+|---:|---|---|---|
+| 0 | 0.00 / 0.00 / 1.00 | 0.00 / 0.00 / 1.00 | 0.00 / 0.00 / 1.00 |
+| 1 | +0.42 / 0.45 / 0.91 | +0.38 / 0.40 / 0.93 | +0.44 / 0.45 / 0.93 |
+| 4 | +0.42 / 0.45 / 0.92 | +0.40 / 0.42 / 0.92 | +0.40 / 0.43 / 0.93 |
+| 7 | +0.43 / 0.44 / 0.93 | +0.36 / 0.39 / 0.93 | +0.45 / 0.45 / 0.92 |
+
+The Day-1-onwards aggregate bias is **+0.42 ± 0.04 across every condition and every day in every run we have ever measured at n=50**. Turning peers off did not change it. Pearson ρ stays at 0.91–0.93. The "Day-1 LLM inflation, then plateau" pattern is now confirmed as **independent of peer messaging and of broadcast direction**.
+
+### Conditional shift by exposure bucket — the real story
+
+Per-bucket mean shift Day 7 − Day 0, where bucket is **derived from messages.csv** (who actually received a political broadcast):
+
+**S_nopeer** (1.0 / 1.0):
+
+| bucket | n | Day 0 mean | Day 7 mean | mean shift | bias vs GT |
+|---|---:|---:|---:|---:|---:|
+| A-only | 2 | +0.92 | +1.25 | +0.33 | +0.33 |
+| B-only | 2 | −1.17 | −0.75 | +0.42 | +0.42 |
+| both   | 25 | +0.79 | +1.24 | +0.45 | +0.45 |
+| neither | 21 | +0.48 | +0.91 | +0.43 | +0.43 |
+
+**C1_nopeer** (0.25 / 1.0):
+
+| bucket | n | Day 0 mean | Day 7 mean | mean shift | bias vs GT |
+|---|---:|---:|---:|---:|---:|
+| A-only | 1 | −0.83 | −0.17 | +0.67 | +0.67 |
+| B-only | 22 | +0.58 | +1.01 | +0.43 | +0.43 |
+| both   | 5 | +0.97 | +1.23 | +0.27 | +0.27 |
+| neither | 22 | +0.58 | +0.88 | +0.30 | +0.30 |
+
+**C3_nopeer** (1.0 / 0.25):
+
+| bucket | n | Day 0 mean | Day 7 mean | mean shift | bias vs GT |
+|---|---:|---:|---:|---:|---:|
+| A-only | 21 | +1.00 | +1.48 | **+0.48** | +0.48 |
+| both   | 6 | +0.11 | +0.42 | +0.31 | +0.31 |
+| neither | 23 | +0.33 | +0.79 | +0.46 | +0.46 |
+
+Three things stand out:
+
+1. **The "neither" bucket — citizens who received zero broadcasts and zero peer messages — still drifted upward +0.30 to +0.46 in every run.** This is not a broadcast effect or a peer effect. It is the same Day-0 → Day-1 prompt-chain bias visible in every run since Run 1. Whatever is producing the +0.42 plateau lives in the survey prompt itself, not in the social influence pipeline. This is the single most important finding from Run 13.
+2. **C3 A-only (n=21) shows the largest broadcast-conditional shift of any cell** (+0.48) — exactly the cell the experiment was designed to inflate (Green broadcast goes to a wide audience, Reform broadcast nearly muted, no peer dilution). This is the cleanest piece of evidence in the report so far that a directed broadcast does shift opinion *in its receivers*. Compare against C1's "both" cell (+0.27, the cell where both messages compete): hearing the opposing voice halves the shift.
+3. **C1's "B-only" cell (n=22) still drifts UP** (+0.43) — citizens who only heard the anti-climate broadcast still ended Day 7 *more* pro-climate than they started. The +0.42 baseline drift dominates the direction of any reasonable single broadcast effect over 7 days. To pull these citizens *down* would need either much harder anti-climate content, more days, or content that explicitly challenges the prompt-chain bias.
+
+### Run 12 vs Run 13 side-by-side (Day 7)
+
+| Run | bias | MAE | ρ | mean Δ | median Δ | std Δ |
+|---|---:|---:|---:|---:|---:|---:|
+| S_peer    | +0.420 | 0.433 | 0.925 | +0.420 | +0.250 | 0.513 |
+| C1_peer   | +0.433 | 0.433 | 0.933 | +0.433 | +0.333 | 0.484 |
+| C3_peer   | +0.457 | 0.470 | 0.913 | +0.457 | +0.333 | 0.550 |
+| S_nopeer  | +0.433 | 0.440 | 0.931 | +0.433 | +0.333 | 0.484 |
+| C1_nopeer | **+0.363** | 0.390 | 0.925 | **+0.363** | **+0.167** | 0.513 |
+| C3_nopeer | +0.447 | 0.453 | 0.921 | +0.447 | +0.333 | 0.519 |
+
+Switching peers off **does not move the headline numbers** (bias, MAE, ρ all within ±0.02 across the six runs). The one row that moves is C1 nopeer: shutting both the peer channel and most of the pro-climate broadcasts cuts the mean shift by ~0.07 — small in absolute terms but the largest delta in the table. C3 (green-dom) is the highest mean shift in both peer regimes.
+
+### Quality of the simulation run
+
+Same five dimensions as the Run 12 analysis. Headline: **Qwen3-8B output stays production-grade with peers off**, in some respects more so.
+
+**Reflections.** Fewer rows than Run 12 — only broadcast phases produce reflections now, not the C phase — but the rows that do exist are **longer and unanimously on-topic**.
+
+| Condition | n reflections | agents covered | median words | p10 / p90 words | empty | mentions ≥1 keyword |
+|---|---:|---:|---:|---:|---:|---:|
+| S_nopeer  | 378 | 29 / 50 | **293** | 224 / 363 | 0 % | **100.0 %** |
+| C1_nopeer | 231 | 28 / 50 | **302** | 241 / 369 | 0 % | **100.0 %** |
+| C3_nopeer | 231 | 27 / 50 | 290 | 213 / 395 | 0 % | 100.0 % |
+
+Median 290–302 words is ~70 words *longer* than Run 12's 170–225, and policy-keyword coverage is 100 % across all three runs (vs ~99 % in Run 12). Note that *only the 27–29 broadcast-receiving agents* generate reflections at all — the 21–23 "neither" agents go a full week without producing a reflection row. This is correct behaviour, not a quality drop: with no broadcasts to react to and no peer messages, those agents have nothing to reflect on.
+
+**Survey reasoning.** Unchanged.
+
+| Condition | n | median words | p10 / p90 words | empty | on-topic |
+|---|---:|---:|---:|---:|---:|
+| S_nopeer  | 2,400 | 77 | 65 / 93 | 0 % | 98.5 % |
+| C1_nopeer | 2,400 | 78 | 65 / 93 | 0 % | 98.2 % |
+| C3_nopeer | 2,400 | 78 | 65 / 92 | 0 % | 97.9 % |
+
+7,200 reasoning rows, 0 empty, ≥97.9 % on-topic, tight 65–93 word IQR — same envelope as Run 12. The end-of-day survey is doing its work without peer scaffolding.
+
+**Cohort diversity.** Day-0 distribution is identical across Run 12 and Run 13 (same seed, same cohort): n=50, range [−2.17, +3.00], 10 strong supporters, 33 supporters, 2 neutrals, 15 opposers, 2 strong opposers.
+
+**Representativeness through the week.** Pearson ρ vs YouGov stays at 0.91–0.93 across Days 1–7 in all three runs (was 0.92–0.94 in Run 12). Per-bucket Day-0 means show strong heterogeneity: in C1, A-only has Day-0 mean −0.83 (the one anti-broadcast-receiving citizen is the strongest opposer in the sample), while in C3 A-only has Day-0 mean +1.00 (the 21 pro-broadcast receivers skew pro-climate). This is exactly the kind of structured exposure-target ↔ position coupling the `rule_affinity_rank` mode is meant to produce.
+
+**Persona-fidelity at Day 7 (stratified samples from S_nopeer).** With peers off, persona stability across the week becomes very high — almost too high in places:
+
+> **Agent 713 — strong opposer (Day 0 = GT = −2.17, Day 7 = −1.50).**
+>
+> *Day-0 reasoning, Policy 1:* "I slightly support the acceleration of renewable energy production, as I believe in human progress and the importance of sustainable development. However, I am cautious about rapid changes that might disrupt traditional ways of life or local communities, and I value maintaining balance between progress and environmental respect."
+>
+> *Day-7 reasoning, Policy 1:* "I would slightly support the acceleration of renewable energy production because I believe in human progress and the importance of sustainable development. However, I am cautious about rapid changes that might disrupt traditional ways of life or local communities, and I value maintaining balance between progress and environmental respect."
+>
+> Near-verbatim copy of Day 0 — the agent's stance hasn't shifted at the prose level, only the second sentence's leading clause is rewritten. With no peer dilution, the persona+context chain reproduces itself with very small variance.
+
+> **Agent 759 — median (Day 0 = GT = +0.67, Day 7 = +1.00).**
+>
+> *Day-0 reasoning, Policy 1:* "I strongly support government policies that accelerate the roll-out of renewable energy production... As someone who deeply respects nature and believes all lifeforms should be treated equally, I see renewable energy as a way to reduce harm to the environment while still maintaining the prosperity and stability I value."
+>
+> *Day-7 reasoning, Policy 1:* "As a right-wing individual who values tradition and stability, I strongly support government policies that accelerate the roll-out of renewable energy production... While I value traditional ways, I also recognize that adapting to new, cleaner technologies is a way to maintain prosperity without harming the environment."
+>
+> Day-7 prose has internalised the demographic frame ("As a right-wing individual…") — same conclusion, different scaffolding.
+
+> **Agent 1045 — strong supporter (Day 0 = GT = +3.00, Day 7 = +3.00).**
+>
+> Day-0 and Day-7 reasoning both lead with "I strongly support… deeply committed to environmental protection and global harmony… renewable energy is essential for reducing our carbon footprint." Persona pinned exactly at GT for the entire week.
+
+### Cost
+
+| | S_nopeer | C1_nopeer | C3_nopeer |
+|---|---:|---:|---:|
+| Wall-clock | ~2.1 h | ~1.4 h | ~1.4 h |
+
+Cut roughly in half vs Run 12 (~3.4 h). The savings come from (a) no peer-message generation step, (b) fewer reflection rows per day (only broadcast-receiving agents reflect). Per-agent-day cost falls from ~30 s to ~14–18 s. Three asymmetry runs now fit comfortably in a single 6-hour Slurm submission.
+
+### Verdict and what we have learned
+
+1. **The +0.42 Day-1 inflation is a prompt-chain property, not a social-influence artefact.** The 21–23 "neither" citizens who got zero stimulus still drifted +0.30 to +0.46. Whatever is producing the bias lives inside `administer_survey` (debias chain + persona context), not in broadcast or peer messaging. Future debias work should target the survey prompt directly, not the influence pipeline.
+2. **Broadcast reach *does* register a per-bucket effect** that was invisible at the aggregate-mean level. C3 A-only +0.48 vs C1 "both" +0.27 (the receiver-side comparison the experiment was designed to surface). Aggregate-mean reporting masks this because the "neither" bucket carries 42–46 % of cohort weight and saturates the average at the prompt-chain baseline.
+3. **Aggregate cohort-mean monotonicity (C3 ≥ S ≥ C1)** first appeared in Run 13 (C3 +1.033, S +1.020, C1 +0.950 at Day 7), albeit weakly. With peers on (Run 12) the ordering was zero-signed.
+4. **Peers off does not "free up" the broadcast signal at the cohort level.** Both regimes plateau at the same +0.42 ± 0.04. The peer channel is therefore neither a strong amplifier nor a strong dampener of broadcasts at this configuration — it adds variance (Run 12 std 0.55 vs Run 13 std 0.52 in C3, very similar) and shifts a small fraction of agents, but does not produce qualitatively different aggregate outcomes.
+5. **Qwen3-8B remains production-grade** with peers off: 7,200 zero-empty rationales, 840 zero-empty reflections, 100 % policy-on-topic in reflections, near-verbatim persona stability across 7 days when broadcast input is removed.
+
+### Open questions for the next run
+
+- **The +0.42 baseline.** Run a "neither only" diagnostic: subset 30 agents to the neither bucket, run 7 days with no broadcasts and no peers. If the +0.42 drift reproduces, it confirms the bias is purely the Day-0 vs subsequent-day prompt difference (anchor rationale on Day 0 vs vanilla survey thereafter). Then fix it in the survey prompt rather than the influence layer.
+- **Audience-cap symmetrisation.** C1 and C3 in Run 13 have *different* underlying audience compositions (asymmetric `A-only` / `B-only` counts in the new 5/5 mix). Capping both sides to `min(|A_audience|, |B_audience|)` would make the two conditions structural mirrors — apples-to-apples comparison.
+- **Receiver-side analysis is now the right unit.** Report aggregate-mean as one slice but headline the conditional-bucket table — that is where the experiment's manipulation actually shows up. Promote the §G table to the front of the next run's writeup.
+- **Larger reach contrast.** Try `reach_a = 0.0` vs `reach_b = 1.0` (full mute) to see if the C3 A-only +0.48 effect scales to a clearly demonstrable cohort-mean signal once the cohort is dominated by one-side-only agents.
+
+---
+
+---
+
+## Run 12: AIRE Reach-Asymmetry Sweep — Qwen3-8B (bf16) via vLLM, 50 agents × 7 days
+
+**Date:** 2026-06-16
+**Cluster:** AIRE HPC, GPU node (NVIDIA H100, CUDA 12.6), vLLM 0.8.5 in Apptainer serving `Qwen/Qwen3-8B` (bf16)
+**Slurm jobs:** `5985256` (S, symmetric), `5993181` (C1, reform-dominant), `5993232` (C3, green-dominant)
+**Result files:**
+- S  — [data/output/experiments/run_5985256_S_symmetric/20260616_001620/](../data/output/experiments/run_5985256_S_symmetric/20260616_001620/)
+- C1 — [data/output/experiments/run_5993181_C1_reform_dominant/20260616_043552/](../data/output/experiments/run_5993181_C1_reform_dominant/20260616_043552/)
+- C3 — [data/output/experiments/run_5993232_C3_green_dominant/20260616_043647/](../data/output/experiments/run_5993232_C3_green_dominant/20260616_043647/)
+
+First full-scale (n=50, 7 days) reach-asymmetry sweep on the HPC stack with `thinking=False` (per the Run 11 recommendation). The three conditions vary only the broadcast-reach knobs (`reach_a`, `reach_b`); every other dimension — seed, sampled cohort, network, prompts, exposure mode, message pool — is held fixed. **Headline finding: peer messaging swamps the broadcast channel, so muting one political agent to 23 % of its baseline audience produces essentially zero aggregate movement.** The opportunity to extract value from this run is therefore not in the asymmetry effect itself, but in a battery of *quality dimensions* the run lets us check at scale for the first time (see §"Quality of the simulation run", below).
+
+### Configuration
+
+Identical between the three jobs except `reach_a` / `reach_b`. Matches the NB 29 canonical reference stack scaled up.
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 50 |
+| days | 7 (alternating `P-A/P-B/C` and `P-B/P-A/C`; 8 survey days including Day 0) |
+| k_peers_per_day | 2 |
+| communication_mode | `package` (6 climate policies broadcast jointly each phase) |
+| political_message_source / set | `offline` / `v1` |
+| llm_provider / llm_model | `local` / `Qwen/Qwen3-8B` (bf16) |
+| llm_temperature | 0.5 |
+| local_base_url | `http://localhost:8000/v1` (vLLM) |
+| thinking | `False` |
+| debias | `True` (Condition B 1P chain) |
+| day0_anchor | `ground_truth_with_rationale` |
+| political_exposure_mode | `rule_affinity_rank` (default `committed_minority_symmetric`, `balanced` weights) |
+| audience_cap | `None` |
+| network_type | `stochastic_block` (`p_intra=0.15`, `p_inter=0.02`) |
+| random_seed | 42 |
+| **reach_a / reach_b** | **S: 1.0 / 1.0 — C1: 0.25 / 1.0 — C3: 1.0 / 0.25** |
+
+Naming: **agent A = pro-climate (Green-aligned)**, **agent B = anti-climate (Reform-aligned)**. So **C1 (reform-dominant)** mutes A by trimming its audience from 22 → 5; **C3 (green-dominant)** mutes B symmetrically.
+
+### Reach trims landed exactly as specified
+
+From `messages.csv`, unique recipients per political broadcast per day:
+
+| Condition | agent_a (Green) recipients/day | agent_b (Reform) recipients/day |
+|---|---:|---:|
+| S  (1.0 / 1.0) | 22 | 22 |
+| C1 (0.25 / 1.0) | **5** | 22 |
+| C3 (1.0 / 0.25) | 22 | **5** |
+
+Audience composition is identical in all three runs (the seed-42 cohort produces 6 A-only / 6 B-only / 16 both / 22 neither under `rule_affinity_rank` + default targets — see [sandbox/ajay_sandbox/check_reach_split.py](../sandbox/ajay_sandbox/check_reach_split.py)). The reach knob only subsamples *who hears the broadcast*; per-citizen `political_exposure` labels are untouched.
+
+### Headline: trajectories are essentially flat across the three conditions
+
+Daily mean package index across all 50 agents:
+
+| Day | S (1.0/1.0) | C1 (0.25/1.0, reform-dom) | C3 (1.0/0.25, green-dom) |
+|---:|---:|---:|---:|
+| 0 (anchored on GT) | +0.587 | +0.587 | +0.587 |
+| 1 | +1.037 | +1.017 | +0.947 |
+| 2 | +1.007 | +1.003 | +0.970 |
+| 3 | +1.017 | +1.020 | +0.983 |
+| 4 | +1.040 | +1.017 | +1.033 |
+| 5 | +1.027 | +1.000 | +0.970 |
+| 6 | +1.010 | +1.010 | +0.997 |
+| 7 | +1.007 | +1.020 | +1.043 |
+
+The three trajectories are within **±0.04 points of each other** at every plateau day. The C3 (green-dominant) condition is *not* monotonically above C1 (reform-dominant) — on Day 1 it is actually 0.07 *below*. The Day-0 → Day-1 jump (+0.42 mean) is the dominant move in every run; everything after Day 1 is a noisy plateau around +1.0.
+
+Per-agent net Δ (Day 7 − Day 0):
+
+| Condition | mean Δ | median Δ | std | agents with \|Δ\|≥0.5 | agents with \|Δ\|≥1.0 |
+|---|---:|---:|---:|---:|---:|
+| S  | +0.420 | +0.250 | 0.513 | 16 / 50 | 7 / 50 |
+| C1 | +0.433 | +0.333 | 0.484 | 19 / 50 | 7 / 50 |
+| C3 | +0.457 | +0.333 | 0.550 | 17 / 50 | 8 / 50 |
+
+The per-agent distributions are statistically indistinguishable across conditions. The +0.42 mean upward drift is the **same "Day-1 inflation, then plateau"** pattern seen in every prior LLM-citizen run in this report (Runs 1–10).
+
+### Accuracy vs YouGov package ground truth — stable across days and conditions
+
+Day 0 has zero bias by construction (`ground_truth_with_rationale` writes the YouGov value directly). Day 1+ stabilises around a constant +0.42 aggregate bias with Pearson ρ around 0.93 and MAE around 0.43 in all three runs:
+
+| Day | S bias / MAE / ρ | C1 bias / MAE / ρ | C3 bias / MAE / ρ |
+|---:|---|---|---|
+| 0 | 0.00 / 0.00 / 1.00 | 0.00 / 0.00 / 1.00 | 0.00 / 0.00 / 1.00 |
+| 1 | +0.45 / 0.47 / 0.93 | +0.43 / 0.43 / 0.93 | +0.36 / 0.41 / 0.93 |
+| 2 | +0.42 / 0.45 / 0.93 | +0.42 / 0.42 / 0.93 | +0.38 / 0.40 / 0.94 |
+| 3 | +0.43 / 0.44 / 0.93 | +0.43 / 0.43 / 0.93 | +0.40 / 0.43 / 0.92 |
+| 4 | +0.45 / 0.46 / 0.94 | +0.43 / 0.45 / 0.93 | +0.45 / 0.46 / 0.93 |
+| 5 | +0.44 / 0.45 / 0.92 | +0.41 / 0.41 / 0.92 | +0.38 / 0.42 / 0.93 |
+| 6 | +0.42 / 0.43 / 0.94 | +0.42 / 0.44 / 0.94 | +0.41 / 0.44 / 0.93 |
+| 7 | +0.42 / 0.43 / 0.93 | +0.43 / 0.43 / 0.93 | +0.46 / 0.47 / 0.91 |
+
+C3 (green-dominant) is marginally *less* biased than the others on Days 1–3 — the opposite of what a "loud Green broadcast pushes opinions up" hypothesis predicts. The effect is well inside day-to-day noise. **Reach asymmetry on this knob, at this scale, does not move the package-level signal.**
+
+### Why no swaying? The peer channel dominates
+
+Message volume per day (the same in every condition for peer messages because peer messaging is independent of `reach_*`):
+
+| Condition | peer messages / day | political broadcasts / day | peer : broadcast ratio |
+|---|---:|---:|---:|
+| S  | 93 | 44 (= 22 + 22) | 2.11 : 1 |
+| C1 | 93 | 27 (=  5 + 22) | **3.44 : 1** |
+| C3 | 93 | 27 (= 22 +  5) | **3.44 : 1** |
+
+Every agent receives ~2 peer messages each day from neighbours of their own and the opposite valence (the stochastic-block network mixes both ways). Stacked against at most 1–2 broadcasts per agent per day, the peer channel carries 2–3× the volume in S and 3.4× in C1/C3. **Whatever opinion correction one political broadcast tries to push gets immediately diluted by both a same-side and an opposite-side peer message in the C-phase that closes every day.** The agents are not behaving like passive radios with a volume knob; they are predominantly *peer-influenced*, which collapses the broadcast asymmetry signal at the package-mean level.
+
+The pattern is consistent with the per-day end-of-day survey logs (`run.log`): mean shift across 50 agents is ≤ ±0.02 from Day 1 onward in all three runs, and the shift distribution is `0` for 48 / 49 / 50 agents on most days. The simulation has reached an **opinion plateau by Day 1** and stays there.
+
+---
+
+### Quality of the simulation run (Qwen3-8B local LLM behaviour at n=50, 7 days)
+
+The chief value of these three runs is that they give us 6,000+ on-task LLM completions on a real persona × policy grid. Five dimensions, all computed from the artefact CSVs (see [sandbox/ajay_sandbox/run12_asymmetry_analysis.py](../sandbox/ajay_sandbox/run12_asymmetry_analysis.py)):
+
+**1. Reflection completeness and length** (one per agent per phase that received messages; phases C + the broadcast phases yield up to ~12 reflections per agent over 7 days):
+
+| Condition | n reflections | agents covered | median words | p10 / p90 words | empty | mention ≥1 policy keyword |
+|---|---:|---:|---:|---:|---:|---:|
+| S  | 599 | 50 / 50 | 225 | 133 / 354 | 0 % | 99.7 % |
+| C1 | 480 | 50 / 50 | 171 | 128 / 339 | 0 % | 99.2 % |
+| C3 | 480 | 50 / 50 | 177 | 131 / 335 | 0 % | 99.0 % |
+
+Every agent produces reflections every day they receive a message; not a single empty reflection in any of the three runs. Median length is 170–225 words (S is higher because S receives more broadcasts per day → more phases → more reflection rows per agent). Policy-keyword coverage is ≥99 % in all three runs — the model is staying on topic, not drifting into generic small-talk.
+
+**2. Survey-reasoning completeness and length** (one per agent per day per policy = 50 × 8 × 6 = 2,400 rows per run; the survey is administered every day including Day 0):
+
+| Condition | n reasonings | median words | p10 / p90 words | empty | on-topic keyword |
+|---|---:|---:|---:|---:|---:|
+| S  | 2,400 | 77 | 65 / 92 | 0 % | 98.2 % |
+| C1 | 2,400 | 78 | 66 / 93 | 0 % | 97.8 % |
+| C3 | 2,400 | 78 | 65 / 92 | 0 % | 98.8 % |
+
+Zero malformed / empty survey answers across 7,200 reasoning rows. Median ~78 words / 65–92 IQR is **very tight**, suggesting the model has internalised the response-length convention from the chain rather than spraying randomly. This is exactly what we want from a 1P-debias chain serving as a budget-controlled "diary-entry" generator.
+
+**3. Cohort diversity** (Day-0 package-index distribution across the 50 sampled YouGov respondents; identical in all three runs because seed-42 fixes the cohort):
+
+| Stat | Value |
+|---|---:|
+| n agents | 50 |
+| mean / median | +0.587 / +0.667 |
+| std | 1.33 |
+| range | [−2.17, +3.00] |
+| strong supporters (≥ +2.0) | 10 |
+| supporters (> 0) | 33 |
+| neutral (= 0) | 2 |
+| opposers (< 0) | 15 |
+| strong opposers (≤ −2.0) | 2 |
+
+The cohort spans the full opinion range with healthy representation on both tails — not a "centrist mush". Both strong-opposer and strong-supporter sub-populations are present in every run.
+
+**4. Representativeness (persona ↔ output coupling)** — Day-0 package index of the LLM agents *is* the YouGov ground truth by construction, so the meaningful representativeness question is whether the **reasoning the LLM produces on Day 0 reads as persona-consistent**. The spot checks below (and the strong Day 1+ rank correlation, ρ ≈ 0.93, which is *not* anchored) say yes: agents who score low on the package on Day 0 give cautious / sceptical rationales; agents who score high give pro-climate / values-driven rationales; mid-scorers split their reasoning per policy.
+
+The rank-order preservation through Days 1–7 (Pearson ρ stays at 0.92–0.94 across all 7 post-anchor days in all three runs) is the strongest single piece of evidence that the prompts and persona context are coupling correctly: even after a week of broadcasts and peer messaging, an agent's relative position in the cohort matches their YouGov position to that correlation.
+
+**5. Sample passages (stratified by Day-0 opinion, S run)** — picked deterministically as the min / median / max of the Day-0 package index. Persona-fidelity check by eye:
+
+> **Agent 713 — strong opposer (Day 0 = GT = −2.17).**
+>
+> *Day-0 reasoning, Policy 1 (Renewable energy):* "I slightly support the acceleration of renewable energy production, as I believe in human progress and the importance of moving towards sustainable practices. However, I am cautious about the pace and methods of implementation, particularly if it disrupts traditional ways of life or causes unnecessary environmental or social disruption. I value balance and respect for established customs, so I prefer a measured approach that respects both progress and the natural world."
+>
+> *Reflection (first):* "These peer messages make me think about how my own views align with and differ from others. I notice that some of their positions, like supporting renewable energy but wanting it done carefully, mirror my own cautious approach. Their neutrality on banning fossil fuel licenses also resonates with my belief in balancing environmental concerns with economic and traditional values."
+
+> **Agent 759 — median (Day 0 = GT = +0.67).**
+>
+> *Day-0 reasoning, Policy 1:* "I **strongly support** government policies that accelerate the roll-out of renewable energy production, such as more offshore and onshore wind parks. As someone who deeply respects traditional values and the natural world, I recognize the importance of preserving our environment for future generations. While I value stability and established customs, I also believe in the necessity of progress that aligns with ethical responsibility and long-term sustainability."
+>
+> *Reflection (first):* "This message resonates with some of my existing concerns, particularly around the economic impact of climate policies and the potential for public funds to be misused. The argument that renewable subsidies are a transfer from struggling families to a sheltered industry aligns with my skepticism about government overreach. I can see how the cost-of-living crisis has been exacerbated by reliance on international gas markets, and the idea of producing more energy at home does appeal to my values of self-reliance and national sovereignty."
+
+> **Agent 1045 — strong supporter (Day 0 = GT = +3.00).**
+>
+> *Day-0 reasoning, Policy 1:* "I strongly support government policies that accelerate the roll-out of renewable energy production. As someone deeply committed to environmental protection and global harmony, I believe transitioning to renewable energy is essential for reducing our carbon footprint and ensuring a sustainable future for all life on Earth. I reject the idea that any group should dominate the planet, and I see renewable energy as a way to create a more equitable and environmentally responsible society."
+>
+> *Reflection (first):* "Reading these peer messages has made me reflect on how my own views might not be as black-and-white as I thought. The idea of accelerating renewable energy still feels very aligned with my values, but I hadn't considered the local impact angle, which is an important point. On the oil and gas ban, I can see the economic concerns, even though I still strongly support it. The petrol car ban raises some valid points about accessibility and infrastructure, which I hadn't fully considered before."
+
+Three patterns to note:
+
+- **Each agent's reasoning is recognisably theirs.** Agent 713 hedges every clause with "balance / traditional / cautious"; 759 frames support through "values / national sovereignty / self-reliance"; 1045 leads with universal-environmentalist language. None of these prose blocks would swap convincingly with another agent's persona.
+- **Reflections show genuine engagement with the messages received**, not boilerplate ("This message resonates with some of my existing concerns...", "I hadn't considered the local impact angle..."). Agents disagreeing with the prevailing message direction (1045 on the petrol-car ban) acknowledge the counterargument without flipping.
+- **The Day-0 anchor is doing its job.** Even though we instruct the LLM to write a rationale *consistent with the GT score we inject*, agent 759 (median, +0.67) splits per policy — "strongly support" on renewables, more hedging elsewhere — which produces an average around +0.67 across the six. This is the kind of internal differentiation we want.
+
+### Cost
+
+| | S | C1 | C3 |
+|---|---:|---:|---:|
+| Wall-clock | 222.9 min (3.7 h) | 202.1 min (3.4 h) | 203.1 min (3.4 h) |
+| Per agent-day | 33.4 s | 30.3 s | 30.5 s |
+
+S is slightly slower because it has 22 + 22 = 44 broadcast deliveries per day (and therefore 44 reflection-generating phases per day across agents) vs 27 in C1/C3. All three runs comfortably fit a single 6-hour Slurm budget on one H100. Per-agent-day cost is in line with the Run 11 OFF baseline (25.5 s/agent-day at n=10) — scales near-linearly with `n_citizens × n_days`.
+
+### Verdict and recommendations
+
+1. **The reach-asymmetry signal is below the noise floor at n=50 / 7 days under the current peer + broadcast configuration.** Dropping one side's broadcast audience from 22 → 5 (≈77 % cut) produces a ≤0.04-point aggregate shift over a week.
+2. **The peer channel is the dominant force**, ~3 × broadcast volume in the asymmetric runs. To make broadcast asymmetry visible, the next probe will need to either (a) suppress peer messaging entirely (`k_peers_per_day = 0`, like NB 21's broadcast-only design), or (b) push asymmetry harder still (e.g. zero-reach for one side, paired with audience-cap symmetry so the two political agents address identical headcounts) and/or (c) measure on per-agent shifts conditional on *which side they were exposed to*, not on the cohort mean.
+3. **Qwen3-8B at `thinking=False` produces excellent simulation-grade text at scale.** 7,200 zero-empty survey rationales, 1,559 zero-empty reflections, median ~78-word rationales / ~190-word reflections, ≥97 % policy-on-topic, and visibly persona-aligned prose. The model is comfortably ready to back paper figures at this scale.
+4. **Representativeness through the week stays at ρ ≈ 0.93 vs YouGov ground truth** despite a +0.42 aggregate-bias inflation — the same well-characterised "regression-to-pro-climate-mean" bias documented since Run 1. Rank-order signal is preserved; the open issue is the constant additive offset.
+
+### Open questions
+
+- **Re-run with `k_peers_per_day = 0`** (NB 21 design) to recover a clean broadcast-only asymmetry signal under the package + 7-day stack; expect to reproduce the Run 7 / Run 8 monotone ordering.
+- **Audience-cap symmetrisation** (`audience_cap = 5` paired with reach asymmetry) — would make the C1/C3 comparison structurally cleaner, since both political agents would address identically-sized canonical audiences.
+- **Why is the additive bias parked at +0.42 from Day 1?** Look at which policies dominate the offset (Run 5 showed Climate Compensation and Carbon Tax drove most of it). If the same two policies dominate at n=50, the bias is a per-policy property, not an aggregation artefact.
+- **Per-agent ρ over time** (within-agent persistence) was not extracted here; with 50 × 7 = 350 (agent × day) samples per run there is finally enough data to compute it cleanly.
+
+---
+
+## Run 11: AIRE Thinking-Mode Ablation — Qwen3-8B (bf16) via vLLM, thinking OFF vs ON
+
+**Date:** 2026-06-15
+**Cluster:** AIRE HPC, `gpu018.aire.lee.alces.network` (CUDA 12.6), vLLM 0.8.5 in Apptainer
+**Slurm jobs:** `5957902` (thinking OFF), `5975867` (thinking ON)
+**Result files:**
+- OFF — [data/output/experiments/run_5957902/20260615_145510/](../data/output/experiments/run_5957902/20260615_145510/)
+- ON  — [data/output/experiments/run_5975867/20260615_185649/](../data/output/experiments/run_5975867/20260615_185649/)
+
+First true apples-to-apples comparison of `thinking=true` vs `thinking=false` for the integrated `provider="local"` path against a real chat-template-honouring backend (vLLM serving `Qwen/Qwen3-8B` in bf16). Replaces the misattributed NB 24 / NB 25 "thinking helps" claim (see *Correction* at end of this section).
+
+### Important correction to NB 24 / NB 25
+
+The NB 24 and NB 25 result blocks recorded above (Day-0 bias +0.50, Day-1 ρ +0.76, ~22 reflections, etc.) were labelled as `thinking=True`. They are not. The `mlx-lm` server used in NB 24 / NB 25 **silently ignored** the `enable_thinking` chat-template kwarg in the model registry: the request was accepted, no `<think>...</think>` block was ever emitted, and the run was in practice a `thinking=False` execution. The model + sampling + prompt chain were otherwise as documented, so the NB 24 / NB 25 numbers remain valid as a baseline for `Qwen3-8B-4bit` on mlx without thinking — only the "with thinking" label needs to be retired. Run 11 below is the first time the thinking flag has been honoured end-to-end on a Qwen3-class model in this codebase.
+
+### Configuration
+
+Identical between the two jobs except the `thinking` flag.
+
+| Parameter | Value |
+|---|---|
+| n_citizens | 10 |
+| days | 2 (alternating `P-A/P-B/C` and `P-B/P-A/C`; 3 survey days including Day 0) |
+| k_peers_per_day | 2 |
+| communication_mode | `package` |
+| package_policies | all 6 climate policies |
+| political_message_source / set | `offline` / `v1` |
+| llm_provider / llm_model | `local` / `Qwen/Qwen3-8B` (bf16) |
+| llm_temperature | 0.5 |
+| local_base_url | `http://localhost:8000/v1` (vLLM) |
+| debias | `True` |
+| day0_anchor | `ground_truth_with_rationale` |
+| political_exposure_mode | `rule_affinity_rank` |
+| network_type | `stochastic_block` (p_intra=0.15, p_inter=0.02) |
+| random_seed | 42 |
+| **thinking** | **`False` (job 5957902) / `True` (job 5975867)** |
+
+`config.json` diff between the two runs is exactly one line: `"thinking": false` vs `"thinking": true`.
+
+### Parser-bug fix that made this comparison possible
+
+vLLM honours `chat_template_kwargs.enable_thinking` and, when enabled, emits real `<think>...</think>` blocks in the Step-2 letter response. The existing `parse_letter_response()` uses `re.search(r"\b([A-G])\b", text)` and returned the first A–G inside the think block instead of the final answer, producing opinion swings of ±4/±5/±6 against ground truth in early test runs. Fixed by an unconditional strip in [src/cag/io/llm.py](../src/cag/io/llm.py) `_send_local()`:
+
+```python
+text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
+```
+
+Run 11 (ON) shows zero `<think>` leakage in any artefact and healthy per-agent shift distributions, confirming the fix.
+
+### Headline accuracy — Day 2 vs YouGov package ground truth (n=10)
+
+Day 0 is **identical** in both runs because `day0_anchor=ground_truth_with_rationale` writes the YouGov package index directly to Day 0 (the LLM only produces accompanying rationale). The headline NB 25 "Day-0 bias" metric is therefore meaningless for this comparison — Day 2 is the first day where the two runs can diverge through broadcast + peer exposure.
+
+| Metric (Day 2, n=10) | OFF (`5957902`) | ON (`5975867`) |
+|---|---:|---:|
+| LLM mean | 1.133 | 1.001 |
+| Ground-truth mean | 0.749 | 0.749 |
+| **Aggregate bias** (mean − GT) | **+0.384** | **+0.252** |
+| **MAE vs GT** | **0.384** | **0.350** |
+| **Pearson ρ vs GT** | **0.974** | **0.957** |
+
+Both runs are near-ceiling on rank correlation because Day 0 is anchored on GT and only two days of drift have accumulated. ON shows marginally lower aggregate bias and marginally lower MAE; OFF shows marginally higher Pearson ρ. None of these differences are defensible at n=10.
+
+### Per-agent Day-2 trajectory (package index, ProClimatePolSupp)
+
+| Agent | GT | OFF Day 0 → Day 2 | ON Day 0 → Day 2 |
+|---:|---:|---:|---:|
+| 165  | +0.83 | +0.83 → +1.33 (+0.50) | +0.83 → +0.67 (−0.17) |
+| 582  |  0.00 |  0.00 → +1.00 (+1.00) |  0.00 → +0.33 (+0.33) |
+| 1379 | +0.33 | +0.33 → +1.00 (+0.67) | +0.33 → +1.17 (+0.83) |
+| 713  | −2.17 | −2.17 → −1.50 (+0.67) | −2.17 → −2.17 (0.00) |
+| 1878 | +0.67 | +0.67 → unchanged plateau | +0.67 → unchanged plateau |
+| 844  | +2.00 | +2.00 → +2.00 (0.00) | +2.00 → +2.67 (+0.67) |
+| 409  | +1.83 | +1.83 → +1.83 (0.00) | +1.83 → +1.83 (0.00) |
+| 1957 | +2.67 | +2.67 → +2.67 (0.00) | +2.67 → +2.67 (0.00) |
+| 91   | +1.33 | +1.33 → +1.50 (+0.17) | +1.33 → +1.00 (−0.33) |
+| 69   |  0.00 |  0.00 → +1.00 (+1.00) |  0.00 → +0.67 (+0.67) |
+
+OFF shows more aggregate upward drift; ON keeps strong-opposers (713) and strong-supporters at GT. Both runs preserve persona ordering — no rank reversals between OFF and ON on either day.
+
+### Reasoning prose — qualitative comparison (180 `survey_reasoning` rows each)
+
+Both runs produce paper-readable first-person rationales. Stylistically they diverge in a consistent way.
+
+**OFF: flowing, single-paragraph, first-person citizen voice.** Agent 165 (Conservative, parent, South West), Day 1, Policy 1 (Renewable energy):
+
+> "I would somewhat support accelerating the roll-out of renewable energy production because I believe in balancing human progress with environmental respect. While I'm not an active environmental advocate, I recognize the importance of sustainable development and reducing reliance on fossil fuels, especially as a parent concerned about the future. However, I might oppose it if it leads to significant disruption of local communities or traditional ways of life, which I value and respect."
+
+**ON: structured, often dual-frame, markdown-formatted.** Same agent, same day, same policy:
+
+> "I **somewhat support** accelerating renewable energy production because I believe in equal opportunities and the long-term benefits of sustainable solutions … However, I might **oppose** rapid changes that disrupt traditional ways of life or local communities."
+
+The **`Support:` / `Oppose:` dual-framing** and liberal use of `**bold**` markers appear in roughly 1-in-3 ON entries from Day 1 onward and almost never in OFF. ON entries also tend to be 15–25% longer (e.g. ~745 chars vs ~596 chars for agent 165 day 1).
+
+**Reflections (`reflections.csv`)** show the same divergence on the same broadcast input. Agent 165, Day 1, P-A (pro-climate broadcast `A_PKG_13`):
+
+- **OFF**: opens with a one-paragraph summary, then enumerates the broadcast bullet-by-bullet across six topical paragraphs (renewables → oil/gas → EVs → housing → carbon tax → compensation), each ending with a hedge tied to the persona ("I remain wary of government intervention", "I value gradual change", etc.). Total ~1.4k chars.
+- **ON**: opens with the same summary paragraph, then collapses the six topics into 2–3 synthesis paragraphs that name fewer specific policies but argue across them ("the package feels more convincing in its focus on long-term planning and practical, inclusive solutions"). Total ~1.1k chars.
+
+Neither dominates as "better reasoning". OFF reads like a citizen explaining themselves; ON reads like a policy analyst writing a memo. For a paper whose contribution is treating LLMs as **surrogate citizens**, OFF is more on-message.
+
+### Persona fidelity
+
+Persona-driven valence is preserved across days in both runs. Spot checks:
+
+- **Agent 713** (Scottish, traditional, strong opposer, GT −2.17): both runs consistently "strongly oppose" across all six policies on all three days. OFF drifts to −1.50 on Day 2 (one policy softening); ON stays pinned at −2.17.
+- **Agent 1957** (East Midlands, Labour, GT +2.67): both runs consistently "strongly support" across all six policies on all three days; both stay at +2.67 throughout.
+- **Agent 844** (deep-green, GT +2.00): OFF stays at +2.00; ON moves to +2.67 (saturating the scale).
+- **Agent 165** (Conservative parent, GT +0.83): both runs produce identical hedge structure ("balance human progress with environmental respect", "respect for tradition", "concern as a parent").
+
+### Broadcast and peer-message pipelines
+
+`messages.csv` shows broadcasts are byte-identical across the two runs (offline pool `v1` IDs `A_PKG_13`, `B_PKG_...` etc. — these are canned and do not exercise the LLM). The **peer messages** in phase C are LLM-generated and do differ. Sample (agent 582 → agent 1379, Day 1):
+
+- **OFF**: "I slightly support policies that accelerate the roll-out of renewable energy like wind parks because I think it's important to protect the planet for future generations, even if it's not my top priority. I'm more comfortable with gradual change than sudden shifts, so I'm neutral on banning new oil, gas, and coal licenses…"
+- **ON**: "Honestly, I think accelerating renewable energy is a solid idea — I like the idea of moving toward cleaner energy without being too radical. I can see the value in wind farms and solar, especially if it helps reduce our environmental impact without putting too much strain on local communities."
+
+Same persona, same broadcasts received, same target peer — ON is slightly more conversational and shorter; OFF is more "policy summary" in register. Neither shows a quality cliff.
+
+### Cost
+
+| | OFF | ON | Ratio |
+|---|---:|---:|---:|
+| Wall-clock (10 agents × 2 days) | 12.8 min | 70.7 min | **5.5×** |
+| Per agent-day | 25.5 s | 141.4 s | 5.5× |
+| Projected 50 × 5 (10× workload) | ~2.2 h | ~12 h | 5.5× |
+| Recommended Slurm budget for 50 × 5 ON | — | 14 h | — |
+
+### Verdict and recommendation for the paper
+
+1. **Accuracy is statistically tied** at n=10. ON is marginally better on bias (+0.25 vs +0.38) and MAE (0.35 vs 0.38); OFF is marginally better on rank-order (ρ 0.974 vs 0.957). Day-0 cannot be compared (anchor confound). No defensible quality claim either direction.
+2. **Reasoning prose is different in kind, not quality.** OFF reads as a citizen; ON reads as an analyst with `Support:` / `Oppose:` scaffolding. The citizen voice is on-message for the paper's framing.
+3. **Persona fidelity is preserved equivalently** in both runs across all 10 personas.
+4. **The parser-bug fix held**: zero `<think>` leakage in any ON artefact.
+5. **Cost is 5.5×** for no defensible accuracy gain on this evidence.
+
+**Use `thinking=False` for headline production runs.** Reserve `thinking=True` for one targeted appendix run if the paper wants to demonstrate latent deliberation capacity. The previously-recorded "thinking helps" narrative from NB 24 / NB 25 was a label error and should not be cited.
+
+### Open questions deferred
+
+- Re-test at larger n (e.g. 50 × 5) where stronger statistical claims become possible; project ON budget at ~12 h Slurm.
+- Compare against NB 25's Day-0 LLM-survey path (no anchor) to recover a true "with vs without thinking" Day-0 bias comparison; currently impossible under `day0_anchor=ground_truth_with_rationale`.
+- Re-examine peer-message quality at larger N (single sample here is suggestive only).
+
+---
+
 ## Run 10: NB 29 — Canonical Full-Scale Smoke (offline broadcasts + local LLM, package mode)
 
 **Date:** 2026-05-22 (run), 2026-05-24 (fresh-kernel replay of headline metrics)

@@ -53,7 +53,7 @@ export HF_TOKEN="PASTE_YOUR_HUGGINGFACE_TOKEN_HERE"
 # The vLLM container image produced by `apptainer pull docker://vllm/vllm-openai`.
 # By default that command writes the SIF into the directory you ran it from;
 # we look for it in your $HOME. Adjust if you put it elsewhere.
-SIF_IMAGE="$HOME/vllm-openai_latest.sif"
+SIF_IMAGE="$HOME/vllm-openai-v0.8.5.sif"
 
 # Local server address. The simulation (running on this same node) talks to the
 # server over localhost. Apptainer shares the host network, so this just works.
@@ -61,13 +61,28 @@ PORT=8000
 BASE_URL="http://localhost:${PORT}/v1"
 
 # ---- Locate the repository and the output area ------------------------------
-# This script lives in <repo>/scripts/aire/, so the repo root is two levels up.
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Slurm copies this script to a spool dir before running it, so we CANNOT find
+# the repo from the script's own path. Instead use $SLURM_SUBMIT_DIR — the
+# directory you ran `sbatch` from (the repo root). Falls back to the script
+# location when run directly (not via sbatch).
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+    REPO_DIR="$SLURM_SUBMIT_DIR"
+else
+    REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
 cd "$REPO_DIR"
+
+# Guard against submitting from the wrong directory: the package must be here.
+if [[ ! -d "$REPO_DIR/src/cag" ]]; then
+    echo "ERROR: src/cag not found under REPO_DIR=$REPO_DIR" >&2
+    echo "       Submit from the repo root:  cd <repo> && sbatch scripts/aire/smoke.sh" >&2
+    exit 1
+fi
 
 # All results go under $SCRATCH (large, fast, NOT backed up). Never write into
 # the repo tree on a cluster.
-OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}"
+CONDITION="${CONDITION:-S_symmetric}"   # override at submit time: see below
+OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}_${CONDITION}"
 mkdir -p "$OUTDIR"
 
 # Hugging Face model cache also under $SCRATCH (weights are several GB and are
@@ -169,18 +184,26 @@ module load miniforge
 # Make `conda activate` work inside a non-interactive batch script.
 eval "$(conda shell.bash hook)"
 conda activate cag
-
 echo "[sim] Launching the simulation (timing is printed at the end)..."
+
+# Reach asymmetry + peer knobs — settable per submit via env vars; see "How to submit" below.
+REACH_A="${REACH_A:-1.0}"
+REACH_B="${REACH_B:-1.0}"
+K_PEERS="${K_PEERS:-2}"
+
 PYTHONPATH=src python3 -m cag \
     --provider local \
     --model "${HF_MODEL}" \
     --base-url "${BASE_URL}" \
     --outdir "${OUTDIR}" \
     --seed 42 \
-    --n-citizens 10 \
-    --days 2 \
-    --no-thinking      # faster first run; drop this flag to match NB29 exactly
-
+    --n-citizens 50 \
+    --days 7 \
+    --no-thinking \
+    --checkpoint-every-day \
+    --reach-a "${REACH_A}" \
+    --reach-b "${REACH_B}" \
+    --k-peers "${K_PEERS}"
 echo "=================================================================="
 echo " Done. Results (CSVs, PNGs, run.log) are in:"
 echo "   ${OUTDIR}"

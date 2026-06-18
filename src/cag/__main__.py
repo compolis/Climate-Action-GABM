@@ -77,6 +77,13 @@ DEFAULT_MODEL = "mlx-community/Qwen3-8B-4bit"   # Mac/mlx default; override on H
 DEFAULT_PROVIDER = "local"
 DEFAULT_TEMPERATURE = 0.5
 
+# Supervisor-recommended default exposure mix (must sum to 1.0).
+DEFAULT_EXPOSURE_TARGETS = {
+    "A-only":  0.05,
+    "B-only":  0.05,
+    "both":    0.50,
+    "neither": 0.40,
+}
 
 def build_days(n_days):
     """Build an alternating package-mode day plan (mirrors NB29).
@@ -105,15 +112,18 @@ def build_config(args):
     return {
         "n_citizens": args.n_citizens,
         "days": build_days(args.days),
-        "k_peers_per_day": DEFAULT_K_PEERS,
+        "k_peers_per_day": args.k_peers,
         "package_policies": list(ALL_CLIMATE_POLICIES),
         "llm_model": args.model,
         "llm_provider": args.provider,
         "llm_temperature": args.temperature,
         "thinking": args.thinking,
         "debias": args.debias,
+        "reach_a": args.reach_a,
+        "reach_b": args.reach_b,
+        "political_exposure_targets": DEFAULT_EXPOSURE_TARGETS,
         "random_seed": args.seed,
-        "local_base_url": args.base_url,   # None → mlx default; set on HPC
+        "local_base_url": args.base_url,
     }
 
 
@@ -189,6 +199,10 @@ def parse_args(argv=None):
                    dest="n_citizens", help="Number of citizen agents to sample.")
     p.add_argument("--days", type=int, default=DEFAULT_DAYS,
                    help="Number of alternating package-mode days to simulate.")
+    p.add_argument("--k-peers", type=int, default=DEFAULT_K_PEERS,
+                   dest="k_peers",
+                   help="Peers each citizen messages per day in the C phase. "
+                        "0 = peer messaging fully disabled (broadcast-only).")
     p.add_argument("--data", default=DEFAULT_SURVEY_CSV,
                    help="Path to the YouGov processed survey CSV.")
     p.add_argument("--provider", default=DEFAULT_PROVIDER,
@@ -202,7 +216,12 @@ def parse_args(argv=None):
                         "Default None -> mlx-lm http://localhost:8080/v1.")
     p.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE,
                    help="Sampling temperature.")
-
+    p.add_argument("--reach-a", type=float, default=1.0, dest="reach_a",
+                   help="Fraction of agent_a's natural audience reached per "
+                        "broadcast (0.0-1.0). 1.0 = full audience.")
+    p.add_argument("--reach-b", type=float, default=1.0, dest="reach_b",
+                   help="Fraction of agent_b's natural audience reached per "
+                        "broadcast (0.0-1.0). 1.0 = full audience.")
     thinking = p.add_mutually_exclusive_group()
     thinking.add_argument("--thinking", dest="thinking", action="store_true",
                           help="Enable model thinking/reasoning (slower).")
@@ -217,6 +236,13 @@ def parse_args(argv=None):
                         help="Disable debias.")
     p.set_defaults(debias=True)
 
+    p.add_argument(
+        "--checkpoint-every-day", dest="checkpoint_every_day",
+        action="store_true",
+        help="After each day's manage_memory step, write the full CSV "
+             "bundle to <outdir>/checkpoints/ so a killed job leaves "
+             "the most recent completed day on disk.",
+    )
     return p.parse_args(argv)
 
 
@@ -245,10 +271,12 @@ def main(argv=None):
 
     logging.info("--- Climate-Action-GABM v%s ---", __version__)
     logging.info(
-        "Run profile: n_citizens=%d, days=%d, k_peers=%d, provider=%s, "
-        "model=%s, base_url=%s, thinking=%s, debias=%s, seed=%d",
-        args.n_citizens, args.days, DEFAULT_K_PEERS, args.provider, args.model,
-        args.base_url or "(provider default)", args.thinking, args.debias, args.seed,
+        "Run profile: n_citizens=%d, days=%d, k_peers=%d, reach_a=%.2f, "
+        "reach_b=%.2f, provider=%s, model=%s, base_url=%s, thinking=%s, "
+        "debias=%s, seed=%d",
+        args.n_citizens, args.days, args.k_peers, args.reach_a, args.reach_b,
+        args.provider, args.model, args.base_url or "(provider default)",
+        args.thinking, args.debias, args.seed,
     )
     logging.info("Output directory: %s", outdir.resolve())
 
@@ -273,7 +301,12 @@ def main(argv=None):
     config = build_config(args)
     t0 = time.perf_counter()
     logging.info("Starting simulation ...")
-    results = run_simulation(config, nation)
+    checkpoint_dir = outdir / "checkpoints" if args.checkpoint_every_day else None
+    results = run_simulation(
+        config, nation,
+        checkpoint_dir=checkpoint_dir,
+        checkpoint_every_day=args.checkpoint_every_day,
+    )
     t_sim = time.perf_counter() - t0
     logging.info("Simulation complete [%.1fs / %.1f min]", t_sim, t_sim / 60.0)
 

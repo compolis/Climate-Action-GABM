@@ -552,6 +552,7 @@ def _send_local(system_prompt, user_prompt, model, temperature, thinking):
         fallback_max = profile.get("max_tokens_msg", 2048)
         text = _do_call(False, fallback_max, fallback_sampling)
 
+    text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
     return text
 
 
