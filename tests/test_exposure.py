@@ -358,7 +358,14 @@ class TestPresetResolution(unittest.TestCase):
         self.assertEqual(set(TARGET_PRESETS),
                          {"committed_minority_symmetric",
                           "committed_minority_uk_2024",
-                          "legacy_v05"})
+                          "legacy_v05",
+                          "split50",
+                          "neither"})
+
+    def test_target_presets_sum_to_one(self):
+        for name, preset in TARGET_PRESETS.items():
+            with self.subTest(preset=name):
+                self.assertAlmostEqual(sum(preset.values()), 1.0, places=6)
 
 
 # ---------------------------------------------------------------------------

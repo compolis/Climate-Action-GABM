@@ -1,0 +1,204 @@
+"""Tests for the cag.__main__ CLI surface (preset/dry-run/JSON parsing)."""
+from __future__ import annotations
+
+import io
+import json
+from contextlib import redirect_stdout
+from unittest import TestCase
+
+import cag.__main__ as cli
+from cag.presets import RUN_BUNDLE_PRESETS
+
+
+class TestArgsToSimDict(TestCase):
+    """The dest → SIM_CONFIG translation must be lossless and filtering."""
+
+    def test_translates_known_dests(self):
+        args = cli.parse_args([
+            "--outdir", "/tmp/x",
+            "--n-citizens", "5",
+            "--days", "2",
+            "--seed", "7",
+            "--k-peers", "1",
+            "--model", "foo",
+            "--provider", "openai",
+            "--base-url", "http://localhost:9999/v1",
+            "--temperature", "0.3",
+            "--no-thinking",
+            "--debias",
+        ])
+        cfg = cli._args_to_sim_dict(args)
+        self.assertEqual(cfg["n_citizens"], 5)
+        self.assertEqual(cfg["days"], 2)            # int at this point
+        self.assertEqual(cfg["random_seed"], 7)
+        self.assertEqual(cfg["k_peers_per_day"], 1)
+        self.assertEqual(cfg["llm_model"], "foo")
+        self.assertEqual(cfg["llm_provider"], "openai")
+        self.assertEqual(cfg["local_base_url"], "http://localhost:9999/v1")
+        self.assertEqual(cfg["llm_temperature"], 0.3)
+        self.assertFalse(cfg["thinking"])
+        self.assertTrue(cfg["debias"])
+        # Control-flow dests stripped.
+        for forbidden in ("outdir", "data", "preset", "list_presets",
+                          "dry_run", "checkpoint_every_day", "resume"):
+            self.assertNotIn(forbidden, cfg)
+
+    def test_unset_flags_absent(self):
+        args = cli.parse_args(["--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2"])
+        cfg = cli._args_to_sim_dict(args)
+        # User did not pass --seed; SUPPRESS means it should not appear.
+        self.assertNotIn("random_seed", cfg)
+        self.assertNotIn("llm_model", cfg)
+        self.assertNotIn("debias", cfg)
+
+
+class TestBuildConfig(TestCase):
+    """Preset + CLI merge precedence and days normalisation."""
+
+    def test_preset_alone(self):
+        preset = dict(RUN_BUNDLE_PRESETS["smoke"]["config"])
+        cfg = cli.build_config(preset, {})
+        self.assertEqual(cfg["n_citizens"], 10)
+        # Smoke preset deliberately does NOT pin the model/provider —
+        # SIM_CONFIG (Mac) or run.sh (AIRE) supplies those.
+        self.assertNotIn("llm_provider", cfg)
+        self.assertNotIn("llm_model", cfg)
+        # int → list expansion
+        self.assertIsInstance(cfg["days"], list)
+        self.assertEqual(len(cfg["days"]), 2)
+        self.assertEqual(cfg["days"][0]["phases"], ["P-A", "P-B", "C"])
+
+    def test_cli_overrides_preset(self):
+        preset = dict(RUN_BUNDLE_PRESETS["smoke"]["config"])
+        # CLI supplies model+provider and flips debias + grows the run.
+        cli_dict = {
+            "llm_provider": "openai",
+            "llm_model": "gpt-5.4-mini",
+            "debias": False,
+            "n_citizens": 30,
+        }
+        cfg = cli.build_config(preset, cli_dict)
+        self.assertEqual(cfg["llm_provider"], "openai")
+        self.assertEqual(cfg["llm_model"], "gpt-5.4-mini")
+        self.assertFalse(cfg["debias"])
+        self.assertEqual(cfg["n_citizens"], 30)
+        # Preset values untouched where CLI silent:
+        self.assertEqual(cfg["k_peers_per_day"], 0)
+        self.assertFalse(cfg["thinking"])
+
+    def test_days_list_passthrough(self):
+        cfg = cli.build_config({}, {"days": [{"phases": ["P-A"]}]})
+        self.assertEqual(cfg["days"], [{"phases": ["P-A"]}])
+
+
+class TestArgparseTypeHelpers(TestCase):
+
+    def test_maybe_json_string(self):
+        self.assertEqual(cli._maybe_json("split50"), "split50")
+
+    def test_maybe_json_dict(self):
+        result = cli._maybe_json('{"A-only": 0.5, "B-only": 0.5, "both": 0, "neither": 0}')
+        self.assertEqual(result, {"A-only": 0.5, "B-only": 0.5, "both": 0, "neither": 0})
+
+    def test_maybe_json_bad_json_raises(self):
+        import argparse
+        with self.assertRaises(argparse.ArgumentTypeError):
+            cli._maybe_json("{not valid}")
+
+    def test_json_dict_rejects_non_object(self):
+        import argparse
+        with self.assertRaises(argparse.ArgumentTypeError):
+            cli._json_dict("[1,2,3]")
+
+    def test_int_or_none(self):
+        self.assertIsNone(cli._int_or_none("none"))
+        self.assertIsNone(cli._int_or_none("null"))
+        self.assertIsNone(cli._int_or_none(""))
+        self.assertIsNone(cli._int_or_none(None))
+        self.assertEqual(cli._int_or_none("42"), 42)
+
+    def test_package_policies_all(self):
+        from cag.abm.attributes.opinion import ALL_CLIMATE_POLICIES
+        self.assertEqual(cli._package_policies_arg("all"), list(ALL_CLIMATE_POLICIES))
+
+    def test_package_policies_list(self):
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        result = cli._package_policies_arg("1,3,5")
+        self.assertEqual(result, [ClimatePolicyID(1), ClimatePolicyID(3), ClimatePolicyID(5)])
+
+    def test_package_policies_invalid(self):
+        import argparse
+        with self.assertRaises(argparse.ArgumentTypeError):
+            cli._package_policies_arg("not_an_int")
+
+
+class TestCLIMainEntryPoints(TestCase):
+    """End-to-end behaviour of --list-presets / --dry-run (no real run)."""
+
+    def test_list_presets_runs_and_exits_cleanly(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main(["--outdir", "/tmp/whatever", "--list-presets"])
+        out = buf.getvalue()
+        for name in RUN_BUNDLE_PRESETS:
+            self.assertIn(name, out)
+
+    def test_dry_run_with_preset(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main(["--preset", "smoke", "--dry-run"])
+        cfg = json.loads(buf.getvalue())
+        self.assertEqual(cfg["n_citizens"], 10)
+        # Smoke preset does NOT pin a model/provider — SIM_CONFIG defaults
+        # (Mac) or run.sh's hardcoded --model (AIRE) supply them.
+        self.assertNotIn("llm_provider", cfg)
+        # days int got expanded to list
+        self.assertIsInstance(cfg["days"], list)
+
+    def test_dry_run_cli_overrides_preset(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main([
+                "--preset", "r14_canonical",
+                "--exposure-targets", "split50",
+                "--no-debias",
+                "--dry-run",
+            ])
+        cfg = json.loads(buf.getvalue())
+        self.assertEqual(cfg["political_exposure_targets"], "split50")
+        self.assertFalse(cfg["debias"])
+        # Preset values that the CLI did NOT override survive.
+        self.assertEqual(cfg["day0_anchor"], "ground_truth_with_rationale")
+        self.assertEqual(cfg["n_citizens"], 50)
+
+    def test_dry_run_json_exposure_targets(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main([
+                "--n-citizens", "10",
+                "--days", "2",
+                "--exposure-targets",
+                '{"A-only": 0.5, "B-only": 0.5, "both": 0, "neither": 0}',
+                "--dry-run",
+            ])
+        cfg = json.loads(buf.getvalue())
+        self.assertEqual(
+            cfg["political_exposure_targets"],
+            {"A-only": 0.5, "B-only": 0.5, "both": 0, "neither": 0},
+        )
+
+    def test_missing_n_citizens_without_preset(self):
+        with self.assertRaises(SystemExit) as cm:
+            cli.main(["--outdir", "/tmp/x", "--days", "2"])
+        # SystemExit message mentions the missing key.
+        self.assertIn("n_citizens", str(cm.exception))
+
+    def test_missing_days_without_preset(self):
+        with self.assertRaises(SystemExit) as cm:
+            cli.main(["--outdir", "/tmp/x", "--n-citizens", "5"])
+        self.assertIn("days", str(cm.exception))
+
+    def test_unknown_preset_rejected_by_argparse(self):
+        # argparse exits with code 2 on choice violation.
+        with self.assertRaises(SystemExit):
+            cli.main(["--preset", "not_a_real_preset", "--dry-run"])

@@ -223,6 +223,51 @@ Submit with a single `sbatch run_array.sh`; cancel all tasks with a single `scan
 | `--output` / `--error` | Stdout/stderr file patterns (`%x` name, `%j` id, `%A`/`%a` array). | — |
 | `--mail-type=END,FAIL` + `--mail-user=...@leeds.ac.uk` | Email on job events. | — |
 
+### 5.5 This repo's CLI + sbatch pattern (`scripts/aire/run.sh`)
+
+> For a step-by-step novice walkthrough (clone → sbatch → results retrieval), see [AIRE_Quickstart.md](AIRE_Quickstart.md). This section is the design reference; the quickstart is the recipe.
+
+The simulation entry point (`python -m cag`) takes every research knob as a flag, so the sbatch script does **not** hardcode experiment parameters. A submission line looks like:
+
+```bash
+sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+```
+
+Three layers compose to give the final config (lowest → highest precedence):
+
+1. `SIM_CONFIG` defaults in `src/cag/abm/sim.py`.
+2. Optional preset bundle in `src/cag/presets.py`, selected with `--preset NAME`.
+3. Individual `--flag` overrides on the sbatch command line.
+
+Common patterns:
+
+```bash
+# List available presets / inspect the resolved config without running:
+PYTHONPATH=src python3 -m cag --list-presets
+PYTHONPATH=src python3 -m cag --preset r14_canonical --exposure-targets split50 --dry-run
+
+# Override Slurm headers at submit time (no script edit required):
+sbatch --time=06:00:00 --mem=120G scripts/aire/run.sh --preset r14_canonical --exposure-targets neither
+
+# Swap the served model (env var, not a CLI flag):
+HF_MODEL=swiss-ai/Apertus-8B-2509 sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+
+# Multi-job sweep from a one-line-per-job text file:
+bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt
+
+# Resume a killed run (writes back into the same OUTDIR):
+RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+```
+
+JSON literals are accepted in-place for any dict-valued flag (`--exposure-targets`, `--affinity-weights`, `--network-params`, `--local-extra-body`) so one-off configurations stay on the sbatch line:
+
+```bash
+sbatch scripts/aire/run.sh --preset r14_canonical \
+    --exposure-targets '{"A-only":0.5,"B-only":0.5,"both":0,"neither":0}'
+```
+
+The `--preset` flag is convenience only; new experiments compose flags directly and never require a code change. See [scripts/aire/run.sh](../scripts/aire/run.sh) and [scripts/aire/sweep.sh](../scripts/aire/sweep.sh) for the full plumbing.
+
 ---
 
 ## 6. Gotchas to avoid

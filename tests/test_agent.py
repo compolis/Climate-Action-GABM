@@ -202,6 +202,15 @@ class TestDebiasedSurvey(unittest.TestCase):
         self.assertEqual(len(citizen.survey_reasoning[policy]), 1)
         self.assertEqual(citizen.survey_reasoning[policy][0], (0, "My reasoning text."))
 
+    @mock.patch("cag.abm.agent.send_chat", side_effect=["Some reasoning.", "G. Strongly support"])
+    def test_debias_stores_raw_response(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen.administer_survey(policy, day=2, debias=True)
+        self.assertIn(policy, citizen.survey_raw_response)
+        self.assertEqual(citizen.survey_raw_response[policy], [(2, "G. Strongly support")])
+
     @mock.patch("cag.abm.agent.send_chat", return_value="D")
     def test_debias_false_no_reasoning_stored(self, mock_send):
         citizen = self._make_citizen()
@@ -209,6 +218,18 @@ class TestDebiasedSurvey(unittest.TestCase):
         policy = ClimatePolicyID.BAN_PETROL_CARS
         citizen.administer_survey(policy, day=0, debias=False)
         self.assertEqual(citizen.survey_reasoning, {})
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="A nuanced view; the answer is B.")
+    def test_no_debias_stores_raw_response(self, mock_send):
+        citizen = self._make_citizen()
+        from cag.abm.attributes.opinion import ClimatePolicyID
+        policy = ClimatePolicyID.BAN_PETROL_CARS
+        citizen.administer_survey(policy, day=1, debias=False)
+        self.assertIn(policy, citizen.survey_raw_response)
+        self.assertEqual(
+            citizen.survey_raw_response[policy],
+            [(1, "A nuanced view; the answer is B.")],
+        )
 
 
 class TestDay0Seeding(unittest.TestCase):

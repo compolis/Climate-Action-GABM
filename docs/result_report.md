@@ -26,6 +26,247 @@ Notes:
 
 ---
 
+## NB 30 + NB 31: Package-mode survey context bug — discovery and fix
+
+**Date:** 2026-06-20
+**Notebooks:** [notebooks/30_surgical_survey_replay.ipynb](../notebooks/30_surgical_survey_replay.ipynb), [notebooks/31_package_mode_fix_validation.ipynb](../notebooks/31_package_mode_fix_validation.ipynb)
+**Result dirs:**
+- NB 30 — [data/output/calibration/30_replay_20260620_162106/](../data/output/calibration/30_replay_20260620_162106/)
+- NB 31 — [data/output/calibration/31_pkgfix_20260620_193325/](../data/output/calibration/31_pkgfix_20260620_193325/)
+
+**TL;DR.** Two-step audit of Run 14's "Qwen3-8B is non-persuasive" finding. NB 30 froze the R14 split50 reflections and daily summaries for 20 stratified agents, replayed the per-policy survey through three frontier models (claude-sonnet-4-6, claude-haiku-4-5, gpt-5.4-mini), and observed that **all four models — including Qwen — plateau from Day 1 onward in lockstep**. That cross-model lockstep ruled out "Qwen-specific lethargy" and surfaced the actual cause: in `package` mode the end-of-day per-policy survey was assembling its system prompt with `policy_id=<one policy>`, but `manage_memory` writes reflections and `daily_summaries` under `PACKAGE_SCOPE`, so `assemble_context()` filtered every package-scoped entry out. Every day's survey context was **bit-identical** across days. NB 31 patched `administer_survey()` to thread `context_policy_id=PACKAGE_SCOPE` for package-mode runs and replayed the same 20 agents under Qwen3-8B (4-bit MLX local) + gpt-5.4-mini. With the fix, **survey answers move in the bucket-asymmetric direction the broadcast assignment predicts**: A-only +0.05 to +0.18 mean signed shift across days, B-only −0.25 to −0.62. The bug was real and material; the Run 14 persuasion finding needs to be re-measured under the fix.
+
+### NB 30 — cross-model frozen replay (the audit that surfaced the bug)
+
+**Design.** Replay R14 split50 surveys for 20 stratified agents (10 A-only + 10 B-only, stratified on broadcast bucket) on days 1–3 across all 6 policies. For each cell, **freeze Qwen's upstream state** (Day-0 anchor + rationale, reflections, daily_summaries, survey_reasoning, opinion_history) and let each candidate model run the same 2-step debias chain against the exact `assemble_context()` prompt Qwen saw. No agent state is mutated. Budget: 3 models × 20 agents × 3 days × 6 policies × 2 debias steps = 2,160 calls. Source: `data/output/experiments/run_6202348_R14_split50_5day/20260619_192129/`.
+
+**Per-cell `|model − qwen_saved|` numeric divergence** (range −3..+3, 360 rows per model):
+
+| model | n | median | p90 | %\|Δ\|≥1 | %\|Δ\|≥2 | mean |
+|---|---:|---:|---:|---:|---:|---:|
+| gpt-5.4-mini | 360 | 0 | 1 | 19.7% | 5.0% | **0.267** |
+| claude-sonnet-4-6 | 360 | 0 | 1 | 27.8% | 8.1% | 0.378 |
+| claude-haiku-4-5 | 360 | 0 | 2 | 35.6% | 14.2% | 0.586 |
+
+Closest to Qwen is **gpt-5.4-mini** (mean |Δ| = 0.27), which is why NB 31 used it as the second model for the fix verification: a model whose voice already tracks Qwen's gives a cleaner read on what the *fix* changes vs what the model character changes.
+
+**The smoking gun (bucket-mean trajectory, [data/output/calibration/30_replay_20260620_162106/bucket_trajectory.png](../data/output/calibration/30_replay_20260620_162106/bucket_trajectory.png)).** Day 1 → Day 3 trajectories for all four models pooled over six policies:
+
+| bucket | model | Day 1 | Day 2 | Day 3 |
+|---|---|---:|---:|---:|
+| A-only | qwen3-8b (saved) | +2.10 | +2.13 | +2.10 |
+| A-only | claude-sonnet-4-6 | +2.18 | +2.20 | +2.10 |
+| A-only | claude-haiku-4-5 | +2.13 | +2.20 | +2.18 |
+| A-only | gpt-5.4-mini | +2.03 | +2.05 | +2.07 |
+| B-only | qwen3-8b (saved) | +0.35 | +0.38 | +0.28 |
+| B-only | gpt-5.4-mini | +0.13 | +0.25 | +0.23 |
+| B-only | claude-sonnet-4-6 | −0.07 | −0.08 | −0.05 |
+| B-only | claude-haiku-4-5 | −0.30 | −0.40 | −0.23 |
+
+The cross-model spread is **vertical (model character)**, not **horizontal (day-to-day movement)**. Within each model, Day 1 → Day 3 is essentially flat — for the B-only bucket every line moves by ≤ 0.20 across two days, and the A-only bucket is even tighter. That this lockstep flatness held for four very different models — Qwen3-8B (open-weights), GPT-5.4-mini (OpenAI), and two Claude tiers — is what triggered the suspicion that the input wasn't actually changing.
+
+**What we then checked, and what we found.** An md5 hash of `agent.get_system_prompt(day, policy_id=<one policy>)` across days 1, 2, 3 for the same (agent, policy) cell was **bit-identical**. Source diagnosis: `assemble_context()` filters reflections and `daily_summaries` by exact `policy_id` match, but `manage_memory()` in package mode writes both under the sentinel `PACKAGE_SCOPE` rather than per-policy. So the per-policy survey was reading an empty package-scope view and falling back to whatever the static Day-0 anchor + persona produced — every day. The plateau was a 100% mechanical artefact.
+
+### The fix (Option B)
+
+A new optional argument `context_policy_id: str | None = None` was threaded through both `SurveyedCitizen.administer_survey()` and `SurveyedNation.run_end_of_day_survey()`. When set, it is the policy id used to **build the system prompt context** (i.e. the `assemble_context()` call), while the per-policy `policy_id` continues to select the question text and the storage keys. In `sim.py`'s package-mode end-of-day survey loop, `context_policy_id=PACKAGE_SCOPE` is now passed explicitly. Single-policy mode is untouched. Storage keys still use `policy_id`, so reading back the trajectory CSVs is unchanged.
+
+Diff scope: [src/cag/abm/agent.py](../src/cag/abm/agent.py) (`administer_survey` signature + body), [src/cag/abm/environment.py](../src/cag/abm/environment.py) (`run_end_of_day_survey` signature + threading), [src/cag/abm/sim.py](../src/cag/abm/sim.py) (~line 460, package-mode call site). Test suite: 470 passing + 1 skipped, no regressions.
+
+### NB 31 — post-fix validation replay (the fix actually changes the answer)
+
+**Design.** Same 20 agents from NB 30. Now replay the **2-step debias chain with `policy_id=PACKAGE_SCOPE` in the system prompt** — bit-for-bit what the patched production path now does. Two models: **Qwen3-8B (local, 4-bit MLX quant)** and **gpt-5.4-mini** (clean fix-only signal since it's the same model as NB 30 with only the prompt construction changed). Budget: 2 models × 20 agents × 3 days × 6 policies × 2 debias steps = 1,440 calls. Output: [data/output/calibration/31_pkgfix_20260620_193325/](../data/output/calibration/31_pkgfix_20260620_193325/).
+
+A md5-hash diagnostic (Cell 6) explicitly asserts that post-fix `get_system_prompt(day, PACKAGE_SCOPE)` differs across days 1/2/3 while pre-fix `get_system_prompt(day, <one policy>)` is bit-identical — passes for every (agent, policy) sampled. The fix demonstrably reaches the prompt.
+
+**Per-cell post-fix vs pre-fix numeric divergence:**
+
+| model | n | %changed | median \|Δ\| | mean \|Δ\| | p90 \|Δ\| | mean signed Δ |
+|---|---:|---:|---:|---:|---:|---:|
+| gpt-5.4-mini | 360 | 29.7% | 0 | 0.43 | 1.0 | **−0.194** |
+| qwen3-8b (4-bit) | 360 | 33.1% | 0 | 0.44 | 1.0 | −0.103 |
+
+About one cell in three flips at least one survey step; the typical magnitude is a one-step change; **the sign is consistently mildly anti-climate in aggregate**, with GPT (the clean fix-only signal) at −0.194 and Qwen (fix + quantization noise) at −0.103.
+
+**The bucket-asymmetric signature: direction tracks the broadcast.** Pooled means by model × bucket × day (post-fix minus pre-fix signed shift, GPT row is the clean signal):
+
+| bucket | model | Day 1 | Day 2 | Day 3 |
+|---|---|---:|---:|---:|
+| A-only (saw pro-climate broadcasts) | gpt-5.4-mini | −0.083 | **+0.050** | **+0.150** |
+| A-only | qwen3-8b (4-bit) | +0.050 | +0.117 | +0.183 |
+| B-only (saw anti-climate broadcasts) | gpt-5.4-mini | −0.250 | **−0.617** | **−0.417** |
+| B-only | qwen3-8b (4-bit) | −0.283 | −0.433 | −0.250 |
+
+This is the predicted signature. A-only agents already sit near the +2.0 ceiling, so feeding the survey their pro-broadcast reflections nudges them only a sliver higher (Day 3 +0.15 for GPT). B-only agents have plenty of dynamic range from a +0.2 pre-fix baseline downward, and the fix uses most of it: GPT B-only mean drops to −0.37 on Day 2. The cross-bucket gap on Day 2 widens from ~+0.05 (pre-fix, both models) to **~+0.67 (post-fix, GPT)** — that gap is the persuasion-response signal the per-policy context filter was hiding.
+
+**Per-policy breakdown (GPT only, the cleanest signal), mean signed shift:**
+
+| policy | A-only | B-only |
+|---|---:|---:|
+| ClimatePolicyID(1) | −0.10 | −0.30 |
+| ClimatePolicyID(2) | +0.03 | −0.47 |
+| ClimatePolicyID(3) | +0.03 | −0.53 |
+| ClimatePolicyID(4) | +0.03 | **−0.77** |
+| ClimatePolicyID(5) | +0.20 | −0.37 |
+| ClimatePolicyID(6) | +0.03 | −0.13 |
+
+**Every single policy in the B-only column shifts negative**, and 5 of 6 in the A-only column shift non-negative. The directional consistency across policies and across the two models is what makes this a structural fix-effect rather than a model artefact.
+
+**\|Δ\|≥1 share by bucket** (share of cells that flipped at least one survey step):
+
+| model | A-only | B-only |
+|---|---:|---:|
+| gpt-5.4-mini | 17.8% | **41.7%** |
+| qwen3-8b (4-bit) | 21.1% | 45.0% |
+
+Nearly half of B-only cells moved at least one step. The bucket asymmetry is again consistent across both models.
+
+**Day 2 is the peak shift.** This makes sense given how `manage_memory` lays out context: by Day 2 the Day-0 (pre-broadcast, neutral) reflections have been compressed into a daily summary, while the Day-1 broadcast reflection is still full text — so Day 2's survey context contains the maximum fraction of new broadcast-influenced material. By Day 3, additional daily summaries start to dilute it.
+
+### What this means for Run 14
+
+1. **The Run 14 "Qwen3-8B is non-persuasive" conclusion is contaminated** by the per-policy context bug. Every Run 14 trajectory was being fed an effectively static survey prompt past Day 0; broadcasts could and did populate reflections (Run 14 confirmed reflection quality was healthy), but those reflections never reached the survey. The +0.10 / +0.04 net persuasion subtraction reported in Run 14 was measuring debias-chain drift + Day-0 anchor — not the agent's response to the day's broadcast.
+2. **The plateau-and-decoupling observation in Run 14 §"reasoning text" was the bug's literal signature.** Reflections engaged with broadcasts; survey rationales were word-for-word identical to Day 0. That is *mechanically* what the bug guaranteed.
+3. **The Qwen freeze observation specifically (Run 14 §"Reflection production is healthy — engagement isn't the bottleneck") survives, but loses its model-attribution.** The cross-model lockstep in NB 30 shows every frontier model also plateaued under the same buggy paradigm; the bug, not the model, was the bottleneck.
+4. **The size of the post-fix effect is real but moderate.** ~30% of cells change, one-step moves dominate (p90 = 1), and the B-only bucket-mean shift maxes at −0.62 on Day 2. Combined with Run 14's healthy reflection production, this puts the *measurable* persuasion ceiling under the fix at roughly half a survey step per day for a one-sided audience after a handful of broadcasts — still a long way short of dramatic, but it is a signal rather than the flatline.
+5. **The R14 split50 trial needs to be rerun on AIRE with the fix.** The 4-bit MLX local Qwen used here confounds the Qwen row with quantization noise; the only clean Qwen pre/post comparison is the same 5-day R14 split50 design re-executed on the FP Qwen3-8B / vLLM stack. Until that rerun lands, treat the Run 14 numbers as a lower bound for Qwen's persuasion-responsiveness, not a verdict.
+
+### Caveats
+
+- NB 31's Qwen row uses **mlx-community/Qwen3-8B-4bit**, not the FP Qwen3-8B that R14 used on AIRE H100/vLLM. Magnitudes for the Qwen row in NB 31 mix the fix's effect with quantization noise; treat the GPT row (−0.194 aggregate, −0.617 on B-only Day 2) as the clean fix-only signal.
+- All NB 30/31 numbers are over a 20-agent stratified subsample of R14's 50-agent cohort, days 1–3 only, 6 policies pooled, 2 debias steps per cell. Cross-day movement in NB 30 (the smoking-gun lockstep flatness) was measured against Qwen's saved opinion_trajectories; NB 31's pre/post divergence is measured against Qwen-saved + NB-30-saved respectively, not against a fresh re-run.
+- The frozen-replay design holds the agent's reflections and daily summaries fixed. It cannot capture **iterative feedback** dynamics — i.e. what happens when Day 2's survey reflects on richer memory that itself was produced under the fix. The Run 14 rerun will tell us whether the per-day effect compounds, stays flat, or attenuates.
+
+---
+
+## Run 14: AIRE Split-50 Persuasion Responsiveness Trial (broadcasts only, matched neither baseline, anchor ablation)
+
+> **Audit note (2026-06-20):** The "Qwen3-8B is non-persuasive" conclusion below was confounded by the package-mode per-policy survey context bug discovered in NB 30 and fixed in NB 31 — see the section directly above. End-of-day surveys past Day 0 were reading an effectively static system prompt, so broadcast-induced reflections never reached the survey. The numbers in this section are still correct *as measurements*, but should be read as the pre-fix lower bound on Qwen3-8B's persuasion-responsiveness, not as the model's actual ceiling. The split50 + neither matched-baseline design needs to be re-run on AIRE under the patched code before any persuasion claim is final.
+
+**Date:** 2026-06-19
+**Cluster:** AIRE HPC, GPU node (NVIDIA H100, CUDA 12.6), vLLM 0.8.5 in Apptainer serving `Qwen/Qwen3-8B` (bf16)
+**Slurm jobs:** `6202348` (split50, anchor=GT, 5 days), `6203838` (neither baseline, anchor=GT, 5 days), `6204291` (split50, anchor=LLM, 4 days completed of 5 planned)
+**Result files:**
+- split50 — [data/output/experiments/run_6202348_R14_split50_5day/20260619_192129/](../data/output/experiments/run_6202348_R14_split50_5day/20260619_192129/)
+- neither — [data/output/experiments/run_6203838_R14_neither_5day/20260619_184539/](../data/output/experiments/run_6203838_R14_neither_5day/20260619_184539/)
+- anchor_llm — [data/output/experiments/run_6204291_R14_split50_5day_anchor_llm/checkpoints/](../data/output/experiments/run_6204291_R14_split50_5day_anchor_llm/checkpoints/) (CSVs sit in `checkpoints/` because the wall-clock-killed run never reached the final save step; checkpoint_meta records `last_completed_day = 4`)
+
+**Analysis script:** [sandbox/ajay_sandbox/run14_split50_analysis.py](../sandbox/ajay_sandbox/run14_split50_analysis.py)
+
+Designed in response to Run 13's muted aggregate signal and the persuasion-responsiveness concern (Run 13 §K). Three runs were submitted in parallel:
+
+1. **`split50_5day`** — 50/50/0/0 `political_exposure_targets`, `reach_a = reach_b = 1.0`, peers off, GT-anchored Day 0. The cleanest possible persuasion test: every agent gets exactly one side of the broadcast feed and nothing else. By design the cohort splits 25 A-only / 25 B-only because `corr(score_A, score_B) ≈ −0.975` on the YouGov pool (NB 27).
+2. **`neither_5day`** — `targets = {neither: 1.0}`, all other knobs identical to split50. Zero broadcasts and zero peers all five days — the matched-horizon baseline for the persuasion subtraction.
+3. **`split50_5day_anchor_llm`** — identical to split50 but with `day0_anchor = "llm_survey"` (LLM picks its own Day-0 number; no YouGov rationale injected). Tests whether the GT anchor is itself the cause of the day-1 plateau seen in every prior run.
+
+### Configuration delta vs Run 13
+
+| Parameter | Run 13 | **Run 14** |
+|---|---|---|
+| n_citizens | 50 | 50 |
+| days | 7 | **5** |
+| `k_peers_per_day` | 0 | 0 |
+| `political_exposure_targets` | {A-only: 0.05, B-only: 0.05, both: 0.50, neither: 0.40} | **split50: {0.50, 0.50, 0.00, 0.00}** &nbsp;·&nbsp; **neither: {0.00, 0.00, 0.00, 1.00}** |
+| `reach_a` / `reach_b` | S 1/1, C1 0.25/1, C3 1/0.25 | **all 1.0 / 1.0** |
+| `day0_anchor` | GT-with-rationale | **GT-with-rationale** (split50, neither) ·&nbsp; **`llm_survey`** (anchor_llm) |
+| Cohort assignment under seed=42 | uneven A-only/B-only/both/neither sizes (rank-affinity on the 5/5/50/40 mix) | **25 A-only / 25 B-only / 0 both / 0 neither** for both split50 runs (`corr(score_A, score_B) ≈ −0.975`) |
+| All other knobs | (package, offline v1, debias on, thinking off, seed=42, stochastic_block 0.15/0.02, vLLM bf16) | identical |
+
+### TL;DR
+
+**Qwen3-8B is essentially non-persuasive in this paradigm.** After subtracting the matched-horizon "no broadcasts at all" baseline, pro-climate broadcasts move A-only agents +0.10, anti-climate broadcasts move B-only agents +0.04 — both with the *same* sign. The pro-climate bias dominates broadcast content, peers (already off), and anchor choice. Free-Day-0 anchoring (anchor_llm) makes things *worse*, not better.
+
+### Headline: the persuasion subtraction (Day 0 → Day 5)
+
+Same horizon, same n=50, same Qwen3-8B, same prompt chain — just different broadcast exposure:
+
+| Run | Cohort | n | Day 0 | Day 5 | Δ | Δ − neither_baseline |
+|---|---|---:|---:|---:|---:|---:|
+| **neither** | all agents | 50 | +0.59 | +0.98 | **+0.39** | — (this *is* the baseline) |
+| **split50** | A-only | 25 | +1.32 | +1.81 | **+0.49** | **+0.10** |
+| **split50** | B-only | 25 | −0.15 | +0.29 | **+0.43** | **+0.04** |
+
+The two persuasion deltas (+0.10 and +0.04) are:
+- **Both positive** — even pure anti-climate exposure (B-only) doesn't push opinions down.
+- **Tiny** relative to the prompt-chain baseline (+0.39).
+- **Asymmetric in the "wrong" direction** — anti-climate broadcasts should have negative persuasion if the model were responsive; they have +0.04 (essentially noise).
+
+This is the cleanest evidence to date that Qwen3-8B doesn't update on broadcast content in this setup. Whatever drift you see in the asymmetry runs is mostly the bias baseline showing through, with maybe ~0.1 of broadcast-attributable effect on the side that aligns with the model's pre-existing pro-climate tilt.
+
+### Day-1 plateau holds at 5 days
+
+The "everything happens between Day 0 and Day 1, then nothing" pattern from earlier runs persists through Day 5 with no compounding:
+
+| Run | Day 0 | Day 1 | Day 2 | Day 3 | Day 4 | Day 5 |
+|---|---:|---:|---:|---:|---:|---:|
+| split50 | 0.587 | 1.007 | 1.043 | 1.020 | 1.013 | **1.047** |
+| neither | 0.587 | 0.990 | 0.963 | 1.003 | 0.970 | **0.977** |
+| anchor_llm | 1.530 | 1.573 | 1.580 | 1.603 | 1.590 | (no D5) |
+
+- **split50 and neither are within 0.07 of each other at every day past Day 0.** Broadcasts contribute essentially nothing on top of the prompt-chain drift.
+- **The jump from Day 0 to Day 1 is +0.40 in both runs** — this is not persuasion, it's what happens when an agent's stated number transitions from a GT-rationalised value to one written by the LLM survey-with-debias chain. Once that transition is paid for at Day 1, the trajectory is flat.
+- **No compounding past Day 1** — running for 5 days instead of 3 did not surface any further movement. The plateau answer is now settled.
+
+### The anchor ablation says: the GT anchor is *not* the cause of the freeze
+
+This was the hypothesis to kill — and it dies cleanly:
+
+| Run | Anchor | mean Δ Day0→last | \|Δ\|≥0.5 | std Δ | Day-0 std | Day-0 bias vs GT | Day-0 ρ vs GT |
+|---|---|---:|---:|---:|---:|---:|---:|
+| split50 | GT + rationale | **+0.46** | 18/50 | 0.51 | 1.33 | 0.00 | 1.00 |
+| anchor_llm | LLM survey | **+0.06** | 4/50 | 0.27 | 0.95 | +0.94 | 0.56 |
+
+When you let the LLM pick its own Day-0 number (anchor_llm), it concentrates agents tightly around +1.5 (std 0.95, all agents stacked between −0.33 and +3.0), shows a +0.94 bias against the YouGov ground truth, and **barely moves at all** afterward (mean Δ = +0.06, only 4 of 50 agents shift more than 0.5). The "free" anchor doesn't unlock movement — it collapses the starting distribution and locks even harder.
+
+So the GT anchor was *helping* by giving agents distinct starting positions to defend. Without it, the model defaults to "moderate-to-strong support for climate policy" for nearly everyone, then sits there.
+
+The Day-0 ρ of 0.56 with the YouGov ground truth (for anchor_llm) also tells you something important: **Qwen's free survey answer has weak correlation with the agent's actual demographic+values+vote profile.** Personas are getting compressed toward a generic pro-climate stance regardless of who the agent is supposed to be.
+
+### The reasoning text confirms the freeze is at the reasoning layer
+
+The package_index isn't moving because the underlying *reasoning* isn't moving. Compare Day 0 to Day 5 for the three stratified agents in split50 (agent 713 = staunch opposer, 759 = neutral, 1045 = supporter):
+
+- **Agent 713 (B-only, GT=−2.17)**: Day 0 and Day 5 reasoning are *word-identical* in three of five sentences, and paraphrases of each other in the rest. Day 5 still says "slightly support" the same as Day 0. Five days of only-anti-climate broadcasts produced no change in what the agent writes.
+- **Agent 759 (B-only)**: writes a thoughtful first reflection acknowledging the broadcast (*"makes me reconsider the balance… the argument that renewable subsidies are a drain on public funds… is compelling"*) — and then writes a Day-5 survey rationale that *still says* *"I **strongly support** government policies that accelerate the roll-out of renewable energy."* Reflection engages with the message; survey ignores it.
+- **Agent 1045 (A-only, GT=+3)**: word-identical Day-0 and Day-5 reasoning at the ceiling.
+
+This is the failure mode that matters most: the agent reads the broadcast, writes a reflection that explicitly engages with its argument, then re-emits a survey answer that's a verbatim copy of the pre-broadcast survey answer. The persuasion stage and the survey stage are decoupled.
+
+### Reflection production is healthy — engagement isn't the bottleneck
+
+| Run | n reflections | median words | p10 | p90 | % policy-keyword | % empty |
+|---|---:|---:|---:|---:|---:|---:|
+| split50 | 250 | 288 | 213 | 364 | 100% | 0% |
+| anchor_llm | 200 | 295 | 239 | 400 | 100% | 0% |
+| neither | 0 | — | — | — | — | — |
+
+Agents are producing long, substantive, policy-bearing reflections in response to broadcasts. The freeze is not "Qwen is too lazy to think about the broadcast" — it's "Qwen thinks about the broadcast, writes 288 words about it, and then writes a survey answer as if the broadcast didn't exist."
+
+### The bucket Day-0 split shows the affinity-rank assignment works
+
+| Cohort (split50) | Day-0 mean | Notes |
+|---|---:|---|
+| A-only (n=25) | +1.32 | Day-0 matches YouGov GT (anchor=GT) |
+| B-only (n=25) | −0.15 | Day-0 matches YouGov GT (anchor=GT) |
+
+The rank-affinity sort correctly put the 25 most pro-climate agents (by YouGov score) into the A-only cohort and the 25 most anti-climate into the B-only cohort. So the persuasion test is a clean test — we're sending pro-climate broadcasts only to the people most likely to already agree with them (no test of whether they *can* be moved further), and anti-climate broadcasts only to the people most likely to already agree with them (the actual persuasion failure: they don't move toward the message *or* down generally, they drift UP +0.43).
+
+### What Run 14 tells us about the simulation
+
+1. **For Qwen3-8B specifically, broadcasts are non-persuasive.** Any apparent asymmetry between A-leaning and B-leaning outcomes in the prior 7-day Run 12/Run 13 runs is bias-driven, not persuasion-driven. The 4-condition reach sweep was measuring sycophancy + prompt-chain drift, not actual influence.
+2. **The GT anchor is a feature, not a bug.** It gives agents room to differentiate; without it, Qwen collapses them onto a narrow pro-climate band and the simulation has even less to measure.
+3. **The +0.39 baseline drift in 5 days from zero input is the prompt-chain artefact.** This is the number to design around — the "model is responsive" threshold should be persuasion ≥ ~3× this baseline (so ≥ +1.0) to be a defensible effect.
+4. **The decoupling of reflection from survey** is the most actionable finding. Reflections are rich; survey answers are stuck. That points at the survey prompt itself (the debias chain at end-of-day) as the locus of the freeze — when the agent is asked to fill in a number, they're re-reading their `assemble_context()` memory and pattern-matching back to Day-0 reasoning. If we want to test this, the next ablation is to drop the persona reminder from the survey prompt or to make the survey see only the most recent reflection (not the assembled context that includes Day-0 anchor reasoning).
+5. **The model question is now urgent, not optional.** The case for the open-source ladder previously parked ("for later") has gotten stronger. If Qwen3-8B is structurally non-persuasive, the right next comparison isn't another asymmetry sweep — it's the same R14 design on Qwen3-14B/32B, Apertus, Llama-3.1, and possibly a Claude run for the upper bound. Without that, we can't tell whether the freeze is Qwen3-8B-specific (likely fixable by scaling) or a general LLM-agent property in this setup.
+
+### Operational notes
+
+- The anchor_llm run was killed by the 2-hour wall time during Day 5's 5th policy survey. CSVs were salvaged from `checkpoints/` (`last_completed_day = 4`). Resume infrastructure (`--resume` CLI flag in [src/cag/__main__.py](../src/cag/__main__.py), `RESUME=1`+`OUTDIR=` env-var overrides in [scripts/aire/smoke.sh](../scripts/aire/smoke.sh)) is now wired up for future kills.
+- Both completed runs (split50, neither) finished under wall time; the neither run is the cheapest baseline available (no broadcasts → ~70% of split50's LLM call count).
+- All three runs reused seed=42, n_citizens=50, Qwen3-8B bf16, llm_temperature=0.5, debias=on, thinking=off — only the three knobs in the configuration table above were changed across runs.
+
+---
+
 ## Run 13: AIRE Reach-Asymmetry Sweep, peers OFF + supervisor exposure mix (5/5/50/40)
 
 **Date:** 2026-06-17
