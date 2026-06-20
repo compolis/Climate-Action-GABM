@@ -103,6 +103,10 @@ class TestCheckpointRoundtrip(unittest.TestCase):
                     restored.survey_reasoning, original.survey_reasoning,
                     f"survey_reasoning mismatch for agent {aid}",
                 )
+                self.assertEqual(
+                    restored.survey_raw_response, original.survey_raw_response,
+                    f"survey_raw_response mismatch for agent {aid}",
+                )
 
             # nation.message_log restored.
             self.assertEqual(len(fresh.message_log), len(nation.message_log))

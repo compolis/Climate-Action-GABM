@@ -81,10 +81,22 @@ TARGETS_COMMITTED_MINORITY_UK_2024 = {
 TARGETS_LEGACY_V05 = {
     "A-only": 0.225, "B-only": 0.225, "both": 0.20, "neither": 0.35,
 }
+# Run-14-style cleanest persuasion test: every agent gets exactly one side
+# of the broadcast feed and nothing else.
+TARGETS_SPLIT_50 = {
+    "A-only": 0.50, "B-only": 0.50, "both": 0.00, "neither": 0.00,
+}
+# Matched-horizon baseline: nobody hears any broadcast — isolates the
+# prompt-chain / debias drift from any persuasion signal.
+TARGETS_NEITHER = {
+    "A-only": 0.00, "B-only": 0.00, "both": 0.00, "neither": 1.00,
+}
 TARGET_PRESETS = {
     "committed_minority_symmetric": TARGETS_COMMITTED_MINORITY_SYMMETRIC,
     "committed_minority_uk_2024": TARGETS_COMMITTED_MINORITY_UK_2024,
     "legacy_v05": TARGETS_LEGACY_V05,
+    "split50": TARGETS_SPLIT_50,
+    "neither": TARGETS_NEITHER,
 }
 
 # Affinity-score weight presets. Each preset is a dict {"A": {...}, "B": {...}}
@@ -566,7 +578,7 @@ class SurveyedNation(Nation):
 
         return df
     
-    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5, thinking=False, debias=False):
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5, thinking=False, debias=False, context_policy_id=None):
 
         endofday_rows = []
         agents = list(self.agents_active.values())
@@ -580,7 +592,8 @@ class SurveyedNation(Nation):
             letter, numeric = agent.administer_survey(
                 policy_id=policy_id, day=day, api_key=api_key,
                 model=model, provider=provider, temperature=temperature,
-                thinking=thinking, debias=debias)
+                thinking=thinking, debias=debias,
+                context_policy_id=context_policy_id)
 
             shift = numeric - previous_numeric if previous_numeric is not None else 0
             logging.info(f"Agent {agent.id}: {letter} ({numeric:+d}), previous={previous_numeric}, shift={shift:+d}")

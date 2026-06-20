@@ -3,25 +3,46 @@
 """
 Headless entry point for running the Climate-Action-GABM simulation.
 
-This mirrors the canonical reference run in
-``notebooks/29_canonical_full_smoke.ipynb`` (package mode + offline political
-messages + local Qwen3, with Day-0 anchoring from YouGov ground truth) but is
-fully parameterised for the command line so it can run unattended as a Slurm
-batch job on an HPC (see ``scripts/aire/smoke.sh``).
+Composable CLI: every ``SIM_CONFIG`` knob that materially changes the run
+is exposed as a flag, so an HPC sbatch submission line can pin every
+research parameter without editing scripts. Convenience bundles live in
+:mod:`cag.presets` and are selected with ``--preset NAME``.
 
-Usage (local Mac, mlx-lm server on :8080):
-    PYTHONPATH=src python3 -m cag --outdir data/output/experiments
+Application order (lowest → highest precedence)::
 
-Usage (AIRE HPC, vLLM server on :8000):
+    SIM_CONFIG defaults (sim.py)
+        → preset bundle (cag/presets.py)
+            → individual --flag overrides
+
+Two flags are **required**: ``--outdir`` (where artefacts go) and a way to
+size the run — either ``--n-citizens`` + ``--days`` directly, or a
+``--preset`` that supplies them.
+
+Inspection helpers:
+
+* ``--list-presets`` prints all registered run bundles and exits.
+* ``--dry-run`` resolves the final config (preset + CLI overrides),
+  prints it as JSON, and exits without any LLM calls.
+
+Usage (local Mac, mlx-lm server on :8080)::
+
     PYTHONPATH=src python3 -m cag \\
+        --outdir data/output/experiments \\
+        --n-citizens 10 --days 2
+
+Usage (AIRE HPC, vLLM server on :8000)::
+
+    PYTHONPATH=src python3 -m cag \\
+        --outdir "$SCRATCH/cag/runs/run_$SLURM_JOB_ID" \\
+        --n-citizens 50 --days 7 \\
         --provider local --model Qwen/Qwen3-8B \\
         --base-url http://localhost:8000/v1 \\
-        --outdir "$SCRATCH/cag/runs/run_$SLURM_JOB_ID" \\
-        --seed 42 --no-thinking
+        --no-thinking --checkpoint-every-day \\
+        --exposure-targets split50
 
-All run artefacts (CSVs, PNGs, the config snapshot, and the run log) are
-written under ``--outdir``. Nothing is written into the repository tree, so
-the output directory can point at $SCRATCH on a cluster.
+All run artefacts (CSVs, PNGs, config snapshot, run log) are written
+under ``--outdir``; nothing is written into the repository tree, so the
+output directory can point at ``$SCRATCH`` on a cluster.
 """
 __author__ = [
     "Andy Turner <agdturner@gmail.com>",
@@ -32,6 +53,7 @@ __version__ = "0.5.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 import argparse
+import json
 import logging
 import random
 import sys
@@ -43,7 +65,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 
-# ── Agent / attribute imports (kept in lock-step with NB29) ───────
+# ── Agent / attribute imports ─────────────────────────────────────
 from gabm.abm.attributes.gender import GenderMap, GenderID
 from gabm.abm.attributes.politics import PoliticsID
 from gabm.abm.democracy.election import ElectionID
@@ -51,7 +73,7 @@ from gabm.abm.democracy.election import ElectionID
 from cag.io.survey import load
 from cag.abm.agent import SurveyedCitizen
 from cag.abm.environment import SurveyedNation
-from cag.abm.attributes.opinion import ALL_CLIMATE_POLICIES
+from cag.abm.attributes.opinion import ALL_CLIMATE_POLICIES, ClimatePolicyID
 from cag.abm.attributes.region import UKRegionMap, RegionID
 from cag.abm.attributes.education import SurveyEducationMap, EducationID
 from cag.abm.attributes.ethnicity import SurveyEthnicityMap, EthnicityID
@@ -65,32 +87,99 @@ from cag.abm.attributes.narratives import (
     SDOMap, EDOMap, RWAMap, rescale_1_6, rescale_1_7,
 )
 from cag.abm.sim import run_simulation, save_results, save_result_plots
+from cag.presets import RUN_BUNDLE_PRESETS, list_presets
 
 
-# ── Defaults (the NB29 canonical smoke profile) ──────────────────
+# Only the survey CSV gets a hard default — every other knob has either
+# a SIM_CONFIG default (sim.py) or must come from a preset / CLI flag.
 DEFAULT_SURVEY_CSV = "data/yougov_survey_data/YouGovProcessedData.csv"
-DEFAULT_N_CITIZENS = 10           # NB29 smoke (full run = 100)
-DEFAULT_DAYS = 2                  # NB29 smoke (alternating package days)
-DEFAULT_K_PEERS = 2               # NB29 smoke (full run = 3)
-DEFAULT_SEED = 42
-DEFAULT_MODEL = "mlx-community/Qwen3-8B-4bit"   # Mac/mlx default; override on HPC
-DEFAULT_PROVIDER = "local"
-DEFAULT_TEMPERATURE = 0.5
 
-# Supervisor-recommended default exposure mix (must sum to 1.0).
-DEFAULT_EXPOSURE_TARGETS = {
-    "A-only":  0.05,
-    "B-only":  0.05,
-    "both":    0.50,
-    "neither": 0.40,
+
+# Map argparse ``dest`` names → SIM_CONFIG keys. Only flags whose dest
+# differs from the SIM_CONFIG key need an entry; everything else is
+# passed through verbatim.
+_ARG_TO_SIM = {
+    "seed":                "random_seed",
+    "k_peers":             "k_peers_per_day",
+    "model":               "llm_model",
+    "provider":            "llm_provider",
+    "base_url":            "local_base_url",
+    "temperature":         "llm_temperature",
+    "exposure_mode":       "political_exposure_mode",
+    "exposure_targets":    "political_exposure_targets",
+    "message_source":      "political_message_source",
+    "message_set":         "political_message_set",
+    "diagnostics_timeout": "diagnostics_timeout_s",
+    "local_timeout":       "local_timeout_s",
 }
 
-def build_days(n_days):
-    """Build an alternating package-mode day plan (mirrors NB29).
+# Argparse dests that are NOT SIM_CONFIG keys (control flow / I/O).
+_NON_SIM_DESTS = frozenset({
+    "outdir", "data", "preset", "list_presets", "dry_run",
+    "checkpoint_every_day", "resume",
+})
 
-    Day 0 broadcasts P-A first, day 1 P-B first, and so on, always closing
-    with a peer-messaging ("C") phase. No per-day ``policy`` key: package
-    mode broadcasts every ``package_policies`` entry each phase.
+
+# ── Argparse type helpers ─────────────────────────────────────────
+def _maybe_json(value):
+    """Either a JSON object literal (must start with ``{``) or a string.
+
+    Used for flags that accept *either* a preset name (resolved downstream
+    by ``cag.abm.environment``) *or* a literal dict.
+    """
+    value = value.strip()
+    if value.startswith("{"):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise argparse.ArgumentTypeError(f"Invalid JSON: {exc}")
+    return value
+
+
+def _json_dict(value):
+    """Strict JSON object → dict (no preset-name fallback)."""
+    try:
+        d = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise argparse.ArgumentTypeError(f"Invalid JSON: {exc}")
+    if not isinstance(d, dict):
+        raise argparse.ArgumentTypeError(
+            f"Must be a JSON object, got {type(d).__name__}"
+        )
+    return d
+
+
+def _int_or_none(value):
+    """Accept ``none`` / ``null`` / empty as ``None``, else an int."""
+    if value is None:
+        return None
+    s = str(value).strip().lower()
+    if s in ("", "none", "null"):
+        return None
+    return int(value)
+
+
+def _package_policies_arg(value):
+    """``all`` → every climate policy; else comma-separated policy IDs."""
+    s = value.strip().lower()
+    if s == "all":
+        return list(ALL_CLIMATE_POLICIES)
+    try:
+        return [ClimatePolicyID(int(p.strip())) for p in value.split(",") if p.strip()]
+    except (ValueError, TypeError) as exc:
+        raise argparse.ArgumentTypeError(
+            f"--package-policies expects 'all' or comma-separated ints, "
+            f"got {value!r}: {exc}"
+        )
+
+
+# ── Day plan + nation builders ───────────────────────────────────
+def build_days(n_days):
+    """Build an alternating package-mode day plan.
+
+    Day 0 broadcasts P-A first, day 1 P-B first, alternating, always
+    closing with a peer-messaging ("C") phase. No per-day ``policy`` key:
+    package mode broadcasts every ``package_policies`` entry each phase.
     """
     plan = []
     for i in range(n_days):
@@ -101,34 +190,8 @@ def build_days(n_days):
     return plan
 
 
-def build_config(args):
-    """Assemble the SIM_CONFIG overrides for this run.
-
-    Only keys that differ from ``cag.abm.sim.SIM_CONFIG`` defaults (or that we
-    pin for reproducibility / CLI control) are set here; ``run_simulation``
-    merges these on top of the canonical defaults (package mode, offline v1
-    messages, Day-0 ground-truth-with-rationale anchoring, debias on).
-    """
-    return {
-        "n_citizens": args.n_citizens,
-        "days": build_days(args.days),
-        "k_peers_per_day": args.k_peers,
-        "package_policies": list(ALL_CLIMATE_POLICIES),
-        "llm_model": args.model,
-        "llm_provider": args.provider,
-        "llm_temperature": args.temperature,
-        "thinking": args.thinking,
-        "debias": args.debias,
-        "reach_a": args.reach_a,
-        "reach_b": args.reach_b,
-        "political_exposure_targets": DEFAULT_EXPOSURE_TARGETS,
-        "random_seed": args.seed,
-        "local_base_url": args.base_url,
-    }
-
-
 def build_nation(data, year=2026):
-    """Create a SurveyedNation and populate it with citizens (mirrors NB29)."""
+    """Create a SurveyedNation and populate it with citizens."""
     UKGE2019_ELECTION_ID = ElectionID(0)
     BREXIT_REFERENDUM_ID = ElectionID(1)
 
@@ -181,61 +244,210 @@ def build_nation(data, year=2026):
     return sn
 
 
+# ── Config assembly ───────────────────────────────────────────────
+def _args_to_sim_dict(args):
+    """Project argparse Namespace into SIM_CONFIG keyspace.
+
+    Only attributes the user explicitly set survive (overridable flags
+    use ``default=argparse.SUPPRESS``); the rest defer to preset /
+    SIM_CONFIG. Control-flow flags are filtered out.
+    """
+    out = {}
+    for dest, value in vars(args).items():
+        if dest in _NON_SIM_DESTS:
+            continue
+        key = _ARG_TO_SIM.get(dest, dest)
+        out[key] = value
+    return out
+
+
+def build_config(preset_dict, cli_dict):
+    """Merge preset + CLI into a SIM_CONFIG-compatible override dict.
+
+    CLI flags win over preset values. ``days`` is normalised: an integer
+    (from either source) is expanded via :func:`build_days` into the
+    canonical alternating-phases list.
+    """
+    merged = {}
+    if preset_dict:
+        merged.update(preset_dict)
+    merged.update(cli_dict)
+
+    if "days" in merged and isinstance(merged["days"], int):
+        merged["days"] = build_days(merged["days"])
+
+    return merged
+
+
+# ── Argparse ──────────────────────────────────────────────────────
 def parse_args(argv=None):
     p = argparse.ArgumentParser(
         prog="python -m cag",
         description="Run the Climate-Action-GABM simulation headless "
-                    "(mirrors NB29: package mode, offline messages, local LLM).",
+                    "(package mode + offline messages by default).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+
+    # I/O. Not marked required at parse time because --list-presets and
+    # --dry-run don't need it; validated in main() once we know the path.
     p.add_argument(
-        "--outdir", required=True,
+        "--outdir", default=None,
         help="Directory for all run artefacts (CSVs, PNGs, log, config). "
-             "On a cluster point this at $SCRATCH, never the repo tree.",
+             "On a cluster point this at $SCRATCH, never the repo tree. "
+             "Required for real runs; omitted for --list-presets / --dry-run.",
     )
-    p.add_argument("--seed", type=int, default=DEFAULT_SEED,
-                   help="Random seed (seeds Python + simulation RNGs).")
-    p.add_argument("--n-citizens", type=int, default=DEFAULT_N_CITIZENS,
-                   dest="n_citizens", help="Number of citizen agents to sample.")
-    p.add_argument("--days", type=int, default=DEFAULT_DAYS,
+
+    # Meta flags.
+    p.add_argument(
+        "--preset", default=None, choices=sorted(RUN_BUNDLE_PRESETS),
+        help="Apply a named run bundle from cag.presets. CLI flags override "
+             "preset values. Use --list-presets to see what each provides.",
+    )
+    p.add_argument(
+        "--list-presets", dest="list_presets", action="store_true",
+        help="Print all registered presets and exit.",
+    )
+    p.add_argument(
+        "--dry-run", dest="dry_run", action="store_true",
+        help="Resolve preset + CLI into the final SIM_CONFIG override dict, "
+             "print it as JSON, and exit. No LLM / network / disk side effects.",
+    )
+
+    # Run sizing (required unless supplied by a preset).
+    p.add_argument("--n-citizens", type=int, default=argparse.SUPPRESS,
+                   dest="n_citizens",
+                   help="Number of citizen agents to sample.")
+    p.add_argument("--days", type=int, default=argparse.SUPPRESS,
                    help="Number of alternating package-mode days to simulate.")
-    p.add_argument("--k-peers", type=int, default=DEFAULT_K_PEERS,
-                   dest="k_peers",
-                   help="Peers each citizen messages per day in the C phase. "
-                        "0 = peer messaging fully disabled (broadcast-only).")
+
+    # Survey + repro.
     p.add_argument("--data", default=DEFAULT_SURVEY_CSV,
                    help="Path to the YouGov processed survey CSV.")
-    p.add_argument("--provider", default=DEFAULT_PROVIDER,
+    p.add_argument("--seed", type=int, default=argparse.SUPPRESS,
+                   help="Random seed. Default = SIM_CONFIG (42).")
+
+    # Communication mode.
+    p.add_argument("--communication-mode", default=argparse.SUPPRESS,
+                   dest="communication_mode",
+                   choices=("package", "single_policy"),
+                   help="Broadcast scope. Default = SIM_CONFIG (package).")
+    p.add_argument("--package-policies", type=_package_policies_arg,
+                   default=argparse.SUPPRESS, dest="package_policies",
+                   help="Policies broadcast each phase under package mode. "
+                        "Use 'all' or a comma-separated list of policy IDs "
+                        "(1=Renewable, 2=BanFossil, 3=BanPetrolCars, "
+                        "4=GreenHousing, 5=CarbonTax, 6=Compensation).")
+    p.add_argument("--day0-anchor", default=argparse.SUPPRESS,
+                   dest="day0_anchor",
+                   choices=("llm_survey", "ground_truth",
+                            "ground_truth_with_rationale"),
+                   help="Day-0 opinion seed. "
+                        "Default = SIM_CONFIG (ground_truth_with_rationale).")
+    p.add_argument("--k-peers", type=int, default=argparse.SUPPRESS,
+                   dest="k_peers",
+                   help="Peers each citizen messages per day in the C phase. "
+                        "0 disables peer messaging entirely (broadcast-only).")
+
+    # LLM.
+    p.add_argument("--provider", default=argparse.SUPPRESS,
                    help="LLM provider: local / openai / anthropic / genai.")
-    p.add_argument("--model", default=DEFAULT_MODEL,
+    p.add_argument("--model", default=argparse.SUPPRESS,
                    help="Model name the server expects "
                         "(HPC/vLLM example: Qwen/Qwen3-8B).")
-    p.add_argument("--base-url", default=None, dest="base_url",
+    p.add_argument("--base-url", default=argparse.SUPPRESS, dest="base_url",
                    help="OpenAI-compatible endpoint for provider=local "
-                        "(HPC/vLLM example: http://localhost:8000/v1). "
-                        "Default None -> mlx-lm http://localhost:8080/v1.")
-    p.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE,
-                   help="Sampling temperature.")
-    p.add_argument("--reach-a", type=float, default=1.0, dest="reach_a",
-                   help="Fraction of agent_a's natural audience reached per "
-                        "broadcast (0.0-1.0). 1.0 = full audience.")
-    p.add_argument("--reach-b", type=float, default=1.0, dest="reach_b",
-                   help="Fraction of agent_b's natural audience reached per "
-                        "broadcast (0.0-1.0). 1.0 = full audience.")
-    thinking = p.add_mutually_exclusive_group()
-    thinking.add_argument("--thinking", dest="thinking", action="store_true",
-                          help="Enable model thinking/reasoning (slower).")
-    thinking.add_argument("--no-thinking", dest="thinking", action="store_false",
-                          help="Disable thinking (faster; recommended first HPC smoke).")
-    p.set_defaults(thinking=True)   # NB29 executed config used thinking=True
+                        "(HPC/vLLM example: http://localhost:8000/v1).")
+    p.add_argument("--temperature", type=float, default=argparse.SUPPRESS,
+                   help="Sampling temperature. Default = SIM_CONFIG (0.5).")
+    p.add_argument("--survey-model", default=argparse.SUPPRESS,
+                   dest="survey_model",
+                   help="Override model used for end-of-day surveys "
+                        "(None = use --model).")
+    p.add_argument("--survey-provider", default=argparse.SUPPRESS,
+                   dest="survey_provider",
+                   help="Override provider used for end-of-day surveys "
+                        "(None = use --provider).")
+    p.add_argument("--thinking", dest="thinking",
+                   action=argparse.BooleanOptionalAction,
+                   default=argparse.SUPPRESS,
+                   help="Enable / disable model thinking. "
+                        "Default = SIM_CONFIG (False).")
+    p.add_argument("--debias", dest="debias",
+                   action=argparse.BooleanOptionalAction,
+                   default=argparse.SUPPRESS,
+                   help="Enable / disable the Condition B 2-step survey. "
+                        "Default = SIM_CONFIG (True).")
+    p.add_argument("--local-timeout", type=float, default=argparse.SUPPRESS,
+                   dest="local_timeout",
+                   help="Per-request timeout (s) for provider=local.")
+    p.add_argument("--local-extra-body", type=_json_dict,
+                   default=argparse.SUPPRESS, dest="local_extra_body",
+                   help="JSON dict merged into every local-provider request body.")
 
-    debias = p.add_mutually_exclusive_group()
-    debias.add_argument("--debias", dest="debias", action="store_true",
-                        help="Use the Condition B 2-step debias survey (research canon).")
-    debias.add_argument("--no-debias", dest="debias", action="store_false",
-                        help="Disable debias.")
-    p.set_defaults(debias=True)
+    # Political-exposure assignment.
+    p.add_argument("--exposure-mode", default=argparse.SUPPRESS,
+                   dest="exposure_mode",
+                   choices=("rule_priority_chain", "rule_signal_count",
+                            "rule_affinity_rank"),
+                   help="Exposure assignment algorithm. "
+                        "Default = SIM_CONFIG (rule_affinity_rank).")
+    p.add_argument("--exposure-targets", type=_maybe_json,
+                   default=argparse.SUPPRESS, dest="exposure_targets",
+                   help="Either a TARGET_PRESETS name (e.g. 'split50', "
+                        "'neither', 'committed_minority_symmetric') or a "
+                        "literal JSON dict of {A-only,B-only,both,neither} "
+                        "weights summing to 1.0.")
+    p.add_argument("--affinity-weights", type=_maybe_json,
+                   default=argparse.SUPPRESS, dest="affinity_weights",
+                   help="Either an AFFINITY_WEIGHT_PRESETS name "
+                        "('balanced' / 'vote_dominant' / 'values_dominant') "
+                        "or a literal JSON dict.")
 
+    # Broadcast reach + audience.
+    p.add_argument("--reach-a", type=float, default=argparse.SUPPRESS,
+                   dest="reach_a",
+                   help="Fraction of agent_a's natural audience reached "
+                        "per broadcast (0.0-1.0).")
+    p.add_argument("--reach-b", type=float, default=argparse.SUPPRESS,
+                   dest="reach_b",
+                   help="Fraction of agent_b's natural audience reached "
+                        "per broadcast (0.0-1.0).")
+    p.add_argument("--audience-cap", type=_int_or_none,
+                   default=argparse.SUPPRESS, dest="audience_cap",
+                   help="Hard cap on each political agent's audience size "
+                        "(applied before reach subsample). 'none' = no cap.")
+
+    # Political message pool.
+    p.add_argument("--message-source", default=argparse.SUPPRESS,
+                   dest="message_source",
+                   choices=("offline", "llm"),
+                   help="Source of political broadcast text. "
+                        "Default = SIM_CONFIG (offline).")
+    p.add_argument("--message-set", default=argparse.SUPPRESS,
+                   dest="message_set",
+                   help="Versioned offline message set under "
+                        "data/political_messages/. "
+                        "Default = SIM_CONFIG ('v1').")
+
+    # Network.
+    p.add_argument("--network-type", default=argparse.SUPPRESS,
+                   dest="network_type",
+                   help="Peer network factory key (stochastic_block / "
+                        "watts_strogatz / barabasi_albert / erdos_renyi).")
+    p.add_argument("--network-params", type=_json_dict,
+                   default=argparse.SUPPRESS, dest="network_params",
+                   help="JSON dict of per-factory parameters.")
+    p.add_argument("--p-intra", type=float, default=argparse.SUPPRESS,
+                   dest="p_intra",
+                   help="Legacy stochastic-block intra-block edge probability.")
+    p.add_argument("--p-inter", type=float, default=argparse.SUPPRESS,
+                   dest="p_inter",
+                   help="Legacy stochastic-block inter-block edge probability.")
+    p.add_argument("--diagnostics-timeout", type=float,
+                   default=argparse.SUPPRESS, dest="diagnostics_timeout",
+                   help="Wall-clock cap (s) on the network diagnostics block.")
+
+    # Checkpoint / resume.
     p.add_argument(
         "--checkpoint-every-day", dest="checkpoint_every_day",
         action="store_true",
@@ -243,18 +455,73 @@ def parse_args(argv=None):
              "bundle to <outdir>/checkpoints/ so a killed job leaves "
              "the most recent completed day on disk.",
     )
+    p.add_argument(
+        "--resume", dest="resume", action="store_true",
+        help="Resume from <outdir>/checkpoints/ (same --outdir as the "
+             "killed run). Structural config keys must match the original.",
+    )
     return p.parse_args(argv)
+
+
+# ── Entry point ──────────────────────────────────────────────────
+def _resolve_config(args):
+    """Build the final SIM_CONFIG override dict from preset + CLI."""
+    preset_dict = {}
+    if args.preset:
+        preset_dict = dict(RUN_BUNDLE_PRESETS[args.preset]["config"])
+    cli_dict = _args_to_sim_dict(args)
+    return build_config(preset_dict, cli_dict)
+
+
+def _validate_required(config):
+    """Run-sizing must come from either the preset or the CLI."""
+    missing = [k for k in ("n_citizens", "days") if k not in config]
+    if missing:
+        raise SystemExit(
+            f"error: missing required config key(s): {missing}. "
+            f"Pass --n-citizens / --days, or select a --preset that supplies them."
+        )
+
+
+def _jsonable(v):
+    """Best-effort coerce nested values to JSON-printable form for --dry-run."""
+    if isinstance(v, list):
+        return [_jsonable(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _jsonable(x) for k, x in v.items()}
+    if hasattr(v, "value"):
+        try:
+            return int(v.value)
+        except Exception:
+            return repr(v)
+    return v
 
 
 def main(argv=None):
     overall_t0 = time.perf_counter()
     args = parse_args(argv)
 
+    # Inspection-only paths: no I/O, no LLM, no logging setup.
+    if args.list_presets:
+        list_presets()
+        return
+
+    config = _resolve_config(args)
+
+    if args.dry_run:
+        _validate_required(config)
+        preview = {k: _jsonable(v) for k, v in config.items()}
+        print(json.dumps(preview, indent=2, default=str, sort_keys=True))
+        return
+
+    _validate_required(config)
+
+    if args.outdir is None:
+        raise SystemExit("error: --outdir is required for non-inspection runs.")
+
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    # Log to BOTH stdout (Slurm captures this into the .out file) and a file
-    # inside the output directory (so the log travels with the results).
     log_file = outdir / "run.log"
     logging.basicConfig(
         level=logging.INFO,
@@ -270,23 +537,25 @@ def main(argv=None):
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     logging.info("--- Climate-Action-GABM v%s ---", __version__)
-    logging.info(
-        "Run profile: n_citizens=%d, days=%d, k_peers=%d, reach_a=%.2f, "
-        "reach_b=%.2f, provider=%s, model=%s, base_url=%s, thinking=%s, "
-        "debias=%s, seed=%d",
-        args.n_citizens, args.days, args.k_peers, args.reach_a, args.reach_b,
-        args.provider, args.model, args.base_url or "(provider default)",
-        args.thinking, args.debias, args.seed,
-    )
+    if args.preset:
+        logging.info("Preset: %s", args.preset)
+    logging.info("Resolved SIM_CONFIG overrides:")
+    for k in sorted(config):
+        v = config[k]
+        if k == "days" and isinstance(v, list):
+            logging.info("  %-32s = <%d days>", k, len(v))
+        else:
+            logging.info("  %-32s = %r", k, v)
     logging.info("Output directory: %s", outdir.resolve())
 
-    random.seed(args.seed)
+    seed = config.get("random_seed", 42)
+    random.seed(seed)
 
     # ── Stage 1: load + subsample survey data ────────────────────
     t0 = time.perf_counter()
     logging.info("Loading survey data from %s ...", args.data)
     data = load(args.data)
-    data = data.sample(n=args.n_citizens, random_state=args.seed).reset_index(drop=True)
+    data = data.sample(n=config["n_citizens"], random_state=seed).reset_index(drop=True)
     t_load = time.perf_counter() - t0
     logging.info("Sampled %d citizens [%.2fs]", len(data), t_load)
 
@@ -295,20 +564,28 @@ def main(argv=None):
     logging.info("Building SurveyedNation ...")
     nation = build_nation(data)
     t_build = time.perf_counter() - t0
-    logging.info("Nation ready: %d agents [%.2fs]", len(nation.agents_active), t_build)
+    logging.info("Nation ready: %d agents [%.2fs]",
+                 len(nation.agents_active), t_build)
 
-    # ── Stage 3: run the simulation (the LLM-bound phase) ────────
-    config = build_config(args)
+    # ── Stage 3: run the simulation ──────────────────────────────
     t0 = time.perf_counter()
     logging.info("Starting simulation ...")
-    checkpoint_dir = outdir / "checkpoints" if args.checkpoint_every_day else None
+    if args.resume:
+        args.checkpoint_every_day = True
+    checkpoint_dir = (
+        outdir / "checkpoints" if args.checkpoint_every_day else None
+    )
+    if args.resume:
+        logging.info("Resume mode: loading from %s", checkpoint_dir)
     results = run_simulation(
         config, nation,
         checkpoint_dir=checkpoint_dir,
         checkpoint_every_day=args.checkpoint_every_day,
+        resume=args.resume,
     )
     t_sim = time.perf_counter() - t0
-    logging.info("Simulation complete [%.1fs / %.1f min]", t_sim, t_sim / 60.0)
+    logging.info("Simulation complete [%.1fs / %.1f min]",
+                 t_sim, t_sim / 60.0)
 
     # ── Stage 4: save artefacts ──────────────────────────────────
     t0 = time.perf_counter()
@@ -330,8 +607,6 @@ def main(argv=None):
     )
 
     overall = time.perf_counter() - overall_t0
-    # A simple scaling unit to help estimate larger runs: simulation seconds
-    # per (agent x day). Multiply by your target agents x days to extrapolate.
     agent_days = max(n_agents * n_days, 1)
     logging.info("==================== TIMING ====================")
     logging.info("  data load        : %8.2fs", t_load)

@@ -49,6 +49,7 @@ def _make_mock_agent(agent_id, exposure="A-only"):
     agent.reflections = []
     agent.daily_summaries = {}
     agent.survey_reasoning = {}
+    agent.survey_raw_response = {}
     agent.get_real_package_index = MagicMock(return_value=0.5)
 
     def fake_get_real_survey_response(policy_id):
@@ -57,6 +58,8 @@ def _make_mock_agent(agent_id, exposure="A-only"):
     def fake_survey(policy_id, day=0, **kwargs):
         history = agent.opinion_history.setdefault(policy_id, [])
         history.append((day, 1))  # always returns opinion=1
+        raw = agent.survey_raw_response.setdefault(policy_id, [])
+        raw.append((day, f"raw response for day {day}"))
         if kwargs.get("debias"):
             reasoning = agent.survey_reasoning.setdefault(policy_id, [])
             reasoning.append((day, f"Reasoning for day {day}"))
@@ -375,6 +378,7 @@ class TestCollectResults(unittest.TestCase):
             "messages_received": ["msg"],
         }]
         agent.survey_reasoning = {policy: [(0, "reasoning")]}
+        agent.survey_raw_response = {policy: [(0, "raw text")]}
         agent.daily_summaries = {(1, policy): "summary"}
         nation.message_log = [{
             "day": 1,
@@ -1687,6 +1691,7 @@ class TestCollectResultsIncludesMessageId(unittest.TestCase):
         agent.opinion_history = {policy: [(0, 1)]}
         agent.reflections = []
         agent.survey_reasoning = {}
+        agent.survey_raw_response = {}
         agent.daily_summaries = {}
         nation.message_log = [{
             "day": 1,

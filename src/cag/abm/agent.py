@@ -109,8 +109,9 @@ class SurveyedCitizen():
         self.political_exposure = "neither"
         self.network_neighbors = []
         self.reflections = []
-        self.daily_summaries = {}   # {(day, policy_id): summary_text}
-        self.survey_reasoning = {}  # {policy_id: [(day, reasoning_text)]}
+        self.daily_summaries = {}        # {(day, policy_id): summary_text}
+        self.survey_reasoning = {}       # {policy_id: [(day, reasoning_text)]}
+        self.survey_raw_response = {}    # {policy_id: [(day, raw_llm_response)]}
 
     def __str__(self):
         """
@@ -363,9 +364,13 @@ class SurveyedCitizen():
             user_prompt = "\n\n".join([framing, policy_question, response_options, question])
             return user_prompt
 
-    def administer_survey(self, policy_id, day=0, model="gpt-5-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, debias=False) -> tuple[str, int]:
-        
-        system_prompt = self.get_system_prompt(day=day, policy_id=policy_id)
+    def administer_survey(self, policy_id, day=0, model="gpt-5-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, debias=False, context_policy_id=None) -> tuple[str, int]:
+        # context_policy_id selects which slice of memory the system prompt sees;
+        # policy_id still selects the question, storage keys, and history bucket.
+        # In package mode the caller passes PACKAGE_SCOPE so package-scoped
+        # reflections/summaries survive assemble_context()'s per-policy filter.
+        ctx_policy = policy_id if context_policy_id is None else context_policy_id
+        system_prompt = self.get_system_prompt(day=day, policy_id=ctx_policy)
 
         if debias:
             # Step 1: Elicit reasoning with anti-sycophancy preamble
@@ -403,6 +408,11 @@ class SurveyedCitizen():
                 system_prompt, user_prompt, api_key=api_key, model=model,
                 provider=provider, temperature=temperature, thinking=thinking,
             )
+
+        # Store raw Step-2 (or single-call) text for post-hoc parser audit.
+        if policy_id not in self.survey_raw_response:
+            self.survey_raw_response[policy_id] = []
+        self.survey_raw_response[policy_id].append((day, llm_response))
 
         letter_response = parse_letter_response(llm_response)
         opinion_value = RESPONSE_SCALE.get(letter_response)

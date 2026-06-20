@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "last_completed_day": 4,
+  "agent_ids": [
+    "1001.0",
+    "103.0",
+    "1045.0",
+    "1065.0",
+    "1213.0",
+    "1250.0",
+    "1262.0",
+    "1269.0",
+    "1339.0",
+    "1343.0",
+    "1373.0",
+    "1379.0",
+    "1382.0",
+    "1404.0",
+    "1454.0",
+    "1496.0",
+    "1535.0",
+    "155.0",
+    "1635.0",
+    "165.0",
+    "166.0",
+    "1723.0",
+    "1833.0",
+    "1878.0",
+    "1900.0",
+    "1904.0",
+    "1957.0",
+    "238.0",
+    "252.0",
+    "355.0",
+    "377.0",
+    "381.0",
+    "409.0",
+    "416.0",
+    "424.0",
+    "440.0",
+    "556.0",
+    "574.0",
+    "582.0",
+    "620.0",
+    "69.0",
+    "71.0",
+    "713.0",
+    "740.0",
+    "752.0",
+    "759.0",
+    "806.0",
+    "828.0",
+    "844.0",
+    "91.0"
+  ],
+  "config": {
+    "n_citizens": 50,
+    "days": [
+      {
+        "phases": [
+          "P-A",
+          "P-B",
+          "C"
+        ]
+      },
+      {
+        "phases": [
+          "P-B",
+          "P-A",
+          "C"
+        ]
+      },
+      {
+        "phases": [
+          "P-A",
+          "P-B",
+          "C"
+        ]
+      },
+      {
+        "phases": [
+          "P-B",
+          "P-A",
+          "C"
+        ]
+      },
+      {
+        "phases": [
+          "P-A",
+          "P-B",
+          "C"
+        ]
+      }
+    ],
+    "k_peers_per_day": 0,
+    "network_type": "stochastic_block",
+    "network_params": null,
+    "p_intra": 0.15,
+    "p_inter": 0.02,
+    "block_sizes": null,
+    "diagnostics_timeout_s": 30.0,
+    "llm_model": "Qwen/Qwen3-8B",
+    "llm_provider": "local",
+    "llm_temperature": 0.5,
+    "survey_model": null,
+    "survey_provider": null,
+    "thinking": false,
+    "debias": true,
+    "communication_mode": "package",
+    "package_policies": [
+      "ClimatePolicyID(1)",
+      "ClimatePolicyID(2)",
+      "ClimatePolicyID(3)",
+      "ClimatePolicyID(4)",
+      "ClimatePolicyID(5)",
+      "ClimatePolicyID(6)"
+    ],
+    "political_message_source": "offline",
+    "political_message_set": "v1",
+    "day0_anchor": "llm_survey",
+    "reach_a": 1.0,
+    "reach_b": 1.0,
+    "audience_cap": null,
+    "political_exposure_mode": "rule_affinity_rank",
+    "political_exposure_targets": {
+      "A-only": 0.5,
+      "B-only": 0.5,
+      "both": 0.0,
+      "neither": 0.0
+    },
+    "affinity_weights": null,
+    "random_seed": 42,
+    "output_dir": "data/output/experiments",
+    "local_base_url": "http://localhost:8000/v1",
+    "local_extra_body": null,
+    "local_timeout_s": null
+  },
+  "config_hash": "094737082c1847048db331fa92f7b190c2d164c46c17e25acea221b3e086130b",
+  "written_at": "2026-06-19T19:19:34"
+}

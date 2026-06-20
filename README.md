@@ -129,6 +129,8 @@ For security or conduct concerns, you can also use the `Contact maintainers` lin
 ## User Guide
 Please use the [User Guide](USER_GUIDE.md).
 
+Running on Leeds's AIRE HPC? Start with the [AIRE Quickstart](docs/AIRE_Quickstart.md) — clone-to-`sbatch` walkthrough with worked smoke + split50 examples.
+
 
 ## Developer Guide
 Please use the [Developer Guide](DEV_GUIDE.md).

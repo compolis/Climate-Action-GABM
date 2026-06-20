@@ -460,6 +460,7 @@ def _run_one_day(nation, day, day_config, n_days, rt):
                 api_key=rt["survey_api_key"], model=rt["survey_model"],
                 provider=rt["survey_provider"], temperature=rt["temperature"],
                 thinking=rt["thinking"], debias=rt["debias"],
+                context_policy_id=PACKAGE_SCOPE,
             )
     else:
         nation.run_end_of_day_survey(
@@ -660,6 +661,7 @@ def _collect_results(nation, config):
     ref_rows = []
     message_rows = []
     survey_reasoning_rows = []
+    survey_raw_response_rows = []
     daily_summary_rows = []
     package_mode = _is_package_mode(config)
     package_policies = _get_package_policies(config) if package_mode else []
@@ -721,6 +723,15 @@ def _collect_results(nation, config):
                     "day": day,
                     "policy_id": str(policy_id),
                     "reasoning": reasoning,
+                })
+
+        for policy_id, raw_entries in getattr(agent, "survey_raw_response", {}).items():
+            for day, raw in raw_entries:
+                survey_raw_response_rows.append({
+                    "agent_id": agent.id,
+                    "day": day,
+                    "policy_id": str(policy_id),
+                    "raw_response": raw,
                 })
 
         for (day, policy_id), summary in agent.daily_summaries.items():
@@ -794,6 +805,10 @@ def _collect_results(nation, config):
         "survey_reasoning": pd.DataFrame(
             survey_reasoning_rows,
             columns=["agent_id", "day", "policy_id", "reasoning"],
+        ),
+        "survey_raw_response": pd.DataFrame(
+            survey_raw_response_rows,
+            columns=["agent_id", "day", "policy_id", "raw_response"],
         ),
         "daily_summaries": pd.DataFrame(
             daily_summary_rows,
@@ -876,6 +891,7 @@ _RESULT_CSV_SCHEMAS = {
         "political_message_id",
     ],
     "survey_reasoning": ["agent_id", "day", "policy_id", "reasoning"],
+    "survey_raw_response": ["agent_id", "day", "policy_id", "raw_response"],
     "daily_summaries": ["agent_id", "day", "policy_id", "summary"],
     "ground_truth": ["agent_id", "policy_id", "ground_truth"],
     "package_ground_truth": ["agent_id", "index_name", "ground_truth"],
@@ -1142,6 +1158,7 @@ def _load_checkpoint(nation, checkpoint_dir):
         agent.reflections = []
         agent.daily_summaries = {}
         agent.survey_reasoning = {}
+        agent.survey_raw_response = {}
 
     def _read(name):
         path = checkpoint_dir / f"{name}.csv"
@@ -1205,6 +1222,16 @@ def _load_checkpoint(nation, checkpoint_dir):
             continue
         agent.survey_reasoning.setdefault(_to_policy(row.policy_id), []).append(
             (int(row.day), row.reasoning)
+        )
+
+    # survey_raw_response (added in v0.5; missing on older checkpoints)
+    sraw = _read("survey_raw_response")
+    for row in sraw.itertuples(index=False):
+        agent = by_id.get(str(row.agent_id))
+        if agent is None:
+            continue
+        agent.survey_raw_response.setdefault(_to_policy(row.policy_id), []).append(
+            (int(row.day), row.raw_response)
         )
 
     # nation.message_log

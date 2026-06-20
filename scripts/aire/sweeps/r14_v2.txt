@@ -1,0 +1,16 @@
+# =============================================================================
+# Run-14 v2 sweep — three conditions on the post-NB30/31 fix code base.
+# Each line is forwarded verbatim to `scripts/aire/run.sh "$@"`.
+# Submit:  bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt
+# =============================================================================
+
+# A. Canonical baseline: split-50 exposure (every agent on exactly one side).
+--preset r14_canonical --exposure-targets split50
+
+# B. Matched-horizon control: no broadcasts at all — isolates prompt-chain /
+#    debias drift from any persuasion signal.
+--preset r14_canonical --exposure-targets neither
+
+# C. LLM-anchored Day 0 for a separate bias-measurement story; keeps
+#    everything else aligned with B above for the cleanest comparison.
+--preset r14_canonical --exposure-targets neither --day0-anchor llm_survey

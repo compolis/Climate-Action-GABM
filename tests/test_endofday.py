@@ -55,6 +55,18 @@ class TestAdministerSurveyStoresHistory:
         assert len(citizen.opinion_history[policy]) == 2
         assert citizen.opinion_history[policy][1] == (1, 2)
 
+    @mock.patch("cag.abm.agent.send_chat", return_value="E. Somewhat support")
+    def test_raw_response_stored_per_day(self, mock_send):
+        citizen = _make_citizen()
+        policy = ClimatePolicyID.CARBON_TAX
+        citizen.administer_survey(policy, day=0)
+        citizen.administer_survey(policy, day=1)
+        assert policy in citizen.survey_raw_response
+        assert citizen.survey_raw_response[policy] == [
+            (0, "E. Somewhat support"),
+            (1, "E. Somewhat support"),
+        ]
+
     @mock.patch("cag.abm.agent.send_chat", return_value="A")
     def test_multiple_days_append(self, mock_send):
         citizen = _make_citizen()
