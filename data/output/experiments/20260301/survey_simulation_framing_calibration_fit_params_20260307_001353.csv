@@ -1,3 +1,0 @@
-question_type,n_rows,fit_mode,slope,intercept,mean_pred_before,mean_exp,mean_pred_after
-consensus_positive,200,linear,0.24572702236414784,1.2024882392653176,2.045,1.705,1.705
-tradeoff_polarized,400,linear,0.3883978184883264,-0.10834396224499351,1.3925,0.4325,0.432500000000001

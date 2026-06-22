@@ -1986,3 +1986,164 @@ Literature citations that include 2022 publication years are unchanged and not
 part of this correction.
 
 ---
+
+
+## 22. AIRE / HPC infrastructure (v0.7, 2026-06-21)
+
+v0.7 ships a production-ready HPC integration layer for the University of Leeds AIRE cluster (SLURM). The intent is *thin, composable, and edit-free*: launching a new experiment is one entry in a Python preset dict plus one line in a sweep file. No per-experiment shell-script edits.
+
+### 22.1 Thin sbatch launcher
+
+[scripts/aire/run.sh](../scripts/aire/run.sh) is a single sbatch script that delegates every research knob to the Python CLI via environment variables. It defines the SLURM `#SBATCH` directives (partition, gres, mem, time), auto-starts a vLLM server on the GPU node with `$HF_MODEL` (overrideable), waits for the model endpoint to come up, then invokes `python -m cag` with every variable forwarded as a `--flag`. Adding a new experiment never requires editing this script.
+
+### 22.2 Sweep submitter
+
+[scripts/aire/sweep.sh](../scripts/aire/sweep.sh) reads a sweep file (one line per condition, each line a list of CLI overrides) and submits one `sbatch` per condition. Sweep files live under [scripts/aire/sweeps/](../scripts/aire/sweeps/). The v0.7 canonical sweep is [scripts/aire/sweeps/r14_v2.txt](../scripts/aire/sweeps/r14_v2.txt) — 3 split50 conditions for the first AIRE production run.
+
+### 22.3 Preset bundle registry
+
+New [src/cag/presets.py](../src/cag/presets.py) defines `RUN_BUNDLE_PRESETS`, a dict of named SIM_CONFIG bundles. v0.7 ships two: `"smoke"` (10-agent × 2-day fast smoke, used by NB 32) and `"r14_canonical"` (the canonical 50-agent × 5-day Run-14 v2 baseline). Presets are loaded by the CLI via `--preset NAME`; individual `--flag` overrides layer on top.
+
+### 22.4 Walkthrough docs
+
+- [docs/AIRE_HPC_repo_primer.md](AIRE_HPC_repo_primer.md) — cluster fundamentals, storage rules, hard constraints, troubleshooting.
+- [docs/AIRE_Quickstart.md](AIRE_Quickstart.md) — copy-pasteable zero-to-Run-14 walkthrough.
+
+
+## 23. NB-31 package-mode survey-context fix (v0.7, 2026-06-21)
+
+### 23.1 The bug
+
+In v0.4–v0.6, package-mode end-of-day surveys (`administer_survey()` in `src/cag/abm/agent.py` and `run_end_of_day_survey()` in `src/cag/abm/environment.py`) called `assemble_context(policy_id=...)` with a single per-policy `policy_id`. The in-context memory slice retrieved for that policy was effectively empty: in package mode every reflection, peer message, and broadcast lives under `PACKAGE_SCOPE` (the union over all six climate policies), not under any single per-policy key. Result: every package-mode survey was reading an effectively unchanging system prompt — broadcasts and peer messages had nothing to influence at the survey step.
+
+The bug was silent. Per-day inertia metrics looked plausible (the LLM is anchored heavily by Day-0 rationale and persona); only a cross-bucket gap-widening probe could expose it.
+
+### 23.2 Discovery
+
+[notebooks/30_surgical_survey_replay.ipynb](../notebooks/30_surgical_survey_replay.ipynb) replays a single agent's package-mode survey under frozen state across models. With the buggy code the assembled context was structurally empty after the persona prefix; with `PACKAGE_SCOPE` plumbed in, the same agent's context expanded by ~10–18 KB and the survey response shifted.
+
+### 23.3 Fix
+
+Both `administer_survey()` and `run_end_of_day_survey()` now branch on `communication_mode`. In package mode they pass `PACKAGE_SCOPE` (the canonical union key from [src/cag/abm/attributes/opinion.py](../src/cag/abm/attributes/opinion.py)) to `assemble_context()`. In single-policy mode the call is unchanged.
+
+### 23.4 Validation
+
+[notebooks/31_package_mode_fix_validation.ipynb](../notebooks/31_package_mode_fix_validation.ipynb) confirms the predicted amplification on the surgical-replay pool. Production confirmation: **Run-14 v2 measured +0.667 Day-5 cross-bucket package-index gap-widening vs +0.053 pre-fix — a 12.6× amplification** matching the GPT-5.4-mini surgical-replay prediction within noise. Full write-up in [docs/result_report.md](result_report.md).
+
+
+## 24. Outputs and instrumentation expansion (v0.7, 2026-06-22)
+
+The saved run bundle in v0.7 expands from 17 → 29 artefacts so that every diagnostic question previously requiring a notebook to derive from raw CSVs is answered by the bundle itself.
+
+### 24.1 Phase 1 — Agent-attribute persistence
+
+`_assign_affinity_rank` in [src/cag/abm/environment.py](../src/cag/abm/environment.py) now caches `_affinity_score_a` and `_affinity_score_b` on every citizen (mirrors the existing in-place `political_exposure` write).
+
+New `collect_agent_attributes(nation)` in [src/cag/abm/sim.py](../src/cag/abm/sim.py) returns a per-agent DataFrame keyed on `agent_id` with `bucket`, both affinity scores, the demographic IDs that drive the persona, and the **full `get_persona()` text** (no truncation). Written as `agent_attributes.csv` to checkpoints + final.
+
+### 24.2 Phase 2 — Bucket-stratified CSVs
+
+Three pure-function builders join `agent_attributes` to the per-day signals:
+- `build_package_index_by_bucket` — per `(bucket × day)` mean / SD / N of the per-agent package index (mean of the six per-policy `pro_climate_index` values).
+- `build_opinion_shares_by_bucket` — per `(policy × bucket × day)` support / against / neutral share.
+- `build_day0_vs_dayN_shifts` — per-bucket Day-0 → Day-N shift in package index plus per-policy shifts.
+
+The Run-14 v2 "+0.667 Day-5 gap-widening" headline is now derivable from `package_index_by_bucket.csv` alone.
+
+### 24.3 Phase 3 — Bucket plots
+
+- `plot_package_index_by_bucket` (one panel per bucket, mean ± SE band)
+- `plot_opinion_shares_by_bucket` (`policy × bucket` mega-grid)
+- `plot_gap_widening` (bold package-index gap + thin per-policy gap traces)
+
+All wired through the single `save_result_plots(results, out_path)` entry point in [src/cag/abm/output.py](../src/cag/abm/output.py).
+
+### 24.4 Phase 4 — Calibration, message flow, network snapshot
+
+- `build_calibration_table` — per `(policy_id, day)` `pearson_r / spearman_rho / mae / mean_signed_bias` of LLM survey vs `ground_truth`.
+- `plot_calibration_by_policy` — per-policy GT-vs-LLM scatter with diagonal reference.
+- `build_message_flow` — joins `messages × agent_attributes` to a `(day × phase × sender_side × recipient_bucket)` aggregation. Would have flagged the `k_peers=0` waste in one glance.
+- `_safe_network_snapshot` — writes a JSON-safe `{nodes:[{id,bucket,degree}], edges:[[u,v],...]}` to `network_snapshot.json`. Defensive `isinstance(G, nx.Graph)` guard so MagicMock unit tests don't crash.
+- `plot_network_graph` — node colour by bucket, size by degree.
+
+### 24.5 Phase 5 — Survey assembled-context + agent timeline
+
+New `self.survey_assembled_context = {}` on `SurveyedCitizen` in [src/cag/abm/agent.py](../src/cag/abm/agent.py). `administer_survey()` appends `(day, ctx_str)` immediately after `assemble_context()`. Captures the **exact ~1–18 KB system prompt** each agent saw at every survey call — the diagnostic affordance that would have caught NB-31 in week one.
+
+Two new `SIM_CONFIG` keys:
+- `timeline_sample_size = 3` — number of agents to include in `agent_timeline`.
+- `timeline_sample_agent_ids = None` — auto-stratify one agent per top-3-by-size exposure bucket; ties broken by sorted `agent_id`; if fewer than 3 buckets, evenly-spaced sampling along `agent_id`.
+
+`build_agent_timeline` returns a long-format DataFrame with **9 event types** (`broadcast_received`, `broadcast_reflection`, `peer_message_received`, `peer_message_sent`, `peer_reflection`, `survey_assembled_context`, `survey_raw_response`, `survey_reasoning`, `survey_numeric`) sorted by `(agent_id, sim_step)`.
+
+Final-output only — `_CHECKPOINT_SKIP_KEYS = frozenset({"agent_timeline"})` ensures the timeline (which can be GB-scale on long runs) is not duplicated into every per-day checkpoint.
+
+### 24.6 Cross-cutting — `sim_step` instrumentation
+
+Monotonic `nation._sim_step` counter (lazy-init, restored to `max(sim_step)` across all loaded sources on resume) is incremented at every event-logging site. New `sim_step` column on `messages`, `reflections`, `survey_reasoning`, `survey_raw_response`, `survey_assembled_context`, and `daily_summaries`. The canonical sort key for any interleaved replay is now `(agent_id, sim_step)` — the schema makes zero assumption about phase count, order, or repetition.
+
+### 24.7 CLI ergonomics carried in
+
+- `k_peers=0` short-circuit in `run_peer_messaging` and `run_package_peer_messaging`: early-return when peer count is zero, skipping the ~240 wasted `generate_peer_message` LLM calls per r14-style 5-day broadcast-only run.
+- Per-day checkpointing default-on in CLI: `--checkpoint-every-day` is `argparse.BooleanOptionalAction, default=True`; `--no-checkpoint-every-day` opts out. The Python-side `run_simulation(..., checkpoint_every_day=False)` default is intentionally unchanged — interactive notebooks don't accumulate per-day artefacts unless asked.
+
+
+## 25. Network connectivity 3-layer defence (v0.7, 2026-06-22)
+
+### 25.1 Motivation
+
+v0.6 shipped with SBM `p_inter = 0.02` and ER `p = 0.05` as defaults. Empirical sweep in [scripts/estimate_connectivity_threshold.py](../scripts/estimate_connectivity_threshold.py) showed that at n=10 these are hopeless at any `p ≤ 0.15`, and at n=50 SBM needs `p_inter ≥ 0.06` for 90% connectivity. The failure mode is silent: disjoint components produce uneven cross-bucket exposure with no warning to the operator.
+
+### 25.2 New defaults
+
+Updated in [src/cag/abm/networks.py](../src/cag/abm/networks.py) and [src/cag/abm/sim.py](../src/cag/abm/sim.py):
+- SBM `p_inter` default 0.02 → **0.05** (within-to-between ratio drops from 7.5:1 to 3:1, yielding ~25% cross-cutting exposure — within the Facebook ~24% of Bakshy et al. 2015 *Science* and the Twitter 18–26% of Halberstam & Knight 2016).
+- ER `p` default 0.05 → **0.10** (above the n=50 classical threshold ln(50)/50 ≈ 0.078).
+- Watts–Strogatz, Barabási–Albert, and `homophily_weighted` defaults unchanged (always connected by construction).
+
+### 25.3 Layer 1 — Adaptive small-N bump
+
+`_adjust_network_params_for_small_n(cfg, n_agents)` is called before `nation.create_network`:
+- SBM `n < 30` → bump `p_inter` to `max(p_inter, 0.10)` and log WARNING.
+- SBM `30 ≤ n < 100` → bump to `max(p_inter, 0.06)` and log INFO.
+- ER analogues.
+- `n ≥ 100` → untouched.
+
+Layer 1 only ever raises values, never lowers — explicit higher overrides survive untouched.
+
+### 25.4 Layer 2 — Deterministic auto-repair
+
+`_auto_connect_components(nation, seed)` is called after `nation.assign_network_blocks`. If `nx.is_connected(G)` is False:
+1. Sort components by `(-len, sorted_node_ids[0])` for determinism.
+2. Seed an `np.random.default_rng(seed)` to pick endpoints.
+3. Add exactly `(k − 1)` bridging edges — one from each smaller component to the largest.
+4. Re-run `assign_network_blocks()` to refresh agent `network_neighbors`.
+5. Log a WARNING with component count, sizes, n_added, and seed.
+
+Records `nation._auto_connected_edges` (count).
+
+### 25.5 Layer 3 — Visibility log + diagnostic field
+
+`_log_network_summary(nation)` emits a single INFO line `n_nodes / n_edges / n_components / mean_degree / auto_connected_edges`. `_safe_network_diagnostics` adds a new `auto_connected_edges` field in `network_diagnostics.json`. Defensive `isinstance(G, nx.Graph)` guards on Layer 2/3 helpers so MagicMock-based unit tests pass cleanly.
+
+### 25.6 Validation
+
+NB 32 ([notebooks/32_v06_outputs_smoke.ipynb](../notebooks/32_v06_outputs_smoke.ipynb)) doubles as the live demo: at n=10, Layer 1 fires (`p_inter` 0.05 → 0.10) and Layer 2 fires (5 components → 1 with 4 bridging edges). `network_snapshot.json` and `network_diagnostics.json` both reflect the auto-repaired graph. 13 new tests in [tests/test_networks.py](../tests/test_networks.py) cover Layer 1 (`TestAdjustNetworkParamsForSmallN`, 7 tests), Layer 2 (`TestAutoConnectComponents`, 4 tests), and Layer 3 (`TestNetworkDiagnosticsAutoConnectedField`, 2 tests).
+
+
+## 26. v0.7 operational defaults (2026-06-22)
+
+| Area | v0.7 default | Notes |
+|---|---|---|
+| `__version__` across source modules | `0.7.0` (18 modules) | Retires 0.2.0 / 0.3.0 / 0.5.0 / 0.6.0 / 1.0.0 inconsistency. |
+| SBM `p_inter` | `0.05` | Bakshy 2015, Halberstam-Knight 2016 grounded. |
+| ER `p` | `0.10` | Above n=50 classical threshold. |
+| `timeline_sample_size` | `3` | Top-3-bucket stratified. |
+| `timeline_sample_agent_ids` | `None` | Auto-stratify. |
+| `--checkpoint-every-day` (CLI) | `True` (default-on) | `--no-checkpoint-every-day` opts out. |
+| `checkpoint_every_day=` (Python) | `False` (unchanged) | Interactive notebooks unaffected. |
+| Connectivity defence Layer 1 / 2 / 3 | Active | Operator-visible auto-repair on small-N or disconnected configs. |
+| Test suite baseline | **538 passed, 1 skipped** | Was 432 at end of v0.5 / start of in-progress v0.6. |
+| Saved-artefact count | **29** | Was 17. |
+
+---

@@ -1,3 +1,0 @@
-question_type,n_rows,n_respondents,mean_pred_support_score,mean_exp_support_score,mean_score_bias,mean_abs_error,mean_ordinal_accuracy
-consensus_positive,200,100,2.045,1.705,0.34,1.28,0.786666
-tradeoff_polarized,400,100,1.3925,0.4325,0.96,1.745,0.7091645

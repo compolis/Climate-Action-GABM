@@ -26,6 +26,214 @@ Notes:
 
 ---
 
+## v0.6 outputs expansion + network connectivity defence — NB 32 smoke validation
+
+**Date:** 2026-06-22
+**Result dir:** [`data/output/experiments/20260622_170436/`](../data/output/experiments/20260622_170436/)
+**Notebook:** [`notebooks/32_v06_outputs_smoke.ipynb`](../notebooks/32_v06_outputs_smoke.ipynb)
+**Test suite at write time:** 538 passed, 1 skipped (baseline before this work: 495 → +43, of which +30 from outputs expansion and +13 from the 3-layer connectivity tests)
+
+**TL;DR.** Two coordinated model-side changes shipped against `main` (commit `e5bb298`): (1) a **v0.6 outputs expansion** that takes the saved run bundle from 17 artefacts to 29, adds bucket-stratified analyses, a per-event agent timeline, full survey-prompt audit (`survey_assembled_context.csv`), end-of-run network snapshot, and a monotonic `sim_step` counter wired through every event-logging site; (2) a **3-layer network connectivity defence** with literature-grounded SBM defaults (`p_inter` 0.02 → 0.05, ratio 3:1 ≈ Bakshy 2015 cross-cutting fraction), an adaptive small-N bump, and a deterministic post-creation auto-repair pass so disjoint peer networks can no longer corrupt opinion dynamics silently. NB 32 is a deliberately tiny smoke run (10 agents × 2 alternating package-mode days, `gpt-5-mini`) whose **only purpose** is to exercise every new code path and surface every new artefact for visual inspection. Both layers fire as designed: `p_inter` is bumped from 0.05 → 0.10 because `n=10 < 30` (Layer 1), the random SBM draw produces 5 disconnected components which Layer 2 stitches together with 4 bridging edges (`auto_connected_edges=4`, final `n_connected_components=1`), and Layer 3 logs the resulting graph as `n_nodes=10, n_edges=9, n_components=1, mean_degree=1.8, auto_connected_edges=4`. Every new CSV is populated, the `sim_step` column is dense and strictly monotonic per agent across all 5 instrumented sources, the per-agent timeline reconstructs a sampled agent's full day (broadcasts received → reflections → 6-policy survey → next day), and `survey_assembled_context` differs across days for every (agent, policy) pair — the NB-31 staleness signature is impossible to miss going forward.
+
+### What changed since last commit (`e5bb298`)
+
+**Diff scope:** 10 source/test files modified, +1,549 / −56 lines; 3 new files (1 notebook, 1 test module, 1 calibration script). No `__version__` bump, no docs sweep (deferred — this is the docs sweep).
+
+#### 1. v0.6 outputs expansion (Phases 1–5)
+
+Motivation: NB-31's package-mode survey-context bug stayed hidden for two months because the assembled prompt was discarded immediately after the LLM call, and the bucket-stratified Day-N − Day-0 gap that finally surfaced it had to be hand-derived in a notebook from the existing CSVs. The outputs expansion bakes both diagnostic affordances — full prompt capture and pre-computed bucket views — into the saved bundle so future class-of-context bugs are visible from `agent_timeline.csv` alone.
+
+- **Phase 1 — agent attribute persistence ([src/cag/abm/environment.py](../src/cag/abm/environment.py), [src/cag/abm/sim.py](../src/cag/abm/sim.py)).** `_assign_affinity_rank` now caches `_affinity_score_a` and `_affinity_score_b` on each citizen (mirrors the existing in-place `political_exposure` write). New `collect_agent_attributes(nation)` returns a per-agent DataFrame keyed on `agent_id` with `political_exposure`, both affinity scores, the demographic IDs that drive the persona (`year_of_birth, gender_id, region_id, education_id, ukge2019_vote_id, brexit_vote_id`), and the full `get_persona()` string — written verbatim, no truncation. Persisted as `agent_attributes.csv` to both checkpoints and final.
+- **Phase 2 — bucket-stratified derived CSVs ([src/cag/abm/sim.py](../src/cag/abm/sim.py)).** Three pure-function builders that take `results` and join `agent_attributes`: `build_package_index_by_bucket` (cols: `day, political_exposure, n_agents, mean, std, q25, q50, q75`), `build_opinion_shares_by_bucket` (cols: `policy_id, day, political_exposure, n_agents, n_support, n_neutral, n_against, support_pct, neutral_pct, against_pct`), and `build_day0_vs_dayN_shifts` (cols: `agent_id, policy_id, political_exposure, day0_numeric, dayN_numeric, signed_shift, abs_shift`). The "12.6× gap-widening" headline from Run-14 v2 is now derivable from `package_index_by_bucket.csv` alone with no notebook scaffolding.
+- **Phase 3 — bucket plots ([src/cag/abm/sim.py](../src/cag/abm/sim.py)).** `plot_package_index_by_bucket` (one panel per bucket), `plot_opinion_shares_by_bucket` (`policy × bucket` mega-grid), and `plot_gap_widening` (single panel: bold package-index gap + thin per-policy gap lines). Wired into `save_result_plots`.
+- **Phase 4 — calibration, message flow, network snapshot ([src/cag/abm/sim.py](../src/cag/abm/sim.py), [src/cag/abm/networks.py](../src/cag/abm/networks.py)).** `build_calibration_table(results)` computes `pearson_r / spearman_rho / mae / mean_signed_bias` per `(policy_id, day)` against `ground_truth`; `plot_calibration_by_policy` is the per-policy GT-vs-LLM scatter with ρ in the title. `build_message_flow(results)` joins `messages × agent_attributes` to a `(day × phase × sender_side × recipient_bucket)` aggregation with `n_messages` and `mean_chars` — would have flagged the `k_peers=0` waste in one glance. `_safe_network_snapshot(nation)` writes a JSON-safe `{nodes:[{id,bucket,degree}], edges:[[u,v],...]}` file (sibling to `network_diagnostics.json`); `plot_network_graph` renders it with `nx.draw_spring`, node colour by bucket, size by degree.
+- **Phase 5 — assembled survey context + agent timeline ([src/cag/abm/agent.py](../src/cag/abm/agent.py), [src/cag/abm/sim.py](../src/cag/abm/sim.py)).** New `self.survey_assembled_context = {}` on `SurveyedCitizen` (next to `survey_reasoning` / `survey_raw_response`); `administer_survey()` appends `(day, ctx_str)` immediately after `assemble_context()`. Two new `SIM_CONFIG` keys: `timeline_sample_size=3` (default) and `timeline_sample_agent_ids=None` (auto-stratify one agent per top-3-by-size bucket; ties → sorted agent_id; <3 buckets → evenly-spaced agent_ids). `build_agent_timeline(results, sample_ids)` returns a long-format DataFrame (`agent_id, political_exposure, day, phase, phase_order, event_order, event_type, policy_id, counterparty_id, counterparty_role, content, metadata_json`) covering 9 event types: `broadcast_received, broadcast_reflection, peer_message_received, peer_message_sent, peer_reflection, survey_assembled_context, survey_raw_response, survey_reasoning, survey_numeric`. Written to final only (can be GB-scale on long runs) via the new `_CHECKPOINT_SKIP_KEYS = frozenset({"agent_timeline"})` mechanism.
+- **Cross-cutting — `sim_step` instrumentation ([src/cag/abm/environment.py](../src/cag/abm/environment.py), [src/cag/abm/agent.py](../src/cag/abm/agent.py), [src/cag/abm/sim.py](../src/cag/abm/sim.py)).** Monotonic `nation._sim_step` counter (lazy-init on first use, restored to `max(sim_step)` across all loaded sources on resume) incremented at every event-logging site: `message_log` appends in `environment.py`, `agent.reflections.append` calls, survey context capture, survey raw/reasoning append, `daily_summaries` setitem. `messages`, `reflections`, `survey_reasoning`, `survey_raw_response`, `survey_assembled_context`, and `daily_summaries` CSVs all gain a `sim_step` column. **Sort key for any interleaved replay is now `(agent_id, sim_step)` — schema makes zero assumption about phase count, ordering, or repetition.** Three existing tests updated to expect the new column (no regressions).
+- **Schema + write infrastructure.** `_RESULT_CSV_SCHEMAS` extended with the new entries (`survey_assembled_context`, `agent_attributes`, `agent_timeline`) plus `sim_step` cols on the existing 5. `_write_all_csvs(out_path, results, *, is_checkpoint=False)` now writes derived bucket CSVs + `network_snapshot.json` only on final; `_write_checkpoint` passes `is_checkpoint=True` so checkpoints stay lean. `_load_checkpoint` rehydrates `survey_assembled_context` and the 4 parallel `_*_steps` dicts.
+- **Test coverage.** New file [`tests/test_timeline_and_outputs.py`](../tests/test_timeline_and_outputs.py) (30 tests) covering the sim_step counter, `_safe_step`, agent_attributes collection, network_snapshot shape, timeline sampling, agent_timeline construction, all bucket builders, calibration, message_flow, the checkpoint skip-keys mechanism, and `save_results` writing `network_snapshot.json`.
+
+#### 2. Network connectivity 3-layer defence
+
+Motivation: the immediately-prior NB 32 smoke run ([`data/output/experiments/20260622_154751/`](../data/output/experiments/20260622_154751/), n=10) opened with `n_connected_components=5, largest_component_size=4` — a textbook silent failure for an opinion-dynamics study. An empirical sweep (`scripts/estimate_connectivity_threshold.py`, n ∈ {10, 20, 50, 100, 200, 500} × `p_inter` ∈ linspace(0.001, 0.15, 30), 100 trials per cell) confirmed that the old SBM default (`p_inter=0.02`) is hopeless at n=10 (0% connectivity at any p ≤ 0.15) and only ~80% reliable at n=50.
+
+- **Defaults updated ([src/cag/abm/networks.py](../src/cag/abm/networks.py), [src/cag/abm/sim.py](../src/cag/abm/sim.py)).** SBM `p_inter` 0.02 → **0.05** (drops the within-to-between ratio from 7.5:1 to 3:1, yielding ~25% cross-cutting exposure — within the Facebook ~24% of Bakshy et al. 2015 *Science* and the Twitter 18–26% of Halberstam & Knight 2016). ER default `p` 0.05 → **0.10** (n=50 connectivity threshold is `ln(50)/50 ≈ 0.078`, so 0.10 sits comfortably above it). Both builder docstrings updated with rationale and the v0.6 (2026-06-22) note. Watts–Strogatz, Barabási–Albert, and homophily_weighted are unchanged (always connected by construction or by attribute density).
+- **Layer 1 — adaptive small-N bump ([src/cag/abm/sim.py](../src/cag/abm/sim.py)).** New `_adjust_network_params_for_small_n(cfg, n_agents)` called in `run_simulation` **before** `nation.create_network`. SBM: `n < 30` → bump `p_inter` to `max(p_inter, 0.10)` and log WARNING; `30 ≤ n < 100` → bump to `max(p_inter, 0.06)` and log INFO. ER: `n < 30` → bump `p` to 0.20; `30 ≤ n < 100` → bump to 0.10. `n ≥ 100` is left alone. Helper only ever raises values, never lowers — explicit higher overrides survive untouched.
+- **Layer 2 — post-creation auto-repair ([src/cag/abm/sim.py](../src/cag/abm/sim.py)).** New `_auto_connect_components(nation, seed)` called **after** `nation.assign_network_blocks`. If `nx.is_connected(G)` is False, sorts components by `(-len, sorted_node_ids[0])` for determinism, uses `np.random.default_rng(seed)` to pick endpoints, adds exactly `(k − 1)` bridging edges from each smaller component to the largest, re-runs `nation.assign_network_blocks()` to refresh agent `network_neighbors`, and logs a WARNING with `n_components / largest_size / n_added / seed`. Records `nation._auto_connected_edges` (defaults to 0 when already-connected). Defensively guarded with `isinstance(G, nx.Graph)` so MagicMock-based unit tests don't crash.
+- **Layer 3 — visibility ([src/cag/abm/sim.py](../src/cag/abm/sim.py)).** New `_log_network_summary(nation)` emits a single INFO line `Network: n_nodes=…, n_edges=…, n_components=…, mean_degree=…, auto_connected_edges=…` after every setup. `_safe_network_diagnostics` extended (both success and exception branches) with a new `auto_connected_edges` field in `network_diagnostics.json`.
+- **Test coverage.** 13 new tests in three classes in [`tests/test_networks.py`](../tests/test_networks.py): `TestAdjustNetworkParamsForSmallN` (×7: SBM bump at n=10 / n=50 / no-op at n=200 / never lowers explicit high values / ER analogues / skips WS+BA+homophily), `TestAutoConnectComponents` (×4: repairs disjoint graph with correct `(k-1)` edge count / no-op when already connected / safe on MagicMock / deterministic under fixed seed), `TestNetworkDiagnosticsAutoConnectedField` (×2: field present and reflects repair count).
+
+#### 3. Notebook + script
+
+- New [`notebooks/32_v06_outputs_smoke.ipynb`](../notebooks/32_v06_outputs_smoke.ipynb) — canonical 10-agent × 2-day package-mode smoke whose **only purpose** is to surface every artefact added in v0.6 (file inventory, per-CSV schema preview, each new table, the agent_timeline for sampled agents, every PNG inline). Every key in `SIM_CONFIG` is enumerated explicitly with a `# default` / `# SMOKE OVERRIDE` / `# PROVIDER OVERRIDE` tag and asserted to match. Provider is `openai/gpt-5-mini` for both messaging and surveys.
+- New [`scripts/estimate_connectivity_threshold.py`](../scripts/estimate_connectivity_threshold.py) — empirical SBM connectivity sweep that produced the threshold table used to set the Layer 1 cutoffs. Writes `data/output/connectivity_analysis/connectivity_sweep.csv` and `connectivity_threshold.png`.
+
+### NB 32 design
+
+`n_citizens=10`, `days=[{phases:[P-A,P-B,C]}, {phases:[P-B,P-A,C]}]` (alternating package-mode), `k_peers_per_day=2`, `communication_mode=package`, `package_policies` = all six, `day0_anchor=ground_truth_with_rationale`, `debias=True`, `thinking=False`, `llm_temperature=0.5`, `political_message_source=offline` (`v1`), `political_exposure_mode=rule_affinity_rank` (defaults), `reach_a=reach_b=1.0`, `network_type=stochastic_block` with `p_inter=0.05` (the new default — Layer 1 promotes it to 0.10 at runtime), `timeline_sample_size=3`, `random_seed=42`, provider/model = `openai/gpt-5-mini` for messaging **and** surveys. Wall time: ~3 minutes, a handful of cents in API spend.
+
+### NB 32 results — does v0.6 work end-to-end?
+
+**File inventory** (target ≥ 17 + new 12): **31 files** (19 CSVs, 9 PNGs, 3 JSONs). `daily_summaries.csv` is non-empty in schema only — only 1–3 reflections per agent per day, so the memory-compression threshold never fired (expected for a 2-day run).
+
+**Network defence — both layers fired:**
+
+| Signal | Expected | Observed | Status |
+|---|---|---|---|
+| `cfg.p_inter` (in NB32 input) | 0.05 (new default) | 0.05 | — |
+| `config.json` top-level `p_inter` | 0.10 (Layer 1 bump, n=10 < 30) | **0.10** | ✓ Layer 1 fired |
+| `config.json` `network_params.p_inter` | 0.10 | **0.10** | ✓ |
+| `network_diagnostics.auto_connected_edges` | > 0 (n=10 SBM is fragile even at 0.10) | **4** | ✓ Layer 2 fired |
+| `network_diagnostics.n_connected_components` | 1 (after repair) | **1** | ✓ |
+| `network_diagnostics.largest_component_size` | 10 (all nodes) | **10/10** | ✓ |
+| Mean degree | small (10 nodes, 9 edges) | 1.8 | as expected |
+
+Reading the log line: the raw SBM draw at (`p_intra=0.15`, `p_inter=0.10`, n=10) produced 5 components; Layer 2 added `5 − 1 = 4` bridging edges deterministically (seed=42) to merge them into the largest. This is the **live demo case** for the defence — exactly the failure mode the pre-fix NB 32 smoke exhibited, now caught and repaired automatically without aborting the run or silently corrupting the peer graph.
+
+**v0.6 outputs — every new CSV populated:**
+
+| CSV | Rows | Cols | Meaning |
+|---|---:|---:|---|
+| `agent_attributes` | 10 | 11 | one row per active agent, both affinity scores cached |
+| `package_index_by_bucket` | 12 | 8 | 3 days × 4 buckets (A-only, B-only, both, neither) |
+| `opinion_shares_by_bucket` | 72 | 10 | 6 policies × 3 days × 4 buckets |
+| `day0_vs_dayN_shifts` | 60 | 9 | 10 agents × 6 policies |
+| `calibration` | 18 | 7 | 6 policies × 3 days |
+| `message_flow` | 16 | 6 | 2 days × 2 phases × 4 buckets |
+| `survey_assembled_context` | 120 | 5 | 10 agents × 6 policies × 2 days (Day 0 anchored, no LLM survey) |
+| `agent_timeline` | 213 | 11 | 3 sampled agents × full per-event log |
+
+**Bucket coverage in `agent_attributes`:** A-only=1, B-only=1, both=3, neither=5. All 4 affinity-rank buckets present in a 10-agent draw — Layer 2 of the recent `_safe_int` fix (committed earlier) is also indirectly confirmed (affinity scores span `[0.20, 8.85]` for A and `[1.40, 7.97]` for B, not all-zero).
+
+**`sim_step` instrumentation sanity** — strictly monotonic per agent on `agent_timeline`, zero zeros on every instrumented CSV, range spans 1–500 across the 2-day run:
+
+| CSV | n_rows | sim_step range | zeros |
+|---|---:|---|---:|
+| `messages` | 46 | [61, 311] | 0 |
+| `reflections` | 34 | [62, 320] | 0 |
+| `survey_reasoning` | 180 | [1, 499] | 0 |
+| `survey_raw_response` | 120 | [103, 500] | 0 |
+| `survey_assembled_context` | 120 | [101, 498] | 0 |
+
+**NB-31 regression check** — the whole point of `survey_assembled_context`. For a single (agent=165, policy=ClimatePolicyID(1)) pair across the two survey days: day 1 context length = 12,429 chars, day 2 = 18,669 chars; SHA hashes differ. The day-2 context contains the day-1 reflections + daily summary; if the NB-31 bug ever recurs, the lengths and hashes will be bit-identical across days for every (agent, policy) pair and a one-line `groupby` will surface it immediately.
+
+**Bucket-stratified package index** (3 days × 4 buckets, from `package_index_by_bucket.csv`):
+
+| day | A-only (n=1) | B-only (n=1) | both (n=3) | neither (n=5) |
+|---:|---:|---:|---:|---:|
+| 0 (GT anchor) | +1.83 | +0.33 | +0.44 | +0.80 |
+| 1 | +1.83 | +1.00 | +0.33 | +1.23 |
+| 2 | +1.83 | +1.00 | +0.33 | +1.13 |
+
+The cross-bucket gap-widening narrative does not appear in this run — the bucket cells are n=1/1/3/5 and the run is 2 days. Expected for a smoke test; the point is the CSV shape and content, not the science. Calibration vs ground truth: Day 0 ρ = 1.000 across all 6 policies (sanity check on the GT anchor — perfect by construction); Day 1 ρ ranges 0.80 (Carbon tax) to 0.94 (Ban petrol cars), MAE 0.2–0.6 — modest LLM drift after one day of broadcasts, as expected with the new prompt chain.
+
+**Message flow** — confirms reach asymmetry by design (`reach=1.0` symmetric): each day P-A delivers 4 broadcasts (1 to A-only + 3 to both, by exposure-bucket eligibility), P-B delivers 4 broadcasts (1 to B-only + 3 to both); phase C reaches all 4 buckets (3 / 1 / 5 / 6 messages on day 1; 2 / 1 / 3 / 9 on day 2). The `recipient_bucket` aggregation worked correctly across both rounds of `assign_network_blocks` (the second one happens inside Layer 2 after auto-repair).
+
+**Plots** — all 9 PNGs render without errors and without `None` axes:
+`opinion_trajectories`, `opinion_shares`, `package_index_trajectories`, `package_index_shares`, `package_index_by_bucket`, `opinion_shares_by_bucket`, `gap_widening`, `network_graph`, `calibration_by_policy`. `gap_widening.png` is degenerate at n=2 days but renders cleanly; `network_graph.png` shows the 10 nodes coloured by bucket with the 4 auto-added bridging edges visually distinguishable from the SBM draws (they cross block boundaries, which by definition they had to in order to merge components).
+
+### What this run does **not** do
+
+- No claim about the science. n=10 × 2 days is too small for any persuasion signature; the bucket cells are singletons in 2/4 buckets.
+- No checkpoint exercise. NB 32 calls `run_simulation(config, sn)` directly with no `checkpoint_dir`, so `checkpoint_every_day` falls through to the Python-side default of `False`. The CLI default is `True` (see [src/cag/\_\_main\_\_.py](../src/cag/__main__.py)); the two are intentionally different — interactive notebooks rarely need per-day on-disk state, batch AIRE runs always do.
+- No resume exercise. The next AIRE production run (n ≥ 50, days ≥ 5) is what tests v0.6 outputs and the connectivity defence at scale.
+
+### Status
+
+**v0.6 outputs and connectivity defence: ready for production AIRE runs.** Every new CSV/PNG/JSON populates with valid content on the smoke run, every new code path is exercised, the test suite is green at 538 / 1 skipped, and the network defence catches the exact disjoint-graph failure mode that motivated it (`auto_connected_edges=4` recorded, simulation continued, peer graph is connected).
+
+**Deferred to next session:**
+- `__version__` bump (still showing v0.5.0 across 12 modules; the v0.6 work is unbumped on disk)
+- CHANGE_LOG, Model_Design.md, Run_Output_Guide.md, USER_GUIDE.md, ROADMAP.md sweeps for v0.6
+- README v0.5 → v0.6 status bump and test-count refresh
+- Production AIRE run at n=50–100 to validate v0.6 outputs + connectivity defence under load and bucket-asymmetric persuasion under the new SBM defaults
+
+---
+
+## Run-14 v2: post-NB-31-fix split50 — first end-to-end validation
+
+**Date:** 2026-06-21
+**Result dir:** [data/output/experiments/run_6214872/20260621_034000/](../data/output/experiments/run_6214872/20260621_034000/)
+**Baseline for comparison:** [data/output/experiments/run_6202348_R14_split50_5day/20260619_192129/](../data/output/experiments/run_6202348_R14_split50_5day/20260619_192129/) (the original R14 split50, pre-fix)
+**AIRE job:** 6214872 (Qwen3-8B via vLLM on a single GPU node)
+
+**TL;DR.** First full-pipeline run after the NB-31 package-mode survey-context fix landed in `main`. Bit-identical configuration to the pre-fix R14 split50 baseline (n=50, days=5, k_peers=0, GT-anchor, debias=True, reach=(1.0,1.0), seed=42, same 50 sampled agents, same A=25 / B=25 split50 bucketing), so the only thing differing between the two runs is the fix itself. **Day-5 cross-bucket gap-widening jumps from +0.053 (pre-fix) to +0.667 (post-fix) — a 12.6× amplification that matches NB-31's surgical-replay prediction (~+0.67 on GPT-5.4-mini) within the noise.** This is the first end-to-end confirmation that the fix produces the predicted bucket-asymmetric persuasion signature in a fresh production simulation, not just in a frozen-state replay. Status: smoke validation of the fix on a small run; **not a publishable result.** The planned production run is n=100, 30 days, with reach / exposure asymmetry levers swept.
+
+### Bug fixes shipped before this run
+
+Three small follow-ups landed alongside the NB-31 context fix (full suite 495 passing, 1 skipped):
+
+1. **`k_peers=0` short-circuit in peer messaging.** `run_peer_messaging` and `run_package_peer_messaging` both used to fall through `random.sample(neighbors, 0)` for every citizen and still call `generate_peer_message` on each one before discovering the inbox was empty. The log line `48 citizens generated package messages, 0 citizens reflected` was the visible artefact: 48 LLM generations × 5 days = ~240 wasted Qwen3-8B calls per r14-style run with k_peers=0. New early-return at the top of both functions: `if k_peers == 0: log "peer messaging disabled (k_peers=0), skipping"; return zero-filled dict`. Tests added: `TestPeerMessagingKPeersZeroShortCircuits` in [tests/test_peer_messaging.py](../tests/test_peer_messaging.py) (asserts `send_chat.assert_not_called()` for both single-policy and package variants).
+2. **Per-day checkpointing now default-on.** Recent r14-family runs accidentally shipped without checkpoints because the new AIRE Quickstart sbatch invocations dropped the `--checkpoint-every-day` flag, while the earlier R14 split50 baseline ([run_6202348](../data/output/experiments/run_6202348_R14_split50_5day/checkpoints/)) had them. Promoting checkpointing to default-on (`argparse.BooleanOptionalAction, default=True`) means every run is wall-clock-kill-recoverable by default; `--no-checkpoint-every-day` opts out for throwaway smoke tests. Tests added in [tests/test_cli.py](../tests/test_cli.py) (`test_checkpoint_default_on`, `test_checkpoint_opt_out`).
+3. **Docs in sync.** [docs/AIRE_Quickstart.md](AIRE_Quickstart.md) §5 / §7 / §10.6 / §11 updated to reflect both defaults; [scripts/aire/run.sh](../scripts/aire/run.sh) inline examples updated to remove the now-redundant `--checkpoint-every-day` flag.
+
+### Design
+
+Identical configuration to [run_6202348](../data/output/experiments/run_6202348_R14_split50_5day/20260619_192129/): `n_citizens=50`, `days=5`, `k_peers_per_day=0`, `communication_mode=package`, `package_policies` = all six, `day0_anchor=ground_truth_with_rationale`, `debias=True`, `thinking=False`, `random_seed=42`, `political_exposure_mode=rule_affinity_rank`, `political_exposure_targets=split50` (= `{A-only:0.50, B-only:0.50, both:0.00, neither:0.00}`), `reach_a=reach_b=1.0`, `llm_model=Qwen/Qwen3-8B`, `llm_provider=local` (vLLM v0.8.5). YouGov seed is shared so the 50 sampled agents are the same in both runs, and `split50` is fully deterministic on the affinity-rank rule, so A=25 / B=25 bucket membership is identical agent-for-agent between pre-fix and post-fix.
+
+The only thing differing between the two runs is the code path inside `administer_survey()` and `run_end_of_day_survey()`. Pre-fix, package-mode surveys passed the per-policy id to `assemble_context()` and got an empty context view; post-fix, they pass `context_policy_id=PACKAGE_SCOPE` and get the actual reflections + daily summaries.
+
+### Bucket trajectory: pre-fix vs post-fix package index
+
+| day | PRE A-only | POST A-only | PRE B-only | POST B-only | PRE gap (A−B) | POST gap (A−B) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 (GT anchor) | +1.320 | +1.320 | −0.147 | −0.147 | +1.467 | +1.467 |
+| 1 | +1.807 | +1.980 | +0.207 | +0.160 | +1.600 | +1.820 |
+| 2 | +1.800 | +2.067 | +0.287 | +0.107 | +1.513 | +1.960 |
+| 3 | +1.820 | +2.153 | +0.220 | +0.153 | +1.600 | +2.000 |
+| 4 | +1.807 | +2.100 | +0.220 | +0.180 | +1.587 | +1.920 |
+| 5 | +1.807 | +2.140 | +0.287 | +0.007 | +1.520 | **+2.133** |
+
+Day-0 column is bit-identical by construction (GT anchor bypasses the LLM). From Day 1 onward the runs diverge.
+
+### Bucket Δ from Day-0 anchor (the persuasion signal)
+
+| day | PRE A-Δ | POST A-Δ | PRE B-Δ | POST B-Δ | PRE gap-widen | POST gap-widen |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | +0.487 | +0.660 | +0.353 | +0.307 | +0.133 | +0.353 |
+| 2 | +0.480 | +0.747 | +0.433 | +0.253 | +0.047 | +0.493 |
+| 3 | +0.500 | +0.833 | +0.367 | +0.300 | +0.133 | +0.533 |
+| 4 | +0.487 | +0.780 | +0.367 | +0.327 | +0.120 | +0.453 |
+| 5 | +0.487 | +0.820 | +0.433 | +0.153 | **+0.053** | **+0.667** |
+
+In the pre-fix run, A-only and B-only move together at roughly +0.43 to +0.50 from Day 1 onward — A drifts up slightly more than B but the cross-bucket gap-widening is in the noise (Day-5 +0.053, less than one ordinal step out of six). That is the static-context bug burying the persuasion signal: every day's survey was reading an effectively unchanging system prompt, so the broadcasts had nothing to influence at the survey step. In the post-fix run, A keeps climbing (+0.66 → +0.82 by Day 5) and B stalls then partially retreats (+0.31 → +0.15 by Day 5). Day-5 gap-widening is +0.667 — within the noise of NB-31's GPT-5.4-mini Day-2 surgical-replay prediction (~+0.67) and right at the upper end of the Qwen3-8B 4-bit MLX prediction band (NB 31: Qwen Day-2 gap +0.55).
+
+The 12.6× amplification of the gap-widening (+0.053 → +0.667) is the key number: it confirms the fix lands in production at the same magnitude as in the surgical replay, not just qualitatively.
+
+### Per-policy D0→D5 shift — where the persuasion responsiveness lives
+
+| policy | PRE A | POST A | PRE B | POST B | B-side flip |
+|---|---:|---:|---:|---:|---:|
+| ClimatePolicyID(1) Carbon Tax | +0.16 | +0.36 | +0.08 | +0.04 | small |
+| ClimatePolicyID(2) Climate Compensation | +0.76 | +1.16 | +0.68 | +0.60 | small |
+| ClimatePolicyID(3) Green Housing | +0.72 | +1.00 | +0.88 | **−0.08** | **−0.96** |
+| ClimatePolicyID(4) Ban Petrol Cars | +0.36 | +0.36 | +0.12 | **−0.20** | **−0.32** |
+| ClimatePolicyID(5) Renewable Energy | +0.52 | +0.84 | +0.60 | +0.36 | small |
+| ClimatePolicyID(6) Ban Fossil Fuels | +0.40 | +1.20 | +0.24 | **−0.60** | **−0.84** |
+
+Three of six policies have B-only flipping from positive in pre-fix to negative in post-fix: **Ban Fossil Fuels (−0.84 flip), Green Housing (−0.96 flip), Ban Petrol Cars (−0.32 flip)**. Three stay slightly positive even post-fix: **Carbon Tax (+0.04), Climate Compensation (+0.60), Renewable Energy (+0.36)** — these are the policies where Qwen3-8B's pro-climate prior dominates the anti-broadcast even when the survey context now sees the broadcast reflection. The contestable-vs-saturated partition reproduces NB 14's pattern from a year earlier: high-consensus policies show ceiling effects, contestable policies have room to move.
+
+### B-only baseline-direction caveat
+
+NB 31's surgical replay (frozen Qwen state, GPT-5.4-mini survey) had B-only averaging **−0.10 to −0.43 mean signed shift** across days 1–3. This live run has B-only averaging **+0.15 to +0.33** signed shift — same trajectory shape (rises then partially retreats) but with a positive baseline offset of about +0.4 to +0.5 across the run.
+
+Two non-exclusive explanations, both testable:
+
+1. **Quantization / serving stack drift.** NB 31 used 4-bit MLX Qwen3-8B locally; this run is full-precision Qwen3-8B via vLLM v0.8.5 on AIRE. Same family, different quantization and different inference runtime. The full-precision model's pro-climate prior is evidently a touch stronger than 4-bit MLX, and the 2-step debias chain does not fully scrub it under sustained anti-broadcasts.
+2. **Surgical-replay vs full-pipeline feedback.** NB 31 was 3 days, surgical, with frozen reflections and daily summaries. This run is 5 days end-to-end, with reflections and daily summaries being re-generated each day and feeding back into the next day's context. Cumulative pro-bias compounds because Day-N's survey rationale carries Day-N pro-bias forward into Day-(N+1)'s context.
+
+The bucket-asymmetric signature still holds — Δ-gap-widening is the right quantity for the persuasion claim, and that number reproduces NB 31's prediction. But the baseline shift in B-only is something to keep an eye on: if it persists at n=100 / 30 days, the framing needs to be "the model is persuasion-responsive in the predicted direction, but the pro-climate prior is strong enough that B-only does not cross the neutrality line in 5 days" rather than "B-only moves anti-climate".
+
+### What this means for the planned production sweep (n=100, 30 days, asymmetry levers)
+
+- **The fix is real and lands at the predicted magnitude.** Subsequent sweeps over reach asymmetry (e.g. C1 reach=(0.5, 1.0), C3 reach=(1.0, 0.5)) and exposure presets (e.g. legacy_v05, committed_minority_*) should now produce real signal at the survey step, not the muted artefact pre-fix produced.
+- **The contestable-vs-saturated policy partition is stable.** Sweeps should report by-policy as well as by-package; pooling all six masks the persuasion signal on Ban Fossil Fuels / Green Housing / Ban Petrol Cars and dilutes it with the ceiling-bound Carbon Tax / Climate Compensation / Renewable Energy responses.
+- **Watch B-only baseline drift over 30 days.** The +0.4 to +0.5 positive offset in this 5-day run may compound or may stabilise; the 30-day run is the right horizon to see which.
+- **Checkpointing default-on means resume-from-day-N is now routine.** A 100-agent × 30-day run is well over a 10-hour wall-clock at Qwen3-8B speed; expect to use resume.
+
+---
+
+---
+
 ## NB 30 + NB 31: Package-mode survey context bug — discovery and fix
 
 **Date:** 2026-06-20

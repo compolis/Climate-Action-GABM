@@ -91,7 +91,7 @@ class TestReceivePoliticalMessage(unittest.TestCase):
             _MOCK_MESSAGE, ClimatePolicyID.CARBON_TAX, "P-A", day=1
         )
         ref = self.citizen.reflections[0]
-        self.assertEqual(set(ref.keys()), {"day", "phase", "policy_id", "text", "messages_received"})
+        self.assertEqual(set(ref.keys()), {"day", "phase", "policy_id", "text", "messages_received", "sim_step"})
 
     @patch("cag.abm.agent.send_chat", return_value=_MOCK_REFLECTION)
     def test_reflection_day_and_phase(self, mock_send):

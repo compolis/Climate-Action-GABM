@@ -1,4 +1,0 @@
-run_timestamp,calibration_level,question_id,respondent_id,error_message,total_errors_so_far,consecutive_errors_so_far
-20260306_220930,baseline,Q1,1820,Error: Gemini request failed after safeguards: Gemini returned empty response text.,1,1
-20260306_220930,soft,Q2,851,Error: Gemini request failed after safeguards: Gemini returned empty response text.,2,1
-20260306_220930,soft,Q3,851,Error: Gemini request failed after safeguards: Gemini returned empty response text.,3,1

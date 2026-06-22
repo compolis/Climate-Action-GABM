@@ -231,5 +231,179 @@ class TestEnvironmentDispatch(unittest.TestCase):
         self.assertEqual(G.number_of_nodes(), 30)
 
 
+# ── 3-layer connectivity defence (v0.6) ────────────────────────────
+
+class TestAdjustNetworkParamsForSmallN(unittest.TestCase):
+    """Layer 1: adaptive default bumps for small-N populations."""
+
+    def test_sbm_bump_for_very_small_n(self):
+        from cag.abm.sim import _adjust_network_params_for_small_n
+        cfg = {
+            "network_type": "stochastic_block",
+            "p_inter": 0.05,
+            "network_params": {"p_intra": 0.20, "p_inter": 0.05},
+        }
+        _adjust_network_params_for_small_n(cfg, n_agents=10)
+        self.assertAlmostEqual(cfg["p_inter"], 0.10)
+        self.assertAlmostEqual(cfg["network_params"]["p_inter"], 0.10)
+
+    def test_sbm_bump_for_medium_small_n(self):
+        from cag.abm.sim import _adjust_network_params_for_small_n
+        cfg = {
+            "network_type": "stochastic_block",
+            "p_inter": 0.02,
+            "network_params": {"p_intra": 0.20, "p_inter": 0.02},
+        }
+        _adjust_network_params_for_small_n(cfg, n_agents=50)
+        self.assertAlmostEqual(cfg["p_inter"], 0.06)
+        self.assertAlmostEqual(cfg["network_params"]["p_inter"], 0.06)
+
+    def test_sbm_no_bump_for_large_n(self):
+        from cag.abm.sim import _adjust_network_params_for_small_n
+        cfg = {
+            "network_type": "stochastic_block",
+            "p_inter": 0.05,
+            "network_params": {"p_intra": 0.20, "p_inter": 0.05},
+        }
+        _adjust_network_params_for_small_n(cfg, n_agents=200)
+        self.assertAlmostEqual(cfg["p_inter"], 0.05)
+        self.assertAlmostEqual(cfg["network_params"]["p_inter"], 0.05)
+
+    def test_sbm_never_lowers_explicit_high_p_inter(self):
+        from cag.abm.sim import _adjust_network_params_for_small_n
+        cfg = {
+            "network_type": "stochastic_block",
+            "p_inter": 0.25,
+            "network_params": {"p_intra": 0.20, "p_inter": 0.25},
+        }
+        _adjust_network_params_for_small_n(cfg, n_agents=10)
+        self.assertAlmostEqual(cfg["p_inter"], 0.25)
+        self.assertAlmostEqual(cfg["network_params"]["p_inter"], 0.25)
+
+    def test_er_bump_for_very_small_n(self):
+        from cag.abm.sim import _adjust_network_params_for_small_n
+        cfg = {
+            "network_type": "erdos_renyi",
+            "network_params": {"p": 0.10},
+        }
+        _adjust_network_params_for_small_n(cfg, n_agents=10)
+        self.assertAlmostEqual(cfg["network_params"]["p"], 0.20)
+
+    def test_er_bump_for_medium_small_n(self):
+        from cag.abm.sim import _adjust_network_params_for_small_n
+        cfg = {
+            "network_type": "erdos_renyi",
+            "network_params": {"p": 0.05},
+        }
+        _adjust_network_params_for_small_n(cfg, n_agents=50)
+        self.assertAlmostEqual(cfg["network_params"]["p"], 0.10)
+
+    def test_skips_watts_strogatz_and_barabasi_albert(self):
+        from cag.abm.sim import _adjust_network_params_for_small_n
+        for nt in ("watts_strogatz", "barabasi_albert", "homophily_weighted"):
+            cfg = {
+                "network_type": nt,
+                "p_inter": 0.02,
+                "network_params": {"k": 4, "m": 2},
+            }
+            snapshot = dict(cfg["network_params"])
+            _adjust_network_params_for_small_n(cfg, n_agents=10)
+            self.assertEqual(cfg["network_params"], snapshot,
+                             f"{nt} params should not be touched")
+
+
+class TestAutoConnectComponents(unittest.TestCase):
+    """Layer 2: post-creation auto-repair of disjoint graphs."""
+
+    def _make_nation_with_graph(self, G):
+        nation = MagicMock()
+        nation.network = G
+        # assign_network_blocks is called for re-population; make it a no-op
+        nation.assign_network_blocks = MagicMock()
+        # delete the auto attribute so getattr default kicks in
+        if hasattr(nation, "_auto_connected_edges"):
+            del nation._auto_connected_edges
+        return nation
+
+    def test_repairs_disjoint_graph(self):
+        from cag.abm.sim import _auto_connect_components
+        # Build a graph with 3 disconnected components.
+        G = nx.Graph()
+        G.add_edges_from([(0, 1), (1, 2), (3, 4), (5, 6), (6, 7)])
+        nation = self._make_nation_with_graph(G)
+
+        _auto_connect_components(nation, seed=42)
+
+        self.assertTrue(nx.is_connected(G))
+        # 3 components → 2 bridging edges added
+        self.assertEqual(nation._auto_connected_edges, 2)
+        nation.assign_network_blocks.assert_called_once()
+
+    def test_noop_when_already_connected(self):
+        from cag.abm.sim import _auto_connect_components
+        G = nx.path_graph(6)
+        nation = self._make_nation_with_graph(G)
+
+        _auto_connect_components(nation, seed=42)
+
+        self.assertEqual(nation._auto_connected_edges, 0)
+        self.assertEqual(G.number_of_edges(), 5)
+        nation.assign_network_blocks.assert_not_called()
+
+    def test_safe_when_network_is_not_a_graph(self):
+        """MagicMock nations in unit tests should not crash."""
+        from cag.abm.sim import _auto_connect_components
+        nation = MagicMock()  # network attribute is itself a MagicMock
+        _auto_connect_components(nation, seed=42)
+        self.assertEqual(nation._auto_connected_edges, 0)
+
+    def test_deterministic_under_seed(self):
+        from cag.abm.sim import _auto_connect_components
+
+        def fresh_graph():
+            G = nx.Graph()
+            G.add_edges_from([(0, 1), (2, 3), (4, 5), (6, 7)])
+            return G
+
+        n1 = self._make_nation_with_graph(fresh_graph())
+        n2 = self._make_nation_with_graph(fresh_graph())
+        _auto_connect_components(n1, seed=123)
+        _auto_connect_components(n2, seed=123)
+        self.assertEqual(sorted(n1.network.edges()),
+                         sorted(n2.network.edges()))
+
+
+class TestNetworkDiagnosticsAutoConnectedField(unittest.TestCase):
+    """Layer 3: ``auto_connected_edges`` is surfaced in network_diagnostics."""
+
+    def test_field_present_on_normal_run(self):
+        from cag.abm.sim import _safe_network_diagnostics
+
+        nation = MagicMock()
+        nation.network = nx.path_graph(8)
+        nation.agents_active = {}
+        nation._auto_connected_edges = 0
+        nation.network_type = "stochastic_block"
+        nation.network_params = {"p_intra": 0.2, "p_inter": 0.05}
+
+        diag = _safe_network_diagnostics(nation, config={})
+        self.assertIsNotNone(diag)
+        self.assertIn("auto_connected_edges", diag)
+        self.assertEqual(diag["auto_connected_edges"], 0)
+
+    def test_field_reflects_repair_count(self):
+        from cag.abm.sim import _safe_network_diagnostics
+
+        nation = MagicMock()
+        nation.network = nx.path_graph(8)
+        nation.agents_active = {}
+        nation._auto_connected_edges = 3
+        nation.network_type = "stochastic_block"
+        nation.network_params = {"p_intra": 0.2, "p_inter": 0.05}
+
+        diag = _safe_network_diagnostics(nation, config={})
+        self.assertEqual(diag["auto_connected_edges"], 3)
+
+
 if __name__ == "__main__":
     unittest.main()

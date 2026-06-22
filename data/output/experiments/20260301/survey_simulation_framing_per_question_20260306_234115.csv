@@ -1,7 +1,0 @@
-question_id,question_type,n_rows,n_respondents,mean_pred_support_score,mean_exp_support_score,mean_score_bias,mean_abs_error,mean_ordinal_accuracy
-Q1,consensus_positive,100,100,2.08,1.77,0.31,1.29,0.785
-Q2,tradeoff_polarized,100,100,1.26,0.53,0.73,1.73,0.711666
-Q3,tradeoff_polarized,100,100,1.23,0.27,0.96,1.82,0.696662
-Q4,consensus_positive,100,100,2.01,1.64,0.37,1.27,0.788332
-Q5,tradeoff_polarized,100,100,1.77,0.81,0.96,1.6,0.7333310000000001
-Q6,tradeoff_polarized,100,100,1.31,0.12,1.19,1.83,0.6949989999999999

@@ -5,7 +5,7 @@ from __future__ import annotations
 Agent module for Climate-Action-GABM.
 """
 __author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
-__version__ = "0.3.0"
+__version__ = "0.7.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 from datetime import date
@@ -112,6 +112,27 @@ class SurveyedCitizen():
         self.daily_summaries = {}        # {(day, policy_id): summary_text}
         self.survey_reasoning = {}       # {policy_id: [(day, reasoning_text)]}
         self.survey_raw_response = {}    # {policy_id: [(day, raw_llm_response)]}
+        # The exact context string assembled and sent to the LLM at each
+        # survey call. Captured per-policy per-day so post-hoc diagnostics
+        # can verify the prompt actually changes day-to-day (NB-31 hid for
+        # weeks because this was discarded). Same shape as survey_reasoning.
+        self.survey_assembled_context = {}  # {policy_id: [(day, ctx_text)]}
+        # Parallel monotonic sim_step trackers (positionally aligned with
+        # the lists above) so timeline output can interleave these events
+        # with broadcasts/reflections in true temporal order.
+        self._daily_summary_steps = {}        # {(day, policy_id): sim_step}
+        self._survey_reasoning_steps = {}     # {policy_id: [sim_step, ...]}
+        self._survey_raw_response_steps = {}  # {policy_id: [sim_step, ...]}
+        self._survey_assembled_context_steps = {}  # {policy_id: [sim_step, ...]}
+
+    def _sim_step(self):
+        """Return the next sim_step from the attached environment, or 0
+        when the agent is detached (tests build agents in isolation).
+        """
+        env = getattr(self, "environment", None)
+        if env is None or not hasattr(env, "_next_sim_step"):
+            return 0
+        return env._next_sim_step()
 
     def __str__(self):
         """
@@ -334,6 +355,7 @@ class SurveyedCitizen():
         reflection_texts = "\n".join(f"- {r['text']}" for r in day_reflections)
         summary = self.compress_memories(reflection_texts, api_key=api_key, model=model, provider=provider, temperature=temperature)
         self.daily_summaries[(day, policy_id)] = summary
+        self._daily_summary_steps[(day, policy_id)] = self._sim_step()
         return summary
 
     def manage_memory(self, day, policy_id, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
@@ -371,6 +393,13 @@ class SurveyedCitizen():
         # reflections/summaries survive assemble_context()'s per-policy filter.
         ctx_policy = policy_id if context_policy_id is None else context_policy_id
         system_prompt = self.get_system_prompt(day=day, policy_id=ctx_policy)
+        # Capture the exact assembled context the LLM will see for this
+        # survey call. Diagnostic ground truth for context-staleness bugs.
+        if policy_id not in self.survey_assembled_context:
+            self.survey_assembled_context[policy_id] = []
+            self._survey_assembled_context_steps[policy_id] = []
+        self.survey_assembled_context[policy_id].append((day, system_prompt))
+        self._survey_assembled_context_steps[policy_id].append(self._sim_step())
 
         if debias:
             # Step 1: Elicit reasoning with anti-sycophancy preamble
@@ -387,7 +416,9 @@ class SurveyedCitizen():
             # Store reasoning for post-hoc analysis (not fed back into agent context)
             if policy_id not in self.survey_reasoning:
                 self.survey_reasoning[policy_id] = []
+                self._survey_reasoning_steps[policy_id] = []
             self.survey_reasoning[policy_id].append((day, reasoning))
+            self._survey_reasoning_steps[policy_id].append(self._sim_step())
 
             # Step 2: Get answer with reasoning appended to system prompt
             response_options = "\n".join(
@@ -412,7 +443,9 @@ class SurveyedCitizen():
         # Store raw Step-2 (or single-call) text for post-hoc parser audit.
         if policy_id not in self.survey_raw_response:
             self.survey_raw_response[policy_id] = []
+            self._survey_raw_response_steps[policy_id] = []
         self.survey_raw_response[policy_id].append((day, llm_response))
+        self._survey_raw_response_steps[policy_id].append(self._sim_step())
 
         letter_response = parse_letter_response(llm_response)
         opinion_value = RESPONSE_SCALE.get(letter_response)
@@ -453,6 +486,7 @@ class SurveyedCitizen():
             "policy_id": policy_id,
             "text": reflection_text,
             "messages_received": [message],
+            "sim_step": self._sim_step(),
         })
         return reflection_text
 
@@ -497,6 +531,7 @@ class SurveyedCitizen():
             "policy_id": policy_id,
             "text": reflection_text,
             "messages_received": list(messages),
+            "sim_step": self._sim_step(),
         })
         return reflection_text
 
@@ -552,7 +587,9 @@ class SurveyedCitizen():
         )
         if policy_id not in self.survey_reasoning:
             self.survey_reasoning[policy_id] = []
+            self._survey_reasoning_steps[policy_id] = []
         self.survey_reasoning[policy_id].append((day, rationale))
+        self._survey_reasoning_steps[policy_id].append(self._sim_step())
         return gt_value, rationale
 
     def receive_package_political_message(self, message, policy_ids, phase, day,
@@ -582,6 +619,7 @@ class SurveyedCitizen():
             "policy_ids": list(policy_ids),
             "text": reflection_text,
             "messages_received": [message],
+            "sim_step": self._sim_step(),
         })
         return reflection_text
 
@@ -632,6 +670,7 @@ class SurveyedCitizen():
             "policy_ids": list(policy_ids),
             "text": reflection_text,
             "messages_received": list(messages),
+            "sim_step": self._sim_step(),
         })
         return reflection_text
 

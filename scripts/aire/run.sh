@@ -40,11 +40,10 @@
 #   sbatch --job-name=LLM-cag-neither scripts/aire/run.sh \
 #       --preset r14_canonical --exposure-targets neither
 #
-#   # 5. Reach-asymmetry experiment + per-day checkpointing:
+#   # 5. Reach-asymmetry experiment (checkpoints default-on; --no-checkpoint-every-day to opt out):
 #   sbatch --time=06:00:00 scripts/aire/run.sh \
 #       --preset r14_canonical \
-#       --exposure-targets split50 --reach-a 0.5 --reach-b 1.0 \
-#       --checkpoint-every-day
+#       --exposure-targets split50 --reach-a 0.5 --reach-b 1.0
 #
 #   # 6. Resume a killed run (same model + config, same OUTDIR):
 #   RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> \

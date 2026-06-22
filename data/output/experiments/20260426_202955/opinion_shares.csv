@@ -1,6 +1,0 @@
-policy_id,day,n_agents,n_support,support_pct,n_neutral,neutral_pct,n_against,against_pct
-ClimatePolicyID(3),0,30,14,46.666666666666664,3,10.0,13,43.333333333333336
-ClimatePolicyID(3),1,30,18,60.0,0,0.0,12,40.0
-ClimatePolicyID(3),2,30,19,63.33333333333333,0,0.0,11,36.666666666666664
-ClimatePolicyID(3),3,30,19,63.33333333333333,0,0.0,11,36.666666666666664
-ClimatePolicyID(3),4,30,21,70.0,0,0.0,9,30.0

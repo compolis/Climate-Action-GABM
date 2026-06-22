@@ -1,5 +1,0 @@
-day,index_name,package_scope,n_agents,n_support,support_pct,n_neutral,neutral_pct,n_against,against_pct
-0,ProClimatePolSupp,climate_policy_package,30,22,73.33333333333333,5,16.666666666666664,3,10.0
-1,ProClimatePolSupp,climate_policy_package,30,22,73.33333333333333,3,10.0,5,16.666666666666664
-2,ProClimatePolSupp,climate_policy_package,30,24,80.0,0,0.0,6,20.0
-3,ProClimatePolSupp,climate_policy_package,30,24,80.0,1,3.3333333333333335,5,16.666666666666664

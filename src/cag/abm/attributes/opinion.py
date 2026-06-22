@@ -6,7 +6,7 @@ numeric mapping, and opinion shift clamping function.
 """
 # Metadata
 __author__ = ["Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Andy Turner <agdturner@gmail.com>"]
-__version__ = "0.2.0"
+__version__ = "0.7.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 # Standard library imports

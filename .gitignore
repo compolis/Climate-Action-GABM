@@ -222,3 +222,11 @@ data/api_key.csv
 
 # Exclude data backup directory
 data-bac/
+
+# Repo cleanup (v0.7) — heavyweight or local-only directories
+# data/output/: experiment artefacts (regeneratable; was ~101 MB tracked)
+# paper/: paper draft (lives in sibling repo)
+# .claude/: Claude Code local agent state
+data/output/
+paper/
+.claude/

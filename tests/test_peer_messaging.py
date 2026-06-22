@@ -188,7 +188,7 @@ class TestReceivePeerMessages(unittest.TestCase):
             ["msg1"], ClimatePolicyID.CARBON_TAX, day=1
         )
         ref = self.citizen.reflections[0]
-        self.assertEqual(set(ref.keys()), {"day", "phase", "policy_id", "text", "messages_received"})
+        self.assertEqual(set(ref.keys()), {"day", "phase", "policy_id", "text", "messages_received", "sim_step"})
 
     @patch("cag.abm.agent.send_chat", return_value=_MOCK_REFLECTION)
     def test_messages_received_is_copy(self, mock_send):
@@ -377,6 +377,38 @@ class TestRunPackagePeerMessagingLogging(unittest.TestCase):
         self.assertGreater(len(self.sn.message_log), 0)
         self.assertTrue(all(row["package_scope"] == PACKAGE_SCOPE for row in self.sn.message_log))
         self.assertTrue(all(row["policy_ids"] == policy_ids for row in self.sn.message_log))
+
+
+class TestPeerMessagingKPeersZeroShortCircuits(unittest.TestCase):
+    """k_peers=0 must skip both message generation and reflection entirely."""
+
+    def setUp(self):
+        self.sn = _make_nation()
+
+    @patch("cag.abm.agent.send_chat")
+    def test_single_policy_skips_when_k_peers_zero(self, mock_send):
+        result = self.sn.run_peer_messaging(
+            ClimatePolicyID.CARBON_TAX, day=1, k_peers=0
+        )
+        self.assertEqual(result["messages_generated"], 0)
+        self.assertEqual(result["reflections_count"], 0)
+        self.assertEqual(result["sample_messages"], [])
+        self.assertEqual(result["sample_reflections"], [])
+        self.assertEqual(len(self.sn.message_log), 0)
+        mock_send.assert_not_called()
+
+    @patch("cag.abm.agent.send_chat")
+    def test_package_skips_when_k_peers_zero(self, mock_send):
+        result = self.sn.run_package_peer_messaging(
+            [ClimatePolicyID.CARBON_TAX, ClimatePolicyID.GREEN_HOUSING],
+            day=1, k_peers=0,
+        )
+        self.assertEqual(result["messages_generated"], 0)
+        self.assertEqual(result["reflections_count"], 0)
+        self.assertEqual(result["sample_messages"], [])
+        self.assertEqual(result["sample_reflections"], [])
+        self.assertEqual(len(self.sn.message_log), 0)
+        mock_send.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -44,19 +44,21 @@ Citizen agents are constructed from real **YouGov survey data** (UK, April 2024)
 
 ## Current Status
 
-**v0.6 — canonical defaults consolidation, offline political messages, and full-stack smoke documentation.**
+**v0.7 — HPC-first infrastructure, audit-trail outputs (17 → 29 saved artefacts), network connectivity defence, NB-31 package-mode survey-context fix.**
 
 | Metric | Value |
 |--------|-------|
-| Tests | 466 collected; 465 passing, 1 skipped |
-| Runtime extensions (v0.6) | Canonical SIM defaults now align with research runs (`n_citizens=100`, package-mode alternating phases, local Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`); offline political-message source is first-class with strict startup validation and message-level provenance (`political_message_id`) |
-| Notebooks | 29 (01–29) |
-| Source files | 23 under `src/cag/` |
+| Tests | 539 collected; 538 passing, 1 skipped |
+| Runtime extensions (v0.7) | AIRE / SLURM thin sbatch launchers + sweep submitter ([scripts/aire/](scripts/aire/)) and preset-bundle CLI composition ([src/cag/presets.py](src/cag/presets.py), [src/cag/\_\_main\_\_.py](src/cag/__main__.py)); package-mode survey-context fix (NB-31; 12.6× Run-14 v2 amplification); outputs expansion (bucket-stratified CSVs, calibration table, message flow, network snapshot, per-agent timeline with 9 event types, full survey-prompt audit, monotonic `sim_step` counter); 3-layer network connectivity defence (literature-grounded SBM `p_inter=0.05`, adaptive small-N bump, deterministic auto-repair, visibility log); `k_peers=0` short-circuit; per-day checkpointing CLI default-on; `__version__` bulk-bumped to 0.7.0 across 18 modules |
+| Runtime extensions (v0.6, rolled into v0.7) | Canonical SIM defaults align with research runs (`n_citizens=100`, package-mode alternating phases, local Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`); offline political-message source first-class with strict startup validation and message-level provenance (`political_message_id`) |
+| Notebooks | 32 (01–32) |
+| Source files | 24 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
 See [docs/Model_Design.md](docs/Model_Design.md) for the design specification.
 See [docs/result_report.md](docs/result_report.md) for experiment results and analysis.
 See [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) for canonical configuration options (supervisor brief + developer matrix).
+See [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) for the v0.7 HPC walkthrough.
 
 
 ## Architecture

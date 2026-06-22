@@ -1,7 +1,0 @@
-run_timestamp,question_id,question_text,num_respondents,average_ordinal_accuracy_score
-20260301_210105,Q1,"Please say how much you support or oppose government policies that do the following: Accelerate the roll-out of renewable energy production, (e.g. more offshore and onshore wind parks)",5,0.7
-20260301_210105,Q2,Please say how much you support or oppose government policies that do the following: Ban new oil/gas/coal licenses,5,0.8
-20260301_210105,Q3,Please say how much you support or oppose government policies that do the following: Ban the sale of new petrol cars by no later than 2030,5,0.8333
-20260301_210105,Q4,"Please say how much you support or oppose government policies that do the following: Mandate that all new housing developments should have non-fossil fuel heating systems, roof-top solar panels, high-level of insulation",5,0.8
-20260301_210105,Q5,Please say how much you support or oppose government policies that do the following: Impose a carbon tax on fossil fuel sale and distribute the tax revenues to the public (i.e. carbon fee and dividend),5,0.5667
-20260301_210105,Q6,"Please say how much you support or oppose government policies that do the following: Compensate people in other countries, who are impacted by climate change",5,0.8

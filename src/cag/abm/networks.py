@@ -98,13 +98,18 @@ def _build_stochastic_block(
     """Two-block SBM driven by ``political_exposure``.
 
     Parameters: ``p_intra`` (float, default 0.15),
-    ``p_inter`` (float, default 0.02).
+    ``p_inter`` (float, default 0.05).
 
     A-only -> block 0, B-only -> block 1, both/neither swing
-    (round-robin distributed). This preserves the v0.5 behaviour.
+    (round-robin distributed).
+
+    The 3:1 ratio (p_intra=0.15 / p_inter=0.05) gives ~25% cross-cutting
+    exposure, consistent with measured social-media homophily (Bakshy
+    et al. 2015 ~24% on Facebook; Halberstam & Knight 2016 ~18-26%
+    on Twitter). Default p_inter raised from 0.02 in v0.6 (2026-06-22).
     """
     p_intra = float(params.get("p_intra", 0.15))
-    p_inter = float(params.get("p_inter", 0.02))
+    p_inter = float(params.get("p_inter", 0.05))
 
     block_0, block_1, swing = [], [], []
     for citizen in agents:
@@ -132,9 +137,12 @@ def _build_erdos_renyi(
 ) -> nx.Graph:
     """Erdős–Rényi ``G(n, p)`` null model.
 
-    Parameters: ``p`` (float, default 0.05).
+    Parameters: ``p`` (float, default 0.10).
+
+    Default raised from 0.05 in v0.6 (2026-06-22) so n=50 sits well
+    above the classical connectivity threshold ln(n)/n ≈ 0.078.
     """
-    p = float(params.get("p", 0.05))
+    p = float(params.get("p", 0.10))
     if not 0.0 <= p <= 1.0:
         raise ValueError(f"erdos_renyi: p must be in [0, 1], got {p!r}.")
     G = nx.erdos_renyi_graph(len(agents), p, seed=seed)

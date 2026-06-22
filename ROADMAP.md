@@ -3,11 +3,12 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs](#06--canonical-defaults-offline-political-messages-and-full-stack-smoke-docs)
-4. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
-5. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
-6. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
-7. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
+3. [0.7 — HPC-First Infrastructure, Audit-Trail Outputs, and Network Defence](#07--hpc-first-infrastructure-audit-trail-outputs-and-network-defence)
+4. [0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs](#06--canonical-defaults-offline-political-messages-and-full-stack-smoke-docs)
+5. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
+6. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
+7. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
+8. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
 
 ## Overview
@@ -18,6 +19,45 @@ Version 0.5 was opened mid-stream rather than as a single planned sprint; this r
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
 Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
+
+
+## 0.7 — HPC-First Infrastructure, Audit-Trail Outputs, and Network Defence
+
+v0.7 is a substantial single release that subsumes the previously-internal "v0.6" label (v0.6 was never tagged on `origin`, so the public ladder becomes 0.5 → 0.7). Four headline themes: (1) production-ready HPC/AIRE infrastructure with thin sbatch launchers, preset bundles, and a sweep submitter; (2) a critical NB-31 package-mode survey-context fix that was silently burying every cross-bucket persuasion signal since v0.4; (3) a major outputs-and-instrumentation expansion taking the saved run bundle from 17 → 29 artefacts with a monotonic `sim_step` counter, per-event agent timeline, and full survey-prompt audit; (4) a 3-layer network connectivity defence with literature-grounded SBM defaults so disjoint peer networks can no longer corrupt opinion dynamics silently.
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | AIRE / HPC infrastructure — [scripts/aire/run.sh](scripts/aire/run.sh), [scripts/aire/sweep.sh](scripts/aire/sweep.sh), [scripts/aire/sweeps/r14_v2.txt](scripts/aire/sweeps/r14_v2.txt) | ✅ Done |
+| 2 | Preset bundles in new [src/cag/presets.py](src/cag/presets.py) (`smoke`, `r14_canonical`) with CLI composition layer | ✅ Done |
+| 3 | New [docs/AIRE_HPC_repo_primer.md](docs/AIRE_HPC_repo_primer.md) and [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) | ✅ Done |
+| 4 | [src/cag/\_\_main\_\_.py](src/cag/__main__.py) full argparse coverage for every `SIM_CONFIG` knob; `--preset`, `--list-presets`, `--dry-run` | ✅ Done |
+| 5 | NB-31 package-mode survey-context fix (`PACKAGE_SCOPE` plumbed through `administer_survey()` / `run_end_of_day_survey()`); Run-14 v2 measured +0.667 Day-5 gap-widening vs +0.053 pre-fix (12.6× amplification) | ✅ Done |
+| 6 | `k_peers=0` short-circuit in peer messaging; ~240 LLM calls saved per r14-style run | ✅ Done |
+| 7 | Per-day checkpointing default-on in CLI (`--checkpoint-every-day` default `True`; `--no-checkpoint-every-day` opts out) | ✅ Done |
+| 8 | Outputs expansion Phase 1 — `collect_agent_attributes` + cached `_affinity_score_a/b`; `agent_attributes.csv` to checkpoints + final | ✅ Done |
+| 9 | Outputs expansion Phase 2 — bucket-stratified CSVs (`package_index_by_bucket`, `opinion_shares_by_bucket`, `day0_vs_dayN_shifts`) | ✅ Done |
+| 10 | Outputs expansion Phase 3 — bucket plots (`plot_package_index_by_bucket`, `plot_opinion_shares_by_bucket`, `plot_gap_widening`) | ✅ Done |
+| 11 | Outputs expansion Phase 4 — `build_calibration_table` + `plot_calibration_by_policy`; `build_message_flow`; `_safe_network_snapshot` → `network_snapshot.json` + `plot_network_graph` | ✅ Done |
+| 12 | Outputs expansion Phase 5 — `survey_assembled_context` capture per (agent, day, policy); `build_agent_timeline` long-format with 9 event types and stratified sampling; final-output only via `_CHECKPOINT_SKIP_KEYS` | ✅ Done |
+| 13 | Monotonic `nation._sim_step` counter wired through every event-logging site; `sim_step` column on 5 existing CSVs | ✅ Done |
+| 14 | Network connectivity 3-layer defence — Layer 1 adaptive small-N bump, Layer 2 deterministic auto-repair, Layer 3 visibility log + `auto_connected_edges` field in `network_diagnostics.json` | ✅ Done |
+| 15 | New SBM `p_inter` default 0.02 → 0.05 (Bakshy/Halberstam-Knight ~25% cross-cutting); ER `p` default 0.05 → 0.10 | ✅ Done |
+| 16 | Empirical connectivity sweep in [scripts/estimate_connectivity_threshold.py](scripts/estimate_connectivity_threshold.py) | ✅ Done |
+| 17 | Three new notebooks — [NB 30](notebooks/30_surgical_survey_replay.ipynb) (surgical replay), [NB 31](notebooks/31_package_mode_fix_validation.ipynb) (fix validation), [NB 32](notebooks/32_v06_outputs_smoke.ipynb) (outputs smoke) | ✅ Done |
+| 18 | Test suite — new [tests/test_timeline_and_outputs.py](tests/test_timeline_and_outputs.py) (30); +13 connectivity tests in [tests/test_networks.py](tests/test_networks.py); `k_peers=0` + CLI-checkpoint tests; suite at **538 / 1 skipped** (was 432) | ✅ Done |
+| 19 | `__version__` bulk-bumped to 0.7.0 across 18 source modules; retires the 0.2.0 / 0.3.0 / 0.5.0 / 0.6.0 / 1.0.0 inconsistency | ✅ Done |
+| 20 | Docs sweep — `CHANGE_LOG.md` [0.7], `ROADMAP.md` 0.7, `DEVELOPMENT_HISTORY.md`, `Model_Design.md` §22–§26, `USER_GUIDE.md` v0.7 + HPC pointer, `README.md` status bump | ✅ Done |
+
+**Current integration suite context:** 538 passed, 1 skipped.
+
+### v0.7 carry-forward backlog (toward 1.0)
+
+- Deep rewrite of [docs/Run_Output_Guide.md](docs/Run_Output_Guide.md) and [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) to cover the 12 new outputs and 2 new SIM_CONFIG keys (`timeline_sample_size`, `timeline_sample_agent_ids`)
+- Condition B 1P-debias bias re-measurement (NB 13 partial rerun, ~120 API calls) — carried from v0.5/v0.6
+- 30–50-agent Qwen3 rerun for per-agent Spearman ρ stability — carried from v0.5/v0.6
+- Async/parallel dispatch implementation from [docs/Model_Design.md](docs/Model_Design.md) §16
+- Package-message v2 authoring (replace concatenated placeholders with bespoke package-level copy) — carried from v0.6
+- Production AIRE run at n=50–100 to validate v0.7 outputs + connectivity defence under load and bucket-asymmetric persuasion under the new SBM defaults
 
 
 ## 0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs
@@ -186,5 +226,8 @@ Issues 1, 2  (independent)
 - Calibration against longitudinal survey panel data
 - Parallelisation of agent-local LLM calls
 - Additional LLM providers and model comparisons
-- **Local LLM provider (v0.5, ✅ landed)** — `provider="local"` for any OpenAI-compatible server (mlx-lm, Ollama, vLLM, sglang, llama.cpp). First end-to-end validated with Qwen3 8B 4-bit on M1 16 GB (NB 24); integrated-provider parity confirmed in NB 25. Open work tracked in the v0.5 backlog above.
+- **Local LLM provider (v0.5, ✅ landed)** — `provider="local"` for any OpenAI-compatible server (mlx-lm, Ollama, vLLM, sglang, llama.cpp). First end-to-end validated with Qwen3 8B 4-bit on M1 16 GB (NB 24); integrated-provider parity confirmed in NB 25.
+- **HPC-first infrastructure (v0.7, ✅ landed)** — AIRE / SLURM thin sbatch launchers, sweep submitter, preset bundles, full CLI argparse coverage. End-to-end Run-14 v2 production run completed on AIRE.
+- **Audit-trail outputs (v0.7, ✅ landed)** — 29 saved artefacts (was 17) including bucket-stratified CSVs, per-agent timeline, calibration table, message flow, network snapshot, and full survey-prompt audit. Catalogues every event with monotonic `sim_step`. Open work: deep rewrites of [docs/Run_Output_Guide.md](docs/Run_Output_Guide.md) / [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) tracked in v0.7 carry-forward.
+- **Network connectivity defence (v0.7, ✅ landed)** — 3-layer adaptive bump / auto-repair / visibility log; literature-grounded SBM `p_inter=0.05` (Bakshy 2015, Halberstam-Knight 2016).
 - Publication-ready analysis and visualisation pipeline
