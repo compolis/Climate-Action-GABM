@@ -63,6 +63,8 @@ ssh <your-username>@<aire-login-host>
 
 Do these steps once per AIRE account. If you re-clone the repo, you only need to repeat §3.4 (clone) and possibly §3.5 (env), not the rest.
 
+> **⚠ Every new login shell needs `module load miniforge`.** AIRE does **not** auto-load conda — in a fresh shell `conda activate cag` will give you `conda: command not found` until you load the module. The same goes for `module add apptainer` if you ever re-pull the SIF. If you want it automatic, append `module load miniforge` to `~/.bashrc`.
+
 ### 3.1 Move to your home directory
 
 ```bash
@@ -124,6 +126,17 @@ git clone git@github.com:ajaymanivannan/Climate-Action-GABM.git
 cd Climate-Action-GABM
 ```
 
+> **If your AIRE key isn't the default `~/.ssh/id_ed25519`** (e.g. you keep a dedicated `~/.ssh/aire_repo`), the bare `git clone git@...` form won't pick it up. Use:
+>
+> ```bash
+> git clone -c core.sshCommand="ssh -i ~/.ssh/aire_repo -o IdentitiesOnly=yes" \
+>     git@github.com:ajaymanivannan/Climate-Action-GABM.git
+> cd Climate-Action-GABM
+> git config core.sshCommand "ssh -i ~/.ssh/aire_repo -o IdentitiesOnly=yes"
+> ```
+>
+> The first command clones with the right key; the second persists it in `.git/config` so future `git pull`/`fetch` use the same key without flag soup. `IdentitiesOnly=yes` stops ssh from trying every other key in your agent first (which can trigger `Permission denied` on accounts with multiple GitHub identities).
+
 ### 3.4 Build the conda environment
 
 ```bash
@@ -135,28 +148,35 @@ This creates a conda env named `cag` with every Python dependency. First-time bu
 
 ### 3.5 Hugging Face token
 
-`scripts/aire/run.sh` reads `HF_TOKEN` from either an environment variable **or** the file `~/.cache/huggingface/token`. Either approach works; the persistent file is more convenient.
+`scripts/aire/run.sh` reads `HF_TOKEN` from either an environment variable **or** the file `~/.cache/huggingface/token`. The persistent file is recommended — it survives across all future logins and never lands in shell history or environment-variable dumps.
 
-Option A — let `huggingface-cli` write the file for you:
+Grab a **read** token at <https://huggingface.co/settings/tokens> first. Fine-grained `Read` is sufficient. While you're signed in, also accept the model licence at <https://huggingface.co/Qwen/Qwen3-8B> — otherwise the first sbatch will 401 on download even with a valid token.
 
-```bash
-conda activate cag
-huggingface-cli login
-# Paste your token when prompted. It is saved to ~/.cache/huggingface/token.
-```
-
-Option B — export it in your shell profile (so every login has it):
+**Recommended — write the token file directly** (no extra dependency, no shell-history leak):
 
 ```bash
-echo 'export HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxx' >> ~/.bashrc
-source ~/.bashrc
+mkdir -p ~/.cache/huggingface && \
+    read -rsp 'Paste HF token: ' HF_TOKEN_VAL && \
+    printf '%s' "$HF_TOKEN_VAL" > ~/.cache/huggingface/token && \
+    chmod 600 ~/.cache/huggingface/token && \
+    unset HF_TOKEN_VAL && echo
 ```
 
-Verify with:
+`read -rsp` reads silently (your token is not echoed and not stored in `~/.bash_history`); `printf '%s'` writes the token with no trailing newline; `chmod 600` locks it to your user only; `unset` clears it from the shell.
+
+**Verify the file exists, and inspect what you actually wrote:**
 
 ```bash
-[[ -n "${HF_TOKEN:-}" ]] || [[ -r ~/.cache/huggingface/token ]] && echo "HF token reachable" || echo "no token"
+[[ -r ~/.cache/huggingface/token ]] && echo OK || echo MISSING
+wc -c ~/.cache/huggingface/token   # ~37 bytes for a fresh HF token; ~74 = you double-pasted
+cat ~/.cache/huggingface/token; echo   # look at it; the file is chmod 600 so only you can read it
 ```
+
+If the byte count or contents look wrong, just rerun the write command — it overwrites cleanly.
+
+> **Alternative — environment variable.** `echo 'export HF_TOKEN=hf_...' >> ~/.bashrc && source ~/.bashrc`. Works, but the token now sits plaintext in your dotfile and any subprocess can see it via `env`. Prefer the file form above.
+>
+> **Alternative — `huggingface-cli login`.** Writes the same file. Requires installing `huggingface_hub` (`pip install huggingface_hub` inside the `cag` env). Skip it unless you want the CLI for other reasons — the sim itself doesn't need it.
 
 ### 3.6 Pull the vLLM container
 
@@ -178,8 +198,11 @@ You'll get `vllm-openai-v0.8.5.sif` (~6 GB) in `$HOME`. The script finds it ther
 
 Before submitting a job (which queues for a GPU), confirm the env is healthy. These two commands run on the login node, take milliseconds, and burn zero compute budget.
 
+> **Fresh login?** `module load miniforge` first, otherwise `conda activate` will report `conda: command not found`. See the box at the top of §3.
+
 ```bash
 cd ~/Climate-Action-GABM
+module load miniforge
 conda activate cag
 PYTHONPATH=src python -m cag --list-presets
 ```
@@ -231,6 +254,8 @@ Submitted batch job 12345
 
 Wall-clock estimate: **~5–15 minutes**. The first time you run any sbatch, vLLM also has to download the model weights (a few GB), which can extend the first job by 10–20 min.
 
+**Which model does the smoke run use?** The `smoke` preset does **not** pin a model — it's a pure run-shape bundle. On AIRE, `scripts/aire/run.sh` hardcodes `--model "$HF_MODEL"`, and `HF_MODEL` defaults to `Qwen/Qwen3-8B` (served by vLLM inside the SIF). To test a different model, prefix the sbatch line: `HF_MODEL=other/model sbatch scripts/aire/run.sh --preset smoke`.
+
 What the command does:
 
 - `scripts/aire/run.sh` is a thin Slurm script. It boots a vLLM server on this node, waits until `http://localhost:8000/v1/models` answers, then runs `python -m cag --provider local --base-url ... --outdir $SCRATCH/cag/runs/run_<jobid> <your flags>`. The trailing `--preset smoke` is forwarded verbatim.
@@ -261,16 +286,15 @@ Translation of every part of that command:
 
 Wall-clock estimate: **~30–60 minutes** depending on prompt yield with Qwen3-8B.
 
-If you want extra headroom and per-day checkpointing (so a wall-clock kill leaves you with the last completed day):
+Per-day checkpointing is **on by default** — every run writes `<outdir>/checkpoints/` after each completed day, so a wall-clock kill always leaves the most recent completed day on disk and you can `--resume` it (see §11). If you want extra headroom for a longer run:
 
 ```bash
 sbatch --time=06:00:00 scripts/aire/run.sh \
     --preset r14_canonical \
-    --exposure-targets split50 \
-    --checkpoint-every-day
+    --exposure-targets split50
 ```
 
-`--time` is an `sbatch` flag — it overrides the `#SBATCH --time` header inside the script. Any Slurm directive is overridable this way (`--mem=120G`, `--cpus-per-task=16`, ...).
+`--time` is an `sbatch` flag — it overrides the `#SBATCH --time` header inside the script. Any Slurm directive is overridable this way (`--mem=120G`, `--cpus-per-task=16`, ...). Pass `--no-checkpoint-every-day` to the Python CLI if you want to skip checkpoints for a throwaway smoke test.
 
 **Next:** while it runs, read §7 so you know what to look for when it finishes.
 
@@ -300,7 +324,7 @@ run_<jobid>/
 ├── package_index_trajectories.png   # plot
 ├── opinion_shares.png               # plot
 ├── package_index_shares.png         # plot
-└── checkpoints/                     # only if --checkpoint-every-day was set
+└── checkpoints/                     # always (default-on); use --no-checkpoint-every-day to suppress
     └── checkpoint_meta.json + per-day CSV dumps
 ```
 
@@ -317,11 +341,13 @@ What to check first when a run finishes:
 
 ## 8. Pull results back to your laptop
 
-**(on your laptop)** Use `rsync` over SSH. The filter pulls CSVs / PNGs / JSON / logs and skips anything else (so the multi-gigabyte vLLM log doesn't come along):
+> **⚠ Run this on your laptop, NOT inside the AIRE ssh session.** The destination path (`~/cag_results/...`) lives on your laptop. If you run `rsync` while still ssh'd into AIRE you'll get `mkdir failed: No such file or directory` because that path doesn't exist on the login node. Either `exit` the AIRE shell first, or open a fresh terminal on your laptop.
+
+`rsync` over SSH. The filter pulls CSVs / PNGs / JSON / logs and skips anything else.
 
 ```bash
-LOCAL_DIR=~/cag_results/run_12345     # whatever you want locally
-REMOTE_DIR=<your-username>@<aire-login-host>:$SCRATCH/cag/runs/run_12345
+LOCAL_DIR=~/cag_results/run_12345                          # on your laptop
+REMOTE_DIR=<user>@<aire-login-host>:/mnt/scratch/<user>/cag/runs/run_12345
 
 mkdir -p "$LOCAL_DIR"
 rsync -avh \
@@ -331,9 +357,43 @@ rsync -avh \
     "$REMOTE_DIR"/ "$LOCAL_DIR"/
 ```
 
-The trailing slash on `$REMOTE_DIR/` copies the *contents* of the run dir into `$LOCAL_DIR`; drop it to nest the run dir inside instead.
+Notes:
 
-If you do want the vLLM server log too (for debugging), it's already covered by `*.log`. To exclude it explicitly, add `--exclude='vllm_server.log'`.
+- **Use the literal `/mnt/scratch/<user>/...` path, not `$SCRATCH`.** `$SCRATCH` only expands on AIRE; from your laptop it's an empty string and rsync silently picks the wrong source.
+- **`mkdir -p` first.** rsync creates the leaf directory but not its parents, so `~/cag_results/` must exist before the transfer or you'll get `mkdir failed`.
+- **Trailing slash on `$REMOTE_DIR/`** copies the *contents* of the run dir into `$LOCAL_DIR`; drop it to nest the run dir inside instead.
+- **Want the vLLM server log too?** It's already covered by `*.log`. To skip it explicitly, add `--exclude='vllm_server.log'`.
+- **Off-campus / Duo MFA:** rsync over SSH triggers the same Duo two-factor prompt your interactive `ssh` does. You'll get an `SMS` / `Enter passcode` prompt mid-command; respond once and rsync proceeds. On-campus and VPN'd users skip this. See the `ControlMaster` tip below for skipping the Duo prompt on repeat connections.
+
+**Shortcut — SSH config alias (Leeds AIRE goes through the `rash` bastion).** Put this once in `~/.ssh/config` on your laptop:
+
+```sshconfig
+Host rash
+    HostName rash.leeds.ac.uk
+    User <your-leeds-username>
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%r@%h:%p
+    ControlPersist 10m
+
+Host aire
+    HostName aire.leeds.ac.uk
+    User <your-leeds-username>
+    ProxyJump rash
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%r@%h:%p
+    ControlPersist 10m
+```
+
+What each line buys you:
+
+- `ProxyJump rash` — AIRE login nodes aren't directly reachable from outside Leeds; ssh hops through `rash.leeds.ac.uk` automatically. No more manual bastion shell.
+- `ControlMaster auto` + `ControlPath` + `ControlPersist 10m` — reuses one TCP connection (and one Duo authentication) for 10 min. The first `ssh aire` triggers Duo; the next `rsync aire:...` or `ssh aire` inside that window is instant.
+
+After saving the config, every command shortens to `aire:/mnt/scratch/<user>/cag/runs/run_<jobid>/`:
+
+```bash
+rsync -avh aire:/mnt/scratch/<user>/cag/runs/run_<jobid>/ ~/cag_results/run_<jobid>/
+```
 
 **Next:** open the CSVs in your notebook of choice (see `notebooks/19_full_simulation.ipynb` for the canonical analysis pattern).
 
@@ -443,22 +503,22 @@ Higher-level shape of the experiment.
 
 ### 10.6 Checkpoint / resume
 
-For long runs that risk hitting the wall-clock limit.
+Per-day checkpointing is on by default so any wall-clock kill is recoverable.
 
 | Flag | Type | Default | Use when you want to... |
 | --- | --- | --- | --- |
-| `--checkpoint-every-day` | flag | off | After each day, dump full CSV bundle to `<outdir>/checkpoints/` so a kill is recoverable |
-| `--resume` | flag | off | Pick up where a killed run left off (see §11). Implies `--checkpoint-every-day` |
+| `--checkpoint-every-day` | flag | **on** | Default. Dumps full CSV bundle to `<outdir>/checkpoints/` after every day |
+| `--no-checkpoint-every-day` | flag | — | Opt out (throwaway smoke tests; saves a small per-day I/O cost) |
+| `--resume` | flag | off | Pick up where a killed run left off (see §11). Implies checkpointing on |
 
 ### Worked examples
 
 ```bash
-# Reach-asymmetry sweep with checkpointing and a longer wall-clock:
+# Reach-asymmetry sweep with a longer wall-clock (checkpoints default-on):
 sbatch --time=06:00:00 scripts/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50 \
-    --reach-a 0.5 --reach-b 1.0 \
-    --checkpoint-every-day
+    --reach-a 0.5 --reach-b 1.0
 
 # Single-policy mode on Carbon Tax (id=5), 30 agents, smaller network:
 sbatch scripts/aire/run.sh \
@@ -484,7 +544,7 @@ sbatch scripts/aire/run.sh \
 
 ## 11. Resume a killed job
 
-If a job hits the wall-clock limit (or is cancelled, or the node dies), and you ran with `--checkpoint-every-day`, you can resume from the last completed day:
+If a job hits the wall-clock limit (or is cancelled, or the node dies), you can resume from the last completed day — checkpoints are on by default so this works for every run unless you explicitly passed `--no-checkpoint-every-day`:
 
 ```bash
 RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> sbatch scripts/aire/run.sh \
@@ -611,9 +671,10 @@ squeue --me
 tail -f $(ls -t LLM-cag-run_*.out | head -1)
 sacct -j <jobid> --format=JobID,State,Elapsed,MaxRSS,ExitCode
 
-# Pull results back (on your laptop):
-rsync -avh --include='*/' --include='*.csv' --include='*.png' --include='*.json' --include='*.log' --exclude='*' \
-    <user>@<aire-host>:$SCRATCH/cag/runs/run_<jobid>/ ~/cag_results/run_<jobid>/
+# Pull results back (on your laptop, NOT inside the AIRE ssh session):
+mkdir -p ~/cag_results/run_<jobid> && \
+    rsync -avh --include='*/' --include='*.csv' --include='*.png' --include='*.json' --include='*.log' --exclude='*' \
+    aire:/mnt/scratch/<user>/cag/runs/run_<jobid>/ ~/cag_results/run_<jobid>/
 ```
 
 When in doubt: `--dry-run` first, then commit GPU time.

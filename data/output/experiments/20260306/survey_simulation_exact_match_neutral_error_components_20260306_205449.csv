@@ -1,4 +1,0 @@
-component,count,share_of_all_errors
-expected_neutral_pred_nonneutral,109,0.4977168949771689
-expected_nonneutral_pred_neutral,18,0.0821917808219178
-all_neutral_involved_errors,127,0.5799086757990868

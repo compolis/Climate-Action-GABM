@@ -1,2 +1,0 @@
-scope,n_rows,n_respondents,bias_before,bias_after,mae_before,mae_after,rmse_before,rmse_after,mean_pred_before,mean_pred_after,mean_exp,corr_before,corr_after,mean_ordinal_after,abs_bias_before,abs_bias_after,mae_delta_after_minus_before,abs_bias_delta_after_minus_before
-overall,600,100,0.7533333333333333,5.773159728050814e-16,1.59,1.3504195367918728,2.227105745132009,1.6565320814675282,1.61,0.8566666666666675,0.8566666666666667,0.41229665575378827,0.4882012468986213,0.7763888888888889,0.7533333333333333,5.773159728050814e-16,-0.23958046320812731,-0.7533333333333327

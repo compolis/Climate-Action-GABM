@@ -304,6 +304,7 @@ class TestCollectResults(unittest.TestCase):
             sorted(df.columns.tolist()),
             sorted([
                 "agent_id",
+                "sim_step",
                 "day",
                 "phase",
                 "policy_id",

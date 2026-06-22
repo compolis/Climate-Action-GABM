@@ -51,6 +51,16 @@ class TestArgsToSimDict(TestCase):
         self.assertNotIn("llm_model", cfg)
         self.assertNotIn("debias", cfg)
 
+    def test_checkpoint_default_on(self):
+        """Per-day checkpointing must default to ON (resume-safe by default)."""
+        args = cli.parse_args(["--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2"])
+        self.assertTrue(args.checkpoint_every_day)
+
+    def test_checkpoint_opt_out(self):
+        args = cli.parse_args(["--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2",
+                               "--no-checkpoint-every-day"])
+        self.assertFalse(args.checkpoint_every_day)
+
 
 class TestBuildConfig(TestCase):
     """Preset + CLI merge precedence and days normalisation."""

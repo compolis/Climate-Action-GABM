@@ -49,7 +49,7 @@ __author__ = [
     "Ajaykumar Manivannan <ashwamanivannan@gmail.com>",
     "Charlie Pilgrim <pilgrimcharlie2@gmail.com>",
 ]
-__version__ = "0.5.0"
+__version__ = "0.7.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 import argparse
@@ -450,10 +450,11 @@ def parse_args(argv=None):
     # Checkpoint / resume.
     p.add_argument(
         "--checkpoint-every-day", dest="checkpoint_every_day",
-        action="store_true",
+        action=argparse.BooleanOptionalAction, default=True,
         help="After each day's manage_memory step, write the full CSV "
              "bundle to <outdir>/checkpoints/ so a killed job leaves "
-             "the most recent completed day on disk.",
+             "the most recent completed day on disk. Default: ON. "
+             "Use --no-checkpoint-every-day to disable.",
     )
     p.add_argument(
         "--resume", dest="resume", action="store_true",
@@ -539,13 +540,14 @@ def main(argv=None):
     logging.info("--- Climate-Action-GABM v%s ---", __version__)
     if args.preset:
         logging.info("Preset: %s", args.preset)
-    logging.info("Resolved SIM_CONFIG overrides:")
+    logging.info("Explicit overrides (preset + CLI):")
     for k in sorted(config):
         v = config[k]
         if k == "days" and isinstance(v, list):
             logging.info("  %-32s = <%d days>", k, len(v))
         else:
             logging.info("  %-32s = %r", k, v)
+    logging.info("(Fully-resolved config printed by run_simulation below.)")
     logging.info("Output directory: %s", outdir.resolve())
 
     seed = config.get("random_seed", 42)

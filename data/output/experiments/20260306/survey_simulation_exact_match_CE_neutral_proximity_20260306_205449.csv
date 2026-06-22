@@ -1,3 +1,0 @@
-expected_answer,n_rows,n_errors,error_rate,n_predicted_D,predicted_D_rate_within_expected,share_of_errors_predicted_D
-C,36,25,0.6944444444444444,2,0.05555555555555555,0.08
-E,106,12,0.11320754716981132,4,0.03773584905660377,0.3333333333333333

@@ -3,7 +3,7 @@ Environment module for Climate-Action-GABM.
 """
 # Metadata
 __author__ = ["Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Andy Turner <agdturner@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
-__version__ = "0.2.0"
+__version__ = "0.7.0"
 __copyright__ = "Copyright (c) 2026 GABM contributors, University of Leeds"
 
 # Standard library imports
@@ -539,9 +539,35 @@ class SurveyedNation(Nation):
         self.network = None
         self.political_agent_a = None
         self.political_agent_b = None
+        # Monotonic counter incremented at every logged event (message,
+        # reflection, survey context capture, survey response, daily
+        # summary). Used to interleave events from different sources in
+        # canonical temporal order without assuming a fixed phase
+        # sequence. See ``_next_sim_step``.
+        self._sim_step = 0
+
+    def _next_sim_step(self) -> int:
+        """Return the next monotonic event-order counter.
+
+        Every logged event (broadcast, reflection, survey context capture,
+        survey response, daily summary) takes one number, so sorting any
+        downstream timeline by ``sim_step`` reproduces actual execution
+        order regardless of how the daily phase plan is configured.
+
+        Lazily initialises the counter so callers that bypass ``__init__``
+        (e.g. unit tests using ``SurveyedNation.__new__``) still work.
+        """
+        self._sim_step = getattr(self, "_sim_step", 0) + 1
+        return self._sim_step
 
     def _log_message_event(self, **event):
-        """Append a structured message event to the research log."""
+        """Append a structured message event to the research log.
+
+        Auto-stamps the event with a monotonic ``sim_step`` so downstream
+        outputs can interleave it with reflections / survey events in
+        true execution order.
+        """
+        event.setdefault("sim_step", self._next_sim_step())
         self.message_log.append(event)
 
     def run_baseline(self, api_key=None, model="gpt-5-mini", provider="openai", max_agents=5, thinking=False):
@@ -791,11 +817,14 @@ class SurveyedNation(Nation):
         if n == 0:
             return
         year = getattr(self, "year", 2024)
-        # Compute scores
+        # Compute scores (cached on the citizen so they can be persisted
+        # in agent_attributes.csv for post-hoc bucket auditing).
         scored = []
         for c in citizens:
             sa = _green_affinity_score(c, year, weights)
             sb = _reform_affinity_score(c, year, weights)
+            c._affinity_score_a = sa
+            c._affinity_score_b = sb
             scored.append((c, sa, sb))
 
         # Integer counts; rounding may leave ±1 slack — absorbed by "neither".
@@ -1210,6 +1239,11 @@ class SurveyedNation(Nation):
             dict with keys "messages_generated", "reflections_count",
             "sample_messages", "sample_reflections".
         """
+        if k_peers == 0:
+            logging.info(f"[C] Day {day}: peer messaging disabled (k_peers=0), skipping.")
+            return {"messages_generated": 0, "reflections_count": 0,
+                    "sample_messages": [], "sample_reflections": []}
+
         # Step 1: Select neighbors for each citizen
         selections = {}  # citizen_id -> list of neighbor citizen objects
         for citizen in self.agents_active.values():
@@ -1281,6 +1315,11 @@ class SurveyedNation(Nation):
                                    provider="openai", temperature=0.5,
                                    thinking=False):
         """Run simultaneous peer messaging about a bundled policy package."""
+        if k_peers == 0:
+            logging.info(f"[C] Day {day}: peer messaging disabled (k_peers=0), skipping.")
+            return {"messages_generated": 0, "reflections_count": 0,
+                    "sample_messages": [], "sample_reflections": []}
+
         selections = {}
         for citizen in self.agents_active.values():
             if not citizen.network_neighbors:

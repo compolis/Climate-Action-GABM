@@ -1,7 +1,0 @@
-policy_id,n,exact,ordinal,mae,bias,spearman,llm_mean,gt_mean
-ClimatePolicyID(1),30.0,0.4,0.833,0.867,0.467,0.251,2.333,1.867
-ClimatePolicyID(2),30.0,0.433,0.8,0.933,0.133,0.613,1.2,1.067
-ClimatePolicyID(3),30.0,0.233,0.7,1.267,0.067,0.628,0.5,0.433
-ClimatePolicyID(4),30.0,0.233,0.767,1.033,0.3,0.444,1.833,1.533
-ClimatePolicyID(5),30.0,0.233,0.567,1.4,0.867,0.48,1.633,0.767
-ClimatePolicyID(6),30.0,0.2,0.567,1.667,0.6,0.464,0.7,0.1
