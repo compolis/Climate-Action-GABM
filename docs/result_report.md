@@ -24,6 +24,56 @@ Notes:
 
 ---
 
+## v0.8 — v2 memory smoke on gpt-5-mini (PRE-day0-refactor caveat)
+
+**Date:** 2026-06-23
+**Run:** [`data/output/experiments/20260623_180305/`](../data/output/experiments/20260623_180305/)
+**Model:** `gpt-5-mini` (`T=0.5`, OpenAI)
+**Config:** `n_citizens=10`, package mode, 4-day alternating `P-A`/`P-B`/`C`, `debias=True`, `day0_anchor="ground_truth_with_rationale"`, `random_seed=42`
+**Test suite at time of doc:** 556 passed, 1 skipped, 21 subtests passed
+
+### CAVEAT — predates the Day-0 anchor compression removal
+
+This run was executed **before** the v0.8 §28 / §29 work landed. It still has `day0_anchors.csv` from the deprecated `compress_day0_anchor()` step. Under v0.8 the §2 Day-0 anchor section reads *verbatim* from `survey_reasoning[target_policy_id]` and no `day0_anchors.csv` is produced. The headline polarisation signal below is still valid as a **non-regression check** that the v0.7 outputs expansion, the v0.7 network connectivity defence, the v0.8 sim.py modular split, and the wider v2 memory plumbing (six-section ordering, `policy_id` / `target_policy_id` scope split) work end-to-end on a real OpenAI model. The eventual AIRE production smoke under the *new* `survey_reasoning`-sourced §2 will confirm whether removing the compression step has any measurable effect on the cross-bucket gap-widening dynamic; the local Apple-Silicon path on this laptop is too slow to be the validation surface.
+
+### Headline result — cross-bucket polarisation
+
+| Day | A-only (n=1) | B-only (n=1) | both (n=3) | neither (n=5) | A-vs-B gap |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 1.833 | 0.333 | 0.444 | 0.800 | **1.50** |
+| 1 | 2.000 | 0.000 | 1.667 | 1.267 | 2.00 |
+| 2 | 2.167 | 0.000 | 1.667 | 1.233 | 2.17 |
+| 3 | 2.167 | 0.000 | 1.667 | 1.233 | 2.17 |
+| 4 | 2.167 | -0.333 | 1.667 | 1.167 | **2.50** |
+
+**A-vs-B gap widened from +1.50 (Day-0) to +2.50 (Day-4) — Δ = +1.00 over 4 days** (n=10, single seed, single-policy exposed bucket sample size 1 each, so this is a smoke-scale signal not a measurement; it confirms the v0.7 NB-31 fix and the v0.7 connectivity defence + v0.8 refactor compose without regression to the v0.7 cross-bucket persuasion dynamic).
+
+### Day-0 → Day-N shift distribution
+
+- mean signed shift: **+0.52**, std 1.47, range [-3, +5], n=60
+- direction: net pro-climate drift (consistent with the v0.5 1P-debias-chain prior on `gpt-5-mini`).
+
+### Calibration (final day, by policy)
+
+| Policy bin | Pearson r | MAE | Signed bias |
+|---|---:|---:|---:|
+| 6 policies (range) | 0.25 – 0.71 | 0.6 – 1.4 | mostly +0.7 – +0.9 |
+
+Pattern matches the v0.7 NB 32 baseline: LLM is more pro-climate than YouGov ground truth (signed bias positive across most policies). Per-bucket MAE under 1.0 is the v0.7 connectivity-defence-grade signal; the v2 memory refactor + sim.py modular split do not degrade it.
+
+### Network defence — confirmed firing on n=10
+
+- Layer-1 (small-N adaptive bump): `p_inter` 0.05 → 0.10.
+- Layer-2 (deterministic auto-repair): added **4 bridging edges** (component count 5 → 1).
+- Layer-3 (visibility): logged in `network_diagnostics.json` (`auto_connected_edges`).
+- Final network: 10 nodes, 9 edges, density 0.2, mean degree 1.8, **1 component**.
+
+### Why this run is the smoke surface
+
+`gpt-5-mini` at `T=0.5` and `n=10` is the smallest configuration that exercises every v0.7 + v0.8 plumbing surface (6-section memory assembly, package-scope EOD survey, network-defence triggers on small N, 22-CSV result bundle, agent timeline, network snapshot, calibration table) on a real frontier model without burning an AIRE-scale budget. It is not a production result — it is a paired regression check for the refactor work. The next AIRE production smoke will re-measure under (a) verbatim §2 Day-0 anchors, (b) n=30+ buckets with statistical power, and (c) the canonical local Qwen3-8B-4bit profile or a comparable open model.
+
+---
+
 ## v0.8 — `sim.py` modular split (refactor only, NB 32 regression-validated)
 
 **Date:** 2026-06-23

@@ -286,6 +286,8 @@ Translation of every part of that command:
 
 Wall-clock estimate: **~30–60 minutes** depending on prompt yield with Qwen3-8B.
 
+> **Important — first-time model download.** The first time you submit with a model that isn't already in the Hugging Face cache, the model download can exceed the **1500 s** vLLM-readiness wait baked into `run.sh`, and the job will fail before any LLM call. Use **`--time=06:00:00`** on that first submission (next code block). Once cached, subsequent runs warm up in < 2 min and the standard wall-clock is fine.
+
 Per-day checkpointing is **on by default** — every run writes `<outdir>/checkpoints/` after each completed day, so a wall-clock kill always leaves the most recent completed day on disk and you can `--resume` it (see §11). If you want extra headroom for a longer run:
 
 ```bash

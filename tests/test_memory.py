@@ -1,4 +1,5 @@
-"""Tests for Issue 9: tiered memory system."""
+"""Tests for the v2 tiered-memory system (assemble_context + Day-0 anchor
++ unified daily summaries + target-scoped own-reasoning + today-so-far)."""
 
 import os
 import sys
@@ -9,7 +10,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from cag.abm.agent import SurveyedCitizen, NUMERIC_TO_LETTER
-from cag.abm.attributes.opinion import ClimatePolicyID
+from cag.abm.attributes.opinion import (
+    ClimatePolicyID,
+    PACKAGE_SCOPE,
+    SURVEY_SHORT_LABELS,
+)
 
 
 # ===================================================================
@@ -47,31 +52,48 @@ class TestMemoryInit:
 
 
 # ===================================================================
-# assemble_context
+# assemble_context — v2 architecture
 # ===================================================================
 
 class TestAssembleContext:
 
-    def test_day0_has_persona_only(self):
+    def test_day0_persona_only_when_no_other_data(self):
         c = _make_citizen()
         ctx = c.assemble_context(day=0)
         assert "36 year old teacher" in ctx
         assert "reflections" not in ctx.lower()
 
+    def test_no_remember_who_you_are_trailing_line(self):
+        c = _make_citizen()
+        _add_reflections(c, day=3)
+        ctx = c.assemble_context(day=3, policy_id=ClimatePolicyID.CARBON_TAX)
+        assert "Remember who you are" not in ctx
+
     def test_day1_includes_recent_reflections(self):
         c = _make_citizen()
         _add_reflections(c, day=1)
-        ctx = c.assemble_context(day=1)
+        ctx = c.assemble_context(day=1, policy_id=ClimatePolicyID.CARBON_TAX)
         assert "Reflection 0 from day 1" in ctx
         assert "Reflection 1 from day 1" in ctx
+
+    def test_recent_reflection_bullet_has_day_prefix_and_no_phase_tag(self):
+        c = _make_citizen()
+        _add_reflections(c, day=2, n=1, phase="P-A")
+        _add_reflections(c, day=2, n=1, phase="P-B")
+        ctx = c.assemble_context(day=2, policy_id=ClimatePolicyID.CARBON_TAX)
+        # New format: "- Day {d}: {text}". No "(P-A)", "(P-B)", "(C)" tags.
+        assert "- Day 2:" in ctx
+        assert "(P-A)" not in ctx
+        assert "(P-B)" not in ctx
+        assert "(C)" not in ctx
 
     def test_day1_includes_day0_reflections_as_recent(self):
         c = _make_citizen()
         _add_reflections(c, day=0, n=1)
         _add_reflections(c, day=1, n=1)
-        ctx = c.assemble_context(day=1)
+        ctx = c.assemble_context(day=1, policy_id=ClimatePolicyID.CARBON_TAX)
         assert "from day 1" in ctx
-        assert "from day 0" in ctx  # day 0 is d-1
+        assert "from day 0" in ctx
 
     def test_daily_summaries_included_for_older_days(self):
         c = _make_citizen()
@@ -89,59 +111,201 @@ class TestAssembleContext:
         c.daily_summaries[(4, pid)] = "Should not appear as summary."
         _add_reflections(c, day=5)
         ctx = c.assemble_context(day=5, policy_id=pid)
-        # Day 4 is d-1, so it should be in recent reflections not summaries
+        # Day 4 is d-1 so it would appear in vivid reflections, not summaries.
         assert "Should not appear as summary" not in ctx
 
-    def test_day0_rationale_included(self):
+
+# ===================================================================
+# Day-0 anchor section (target-scoped)
+# ===================================================================
+
+class TestDay0AnchorSection:
+
+    def test_anchor_section_from_day0_rationale(self):
         c = _make_citizen()
         pid = ClimatePolicyID.CARBON_TAX
-        c.survey_reasoning[pid] = [(0, "I support a carbon tax because polluters should pay.")]
-        _add_reflections(c, day=2)
-        ctx = c.assemble_context(day=2, policy_id=pid)
-        assert "earlier reasoning" in ctx.lower()
-        assert "polluters should pay" in ctx
-        # The numeric self-anchor must be gone.
-        assert "opinion trajectory so far" not in ctx.lower()
-        assert "Day 0: " not in ctx
-        assert "Day 1: " not in ctx
+        c.survey_reasoning[pid] = [(0, "Polluters should pay full stop.")]
+        ctx = c.assemble_context(day=2, policy_id=pid, target_policy_id=pid)
+        assert "Original prior position on" in ctx
+        assert "Polluters should pay" in ctx
 
-    def test_day0_rationale_omitted_when_empty(self):
-        c = _make_citizen()
-        _add_reflections(c, day=2)
-        ctx = c.assemble_context(day=2)
-        assert "earlier reasoning" not in ctx.lower()
-
-    def test_day0_rationale_filtered_by_policy(self):
+    def test_anchor_target_scoped_to_target_policy(self):
         c = _make_citizen()
         pid_a = ClimatePolicyID.CARBON_TAX
         pid_b = ClimatePolicyID.RENEWABLE_ENERGY
-        c.survey_reasoning[pid_a] = [(0, "Carbon-tax rationale text.")]
-        c.survey_reasoning[pid_b] = [(0, "Renewable-energy rationale text.")]
-        _add_reflections(c, day=2, policy_id=pid_a)
-        ctx = c.assemble_context(day=2, policy_id=pid_a)
-        assert "Carbon-tax rationale text." in ctx
-        assert "Renewable-energy rationale text." not in ctx
+        c.survey_reasoning[pid_a] = [(0, "Carbon-tax Day-0 rationale.")]
+        c.survey_reasoning[pid_b] = [(0, "Renewables Day-0 rationale.")]
+        ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=pid_a)
+        assert "Carbon-tax Day-0 rationale." in ctx
+        assert "Renewables Day-0 rationale." not in ctx
 
-    def test_post_day0_rationale_not_shown(self):
+    def test_anchor_omitted_when_target_is_package_scope(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(0, "Should not appear.")]
+        ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=PACKAGE_SCOPE)
+        assert "Should not appear." not in ctx
+        assert "Original prior position on" not in ctx
+
+    def test_anchor_omitted_when_no_data(self):
+        c = _make_citizen()
+        _add_reflections(c, day=2)
+        ctx = c.assemble_context(day=2, policy_id=ClimatePolicyID.CARBON_TAX)
+        assert "Original prior position on" not in ctx
+
+
+# ===================================================================
+# Considered-position section (target-scoped own reasoning, d-1 + d)
+# ===================================================================
+
+class TestRecentOwnReasoning:
+
+    def test_target_scoped_to_target_policy(self):
+        c = _make_citizen()
+        pid_a = ClimatePolicyID.CARBON_TAX
+        pid_b = ClimatePolicyID.RENEWABLE_ENERGY
+        c.survey_reasoning[pid_a] = [(1, "Carbon-tax day-1 reasoning.")]
+        c.survey_reasoning[pid_b] = [(1, "Renewables day-1 reasoning.")]
+        ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=pid_a)
+        assert "Your considered position in recent days:" in ctx
+        assert "Carbon-tax day-1 reasoning." in ctx
+        assert "Renewables day-1 reasoning." not in ctx
+
+    def test_only_days_dm1_and_d(self):
         c = _make_citizen()
         pid = ClimatePolicyID.CARBON_TAX
         c.survey_reasoning[pid] = [
-            (0, "Day 0 anchor rationale."),
-            (3, "Day 3 later rationale."),
+            (1, "Day-1 reasoning."),
+            (3, "Day-3 reasoning."),
+            (4, "Day-4 reasoning."),
+            (5, "Day-5 reasoning."),
         ]
-        _add_reflections(c, day=4, policy_id=pid)
-        ctx = c.assemble_context(day=4, policy_id=pid)
-        assert "Day 0 anchor rationale." in ctx
-        assert "Day 3 later rationale." not in ctx
+        ctx = c.assemble_context(day=5, policy_id=PACKAGE_SCOPE, target_policy_id=pid)
+        block = ctx.split("Your considered position in recent days:")[1]
+        assert "Day-4 reasoning." in block
+        assert "Day-5 reasoning." in block
+        assert "Day-3 reasoning." not in block
+        assert "Day-1 reasoning." not in block
 
-    def test_persona_included_at_end(self):
+    def test_day0_entries_excluded(self):
         c = _make_citizen()
-        _add_reflections(c, day=3)
-        ctx = c.assemble_context(day=3)
-        # Persona reminder ("Remember who you are: ...") appears after reflections.
-        ref_pos = ctx.index("Reflection 0 from day 3")
-        reminder_pos = ctx.rindex("Remember who you are:")
-        assert reminder_pos > ref_pos
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(0, "Day-0 anchor text."), (1, "Day-1 text.")]
+        ctx = c.assemble_context(day=1, policy_id=PACKAGE_SCOPE, target_policy_id=pid)
+        block = ctx.split("Your considered position in recent days:")[1]
+        # Day-0 lives in the anchor section, not this one.
+        assert "Day-0 anchor text." not in block
+        assert "Day-1 text." in block
+
+    def test_omitted_at_day0(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(0, "Day-0 text.")]
+        ctx = c.assemble_context(day=0, policy_id=PACKAGE_SCOPE, target_policy_id=pid)
+        assert "Your considered position in recent days:" not in ctx
+
+    def test_omitted_when_target_is_package_scope(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(1, "Day-1 text.")]
+        ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=PACKAGE_SCOPE)
+        assert "Your considered position in recent days:" not in ctx
+
+
+# ===================================================================
+# Today-so-far section (package mode within-day, excludes target)
+# ===================================================================
+
+class TestTodaySoFar:
+
+    def test_fires_in_package_mode_for_other_today_answered_policies(self):
+        c = _make_citizen()
+        pid_target = ClimatePolicyID.CARBON_TAX
+        pid_other = ClimatePolicyID.RENEWABLE_ENERGY
+        c.opinion_history[pid_other] = [(0, 1), (1, 2)]
+        c.survey_reasoning[pid_other] = [(1, "Today renewables reasoning.")]
+        ctx = c.assemble_context(day=1, policy_id=PACKAGE_SCOPE, target_policy_id=pid_target)
+        assert "Your answers so far in today's survey:" in ctx
+        block = ctx.split("Your answers so far in today's survey:")[1]
+        assert SURVEY_SHORT_LABELS[pid_other] in block
+        assert "Today renewables reasoning." in block
+
+    def test_excludes_target_policy(self):
+        c = _make_citizen()
+        pid_target = ClimatePolicyID.CARBON_TAX
+        pid_other = ClimatePolicyID.RENEWABLE_ENERGY
+        c.opinion_history[pid_target] = [(1, 2)]  # target answered today (shouldn't be possible mid-flight)
+        c.opinion_history[pid_other] = [(1, 2)]
+        ctx = c.assemble_context(day=1, policy_id=PACKAGE_SCOPE, target_policy_id=pid_target)
+        block = ctx.split("Your answers so far in today's survey:")[1]
+        assert SURVEY_SHORT_LABELS[pid_target] not in block
+        assert SURVEY_SHORT_LABELS[pid_other] in block
+
+    def test_excludes_other_policies_not_answered_today(self):
+        c = _make_citizen()
+        pid_target = ClimatePolicyID.CARBON_TAX
+        pid_other = ClimatePolicyID.RENEWABLE_ENERGY
+        c.opinion_history[pid_other] = [(0, 1)]  # answered Day 0 only
+        ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=pid_target)
+        assert "Your answers so far in today's survey:" not in ctx
+
+    def test_does_not_fire_in_single_policy_mode(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.opinion_history[pid] = [(1, 1)]
+        # Single-policy mode: policy_id != PACKAGE_SCOPE → section never fires.
+        ctx = c.assemble_context(day=1, policy_id=pid, target_policy_id=pid)
+        assert "Your answers so far in today's survey:" not in ctx
+
+    def test_includes_why_clause_when_reasoning_available(self):
+        c = _make_citizen()
+        pid_target = ClimatePolicyID.CARBON_TAX
+        pid_other = ClimatePolicyID.RENEWABLE_ENERGY
+        c.opinion_history[pid_other] = [(1, 3)]
+        c.survey_reasoning[pid_other] = [(1, "Because clean energy is essential.")]
+        ctx = c.assemble_context(day=1, policy_id=PACKAGE_SCOPE, target_policy_id=pid_target)
+        assert "(Why: Because clean energy is essential.)" in ctx
+
+
+# ===================================================================
+# Section order
+# ===================================================================
+
+class TestSectionOrder:
+
+    def test_full_package_mode_section_order(self):
+        c = _make_citizen()
+        pid_target = ClimatePolicyID.CARBON_TAX
+        pid_other = ClimatePolicyID.RENEWABLE_ENERGY
+        # Day-0 anchor: verbatim from survey_reasoning at day 0.
+        # Daily summary (older than d-1).
+        c.daily_summaries[(1, PACKAGE_SCOPE)] = "Day-1 summary."
+        # Vivid reflection at d-1 = 2 and d = 3 (package-scoped so it isn't
+        # filtered out under policy_id=PACKAGE_SCOPE).
+        c.reflections.append({"day": 2, "phase": "P-A", "policy_id": PACKAGE_SCOPE,
+                              "text": "Day-2 reflection."})
+        c.reflections.append({"day": 3, "phase": "C", "policy_id": PACKAGE_SCOPE,
+                              "text": "Day-3 reflection."})
+        # Own reasoning at d=0 (anchor), d-1, d for target.
+        c.survey_reasoning[pid_target] = [(0, "Target Day-0 rationale."),
+                                           (2, "Day-2 target reasoning."),
+                                           (3, "Day-3 target reasoning.")]
+        # Today's answer for another policy.
+        c.opinion_history[pid_other] = [(3, 2)]
+        c.survey_reasoning[pid_other] = [(3, "Why renewables.")]
+
+        ctx = c.assemble_context(day=3, policy_id=PACKAGE_SCOPE, target_policy_id=pid_target)
+        headers = [
+            "Original prior position on",
+            "Summary of recent days:",
+            "Recent reflections following received messages:",
+            "Your considered position in recent days:",
+            "Your answers so far in today's survey:",
+        ]
+        positions = [ctx.find(h) for h in headers]
+        assert all(p >= 0 for p in positions), f"missing header: {positions}"
+        assert positions == sorted(positions), \
+            f"sections out of order: {dict(zip(headers, positions))}"
 
 
 # ===================================================================
@@ -165,7 +329,7 @@ class TestCompressMemories:
 
 
 # ===================================================================
-# compress_daily_memory
+# compress_daily_memory (unified: reflections + own reasoning)
 # ===================================================================
 
 class TestCompressDailyMemory:
@@ -189,7 +353,45 @@ class TestCompressDailyMemory:
         assert "Reflection 0 from day 2" in user_prompt
         assert "Reflection 1 from day 2" in user_prompt
 
-    def test_returns_empty_if_no_reflections(self):
+    @mock.patch("cag.abm.agent.send_chat", return_value="Summary.")
+    def test_package_mode_includes_all_policies_reflections(self, mock_send):
+        c = _make_citizen()
+        _add_reflections(c, day=2, n=1, policy_id=PACKAGE_SCOPE)
+        _add_reflections(c, day=2, n=1, policy_id=ClimatePolicyID.CARBON_TAX)
+        _add_reflections(c, day=2, n=1, policy_id=ClimatePolicyID.RENEWABLE_ENERGY)
+        c.compress_daily_memory(2, PACKAGE_SCOPE)
+        user_prompt = mock_send.call_args[0][1]
+        # All three day-2 reflections should be in the prompt.
+        assert user_prompt.count("Reflection 0 from day 2") == 3
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="Summary.")
+    def test_package_mode_includes_own_reasoning(self, mock_send):
+        c = _make_citizen()
+        pid_a = ClimatePolicyID.CARBON_TAX
+        pid_b = ClimatePolicyID.RENEWABLE_ENERGY
+        c.survey_reasoning[pid_a] = [(2, "Carbon-tax reasoning today.")]
+        c.survey_reasoning[pid_b] = [(2, "Renewables reasoning today.")]
+        _add_reflections(c, day=2, n=1, policy_id=PACKAGE_SCOPE)
+        c.compress_daily_memory(2, PACKAGE_SCOPE)
+        user_prompt = mock_send.call_args[0][1]
+        assert "Carbon-tax reasoning today." in user_prompt
+        assert "Renewables reasoning today." in user_prompt
+        assert "My own survey reasoning today:" in user_prompt
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="Summary.")
+    def test_single_policy_includes_own_reasoning_for_that_policy_only(self, mock_send):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        other = ClimatePolicyID.RENEWABLE_ENERGY
+        c.survey_reasoning[pid] = [(2, "Target reasoning.")]
+        c.survey_reasoning[other] = [(2, "Other policy reasoning.")]
+        _add_reflections(c, day=2, n=1, policy_id=pid)
+        c.compress_daily_memory(2, pid)
+        user_prompt = mock_send.call_args[0][1]
+        assert "Target reasoning." in user_prompt
+        assert "Other policy reasoning." not in user_prompt
+
+    def test_returns_empty_if_no_reflections_or_reasoning(self):
         c = _make_citizen()
         pid = ClimatePolicyID.CARBON_TAX
         result = c.compress_daily_memory(5, pid)
@@ -198,7 +400,7 @@ class TestCompressDailyMemory:
 
 
 # ===================================================================
-# manage_memory
+# manage_memory (now called BEFORE EOD survey)
 # ===================================================================
 
 class TestManageMemory:
@@ -239,6 +441,42 @@ class TestManageMemory:
         c.manage_memory(day=5, policy_id=pid)
         assert c.daily_summaries[(3, pid)] == "Already compressed."
         mock_send.assert_not_called()
+
+
+# ===================================================================
+# Deterministic EOD survey shuffle (sim-level)
+# ===================================================================
+
+class TestEodSurveyOrderShuffle:
+
+    def test_same_seed_same_day_same_order(self):
+        import random
+        from cag.abm.attributes.opinion import ALL_CLIMATE_POLICIES
+        policies = list(ALL_CLIMATE_POLICIES)
+        a = list(policies); random.Random(42 * 1000 + 1).shuffle(a)
+        b = list(policies); random.Random(42 * 1000 + 1).shuffle(b)
+        assert a == b
+
+    def test_different_days_different_orders(self):
+        import random
+        from cag.abm.attributes.opinion import ALL_CLIMATE_POLICIES
+        policies = list(ALL_CLIMATE_POLICIES)
+        orders = []
+        for day in range(1, 6):
+            order = list(policies)
+            random.Random(42 * 1000 + day).shuffle(order)
+            orders.append(tuple(order))
+        # At least most pairs should differ (6! = 720; collision probability tiny).
+        assert len(set(orders)) >= 4
+
+    def test_shuffled_set_equals_input_set(self):
+        import random
+        from cag.abm.attributes.opinion import ALL_CLIMATE_POLICIES
+        policies = list(ALL_CLIMATE_POLICIES)
+        shuffled = list(policies)
+        random.Random(42 * 1000 + 1).shuffle(shuffled)
+        assert set(shuffled) == set(policies)
+        assert len(shuffled) == len(policies)
 
 
 # ===================================================================
