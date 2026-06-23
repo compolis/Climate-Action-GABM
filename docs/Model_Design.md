@@ -2147,3 +2147,52 @@ NB 32 ([notebooks/32_v06_outputs_smoke.ipynb](../notebooks/32_v06_outputs_smoke.
 | Saved-artefact count | **29** | Was 17. |
 
 ---
+
+## 27. v0.8 `sim.py` modular refactor (2026-06-23)
+
+### 27.1 Motivation
+
+`src/cag/abm/sim.py` had grown to **2755 lines** by end of v0.7, accumulating responsibilities far outside its orchestration mandate: network connectivity repair, every plot generator, all result post-processing builders, CSV schema and IO, JSON serialisation, and checkpoint mechanics. The v0.7 outputs-expansion (29 saved artefacts, full prompt capture, agent timeline) made the file's diagnostic surface very rich but also made its structural responsibilities increasingly conflated. Reading `sim.py` no longer revealed the simulation loop; it required scrolling past hundreds of lines of matplotlib code and JSON-writing helpers.
+
+The refactor is the first item on the v0.8 **refactor track** — a label that will hold all subsequent pure structural splits this cycle. Behaviour-track work (memory architecture v2, target-policy scoping, blind-spot fix in `_run_one_day`) is deliberately gated on this refactor landing first, so that the next round of changes to `_run_one_day` does not also touch plot code or CSV schemas.
+
+### 27.2 What moved where
+
+| New module | Lines | Responsibility |
+|---|---:|---|
+| [src/cag/abm/sim.py](../src/cag/abm/sim.py) | **838** | Orchestration only: `run_simulation`, `_run_one_day`, `_resolve_runtime`, `SIM_CONFIG`. |
+| [src/cag/abm/network_repair.py](../src/cag/abm/network_repair.py) | 263 | v0.7 3-layer connectivity defence: `_adjust_network_params_for_small_n`, `_auto_connect_components`, `_log_network_summary`, `_safe_network_diagnostics`. |
+| [src/cag/io/aggregators.py](../src/cag/io/aggregators.py) | 506 | `_collect_results` post-processing: `collect_agent_attributes`, `build_package_index_by_bucket`, `build_opinion_shares_by_bucket`, `build_day0_vs_dayN_shifts`, `build_calibration_table`, `build_message_flow`, `build_agent_timeline`. |
+| [src/cag/io/plots.py](../src/cag/io/plots.py) | 555 | `save_result_plots` + every per-figure plotter (`plot_package_index_by_bucket`, `plot_opinion_shares_by_bucket`, `plot_gap_widening`, `plot_calibration_by_policy`, `plot_network_graph`, plus the legacy single-policy plotters). |
+| [src/cag/io/results.py](../src/cag/io/results.py) | 512 | `save_results`, `_RESULT_CSV_SCHEMAS`, `_write_all_csvs`, `_safe_network_snapshot`, JSON config/diagnostics serialisation. |
+| [src/cag/io/checkpoint.py](../src/cag/io/checkpoint.py) | 366 | `_write_checkpoint`, `_load_checkpoint`, `_CHECKPOINT_SKIP_KEYS`, resume-key validation, `sim_step` rehydration logic. |
+
+Total: ~3040 lines across 6 focused modules vs. one 2755-line file. The +285-line overhead is import boilerplate and module-level docstrings in each new file.
+
+### 27.3 Validation
+
+End-to-end NB 32 smoke ([notebooks/32_v06_outputs_smoke.ipynb](../notebooks/32_v06_outputs_smoke.ipynb), 10 agents × 2 alternating package-mode days, `gpt-5-mini`, `debias=True`, `random_seed=42`) re-run against the pre-refactor baseline. See [docs/result_report.md](result_report.md) v0.8 entry for the full regression-validation matrix. Headline:
+
+- **Deterministic outputs bit-identical:** `config.json`, `ground_truth.csv`, `package_ground_truth.csv`, `agent_attributes.csv`, `network_snapshot.json` (10 nodes, 9 edges, bucket distribution `{A-only:1, B-only:1, both:3, neither:5}`).
+- **All 22 LLM-driven CSVs match in schema and row count.**
+- **Numeric distributional stats** (mean abs_shift, calibration MAE per bucket, signed shifts) within `gpt-5-mini @ T=0.5` stochastic noise.
+- **Test suite:** 538 passed, 1 skipped, 21 subtests passed (unchanged from end of v0.7). No test rewrites required; imports updated to the new module paths where symbols moved.
+
+### 27.4 What this refactor preserves (contracts)
+
+- **Determinism path** through `_resolve_runtime` → network construction → ground-truth collection → `agent_attributes` serialisation.
+- **CSV schema contract** on all 22 result CSVs (column names, dtypes, sort order).
+- **JSON contract** on `config.json`, `network_diagnostics.json`, `network_snapshot.json`.
+- **Call-count contract**: number of LLM invocations per `(agent, day, policy)` is unchanged.
+- **Resume contract**: `_RESUME_HARD_KEYS`, `_RESUME_SOFT_KEYS`, and `sim_step` max-restore logic preserved.
+
+### 27.5 What this refactor explicitly does NOT cover
+
+- Long-horizon (>2 day) behaviour — validation horizon matches the v0.7 NB 32 smoke.
+- The memory-architecture v2 changes (Day-0 anchor compression, target-policy scoping in `assemble_context`, blind-spot fix in `_run_one_day` reordering, within-day previous-policy answers, unified daily summaries). Those are the behaviour track, gated on this refactor.
+
+### 27.6 No `__version__` bump
+
+v0.8 is a refactor-only label. The version bump is held until the next behaviour-bearing change. This avoids the v0.5/v0.6/v0.7 pattern where versions advanced ahead of `__version__` strings across modules and then needed a coordinated bulk-bump catch-up.
+
+---
