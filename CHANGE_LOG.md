@@ -3,6 +3,7 @@
 
 ## Table of Contents
 - [Overview](#overview)
+- [0.8](#08)
 - [0.7](#07)
 - [0.6](#06)
 - [0.4](#04)
@@ -13,6 +14,20 @@
 
 ## Overview
 Notable changes are to be documented in this file.
+
+
+## [0.8]
+v0.8 is the **refactor track**: pure structural splits of long-accumulated modules into focused single-responsibility units. Zero behaviour change, validated end-to-end. All subsequent refactor work this cycle lands under this version. No `__version__` bump (deferred to the eventual feature-bearing release).
+
+- **`sim.py` modular split (2026-06-23).** [src/cag/abm/sim.py](src/cag/abm/sim.py) reduced from **2755 → 838 lines** (orchestration only: `run_simulation`, `_run_one_day`, `_resolve_runtime`, `SIM_CONFIG`). Five focused modules extracted:
+    - [src/cag/abm/network_repair.py](src/cag/abm/network_repair.py) (263 lines) — `_adjust_network_params_for_small_n`, `_auto_connect_components`, `_log_network_summary`, `_safe_network_diagnostics` (the v0.7 3-layer connectivity defence).
+    - [src/cag/io/aggregators.py](src/cag/io/aggregators.py) (506 lines) — `_collect_results` post-processing builders: `build_package_index_by_bucket`, `build_opinion_shares_by_bucket`, `build_day0_vs_dayN_shifts`, `build_calibration_table`, `build_message_flow`, `build_agent_timeline`, `collect_agent_attributes`.
+    - [src/cag/io/plots.py](src/cag/io/plots.py) (555 lines) — `save_result_plots` and every per-figure plotter (`plot_package_index_by_bucket`, `plot_opinion_shares_by_bucket`, `plot_gap_widening`, `plot_calibration_by_policy`, `plot_network_graph`, plus the legacy single-policy plotters).
+    - [src/cag/io/results.py](src/cag/io/results.py) (512 lines) — `save_results`, `_RESULT_CSV_SCHEMAS`, `_write_all_csvs`, `_safe_network_snapshot`, JSON config/diagnostics serialisation.
+    - [src/cag/io/checkpoint.py](src/cag/io/checkpoint.py) (366 lines) — `_write_checkpoint`, `_load_checkpoint`, `_CHECKPOINT_SKIP_KEYS`, resume-key validation, `sim_step` rehydration logic.
+- **Validation.** End-to-end NB 32 re-run ([data/output/experiments/20260623_140314/](data/output/experiments/20260623_140314/)) compared against the pre-refactor baseline ([data/output/experiments/20260622_170436/](data/output/experiments/20260622_170436/)). All deterministic outputs (`config.json`, `ground_truth.csv`, `package_ground_truth.csv`, `agent_attributes.csv`, `network_snapshot.json`) are **bit-identical**. All 22 LLM-driven CSVs have **identical schemas and row counts**; numeric distributional stats (mean abs_shift, calibration MAE, signed shifts per bucket) match within gpt-5-mini @ T=0.5 stochasticity. Network: 10 nodes, 9 edges, bucket distribution `{A-only:1, B-only:1, both:3, neither:5}` both runs. The refactor preserves the determinism path, the schema contract, and the call-count contract.
+- **Test suite** — **538 passed, 1 skipped, 21 subtests passed** (unchanged from end of v0.7). No tests rewritten; imports updated to the new module paths where symbols moved.
+- **Versioning** — no `__version__` bump. v0.8 is a refactor-only label; the bump is held until the next behaviour change.
 
 
 ## [0.7]

@@ -24,7 +24,45 @@ Notes:
 
 ---
 
+## v0.8 — `sim.py` modular split (refactor only, NB 32 regression-validated)
+
+**Date:** 2026-06-23
+**Pre-refactor baseline:** [`data/output/experiments/20260622_170436/`](../data/output/experiments/20260622_170436/)
+**Post-refactor run:** [`data/output/experiments/20260623_140314/`](../data/output/experiments/20260623_140314/)
+**Notebook:** [`notebooks/32_v06_outputs_smoke.ipynb`](../notebooks/32_v06_outputs_smoke.ipynb)
+**Test suite:** 538 passed, 1 skipped, 21 subtests passed (unchanged from end of v0.7)
+
+**TL;DR.** [src/cag/abm/sim.py](../src/cag/abm/sim.py) reduced from **2755 → 838 lines** (orchestration only) by extracting five focused single-responsibility modules: [src/cag/abm/network_repair.py](../src/cag/abm/network_repair.py) (263 lines, v0.7 3-layer connectivity defence), [src/cag/io/aggregators.py](../src/cag/io/aggregators.py) (506 lines, `_collect_results` post-processing), [src/cag/io/plots.py](../src/cag/io/plots.py) (555 lines, `save_result_plots` + plotters), [src/cag/io/results.py](../src/cag/io/results.py) (512 lines, `save_results` + CSV/JSON IO), [src/cag/io/checkpoint.py](../src/cag/io/checkpoint.py) (366 lines, checkpoint/resume). **Pure structural split, zero behaviour change.** Validated end-to-end against the v0.7 NB 32 baseline.
+
+### Regression-validation matrix
+
+| Output | Type | Status |
+|---|---|---|
+| `config.json` | deterministic | **bit-identical** |
+| `ground_truth.csv` (60 rows) | deterministic | **bit-identical** |
+| `package_ground_truth.csv` (10 rows) | deterministic | **bit-identical** |
+| `agent_attributes.csv` (10 rows) | deterministic | **bit-identical** |
+| `network_snapshot.json` | deterministic | **bit-identical** — 10 nodes, 9 edges, buckets `{A-only:1, B-only:1, both:3, neither:5}`, total degree 18 |
+| `opinion_trajectories.csv` (180 rows × 4 cols) | LLM-driven | schema + row count match |
+| `package_index_trajectories.csv` (30 rows × 5 cols) | LLM-driven | schema + row count match |
+| `reflections.csv` (60 rows × 10 cols) | LLM-driven | schema + row count match |
+| `messages.csv` (292 rows × 14 cols) | LLM-driven | schema + row count match |
+| `day0_vs_dayN_shifts.csv` (60 rows × 9 cols) | LLM-driven | schema + row count match |
+| `calibration.csv` (18 rows × 7 cols) | LLM-driven | schema + row count match |
+| Mean abs_shift | LLM-driven | both runs ≈ 0.8–1.0 |
+| Mean Day-1/2 MAE | LLM-driven | pre 0.32 / post 0.35 (within `gpt-5-mini @ T=0.5` stochasticity) |
+
+**What this validates.** (a) The determinism path through `_resolve_runtime` → network construction → ground-truth collection → agent_attributes serialisation is unchanged. (b) The schema contract on all 22 CSVs is unchanged. (c) The call-count contract (number of LLM invocations per agent-day-policy) is unchanged. (d) The numeric distributional shape of LLM-driven outputs is unchanged within stochastic noise — refactor did not perturb prompt assembly, message routing, or survey-context construction.
+
+**What this does NOT validate.** Long-horizon behaviour (>2 days), package-mode survey-context fidelity beyond the trivial smoke window, or any of the upcoming v0.8 memory-architecture changes (separate track). Those are guarded by the standing pytest baseline and will be re-validated on the next end-to-end smoke after the next behaviour change.
+
+### Why this refactor now
+
+`sim.py` had grown to 2755 lines accumulating responsibilities orthogonal to its name: network repair, plot generation, result aggregation, CSV/JSON IO, and checkpoint mechanics. The diagnostic affordance from v0.7 (29 saved artefacts, full prompt capture, agent timeline) makes structural splits low-risk to validate — a single smoke run produces evidence on every output surface. Splitting now keeps the next round of behaviour work (memory architecture, target-policy scoping, blind-spot fix) on a clean canvas where changes to `_run_one_day` don't touch plot code or CSV schemas.
+
 ---
+
+
 
 ## v0.6 outputs expansion + network connectivity defence — NB 32 smoke validation
 
