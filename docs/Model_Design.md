@@ -2196,3 +2196,107 @@ End-to-end NB 32 smoke ([notebooks/32_v06_outputs_smoke.ipynb](../notebooks/32_v
 v0.8 is a refactor-only label. The version bump is held until the next behaviour-bearing change. This avoids the v0.5/v0.6/v0.7 pattern where versions advanced ahead of `__version__` strings across modules and then needed a coordinated bulk-bump catch-up.
 
 ---
+
+## 28. v0.8 v2 tiered memory architecture (2026-06-23)
+
+### 28.1 Motivation
+
+The v0.7 stack stitched four memory mechanisms together: (a) full reflections kept verbatim until compressed; (b) a `daily_summaries` dict written once per agent per day by `manage_memory()`; (c) a one-shot `compress_day0_anchor()` LLM call that re-summarised each agent's Day-0 rationale into a compact anchor block; (d) the per-policy slice of `assemble_context()`. The v0.7 NB-31 fix surfaced two underlying issues with this composition. First, the Day-0 anchor was being summarised *away* from the original rationale via a separate LLM call, introducing a drift surface for an LLM-driven write that always conveyed the same numeric position. Second, package-mode surveys needed to see cross-policy reflections (which `assemble_context()` filtered out by per-policy `policy_id`) while still anchoring the prompt to *the specific policy being asked* — a split the v0.7 single-`policy_id` API could not express.
+
+### 28.2 The v2 six-section context order
+
+`assemble_context(day, policy_id, target_policy_id)` in [src/cag/abm/agent.py](../src/cag/abm/agent.py) now builds the system prompt as the following ordered concatenation, skipping any section that is empty:
+
+```
+§1 Persona + values             always (get_persona())
+§2 Day-0 anchor                 verbatim Day-0 rationale for target_policy_id
+§3 Summary of recent days       daily_summaries for days < d-1
+§4 Recent reflections           reflections from days d-1 and d
+§5 Own reasoning d-1, d         survey_reasoning for target_policy_id (recent)
+§6 Today's other answers        package mode only: prior answers in day d
+                                for OTHER policies (target_policy_id excluded)
+```
+
+The split between `policy_id` (context scope) and `target_policy_id` (question scope) is the central v2 invariant. In single-policy mode the two are equal. In **package mode**, the EOD survey passes `context_policy_id=PACKAGE_SCOPE` (so cross-policy reflections survive §4's `policy_id` filter) but `target_policy_id=policy_id` (so §2, §5, §6 are narrowed to the specific policy being asked). The §3 + §4 filter and the §2 + §5 + §6 target scope are *independent dimensions*, not one collapsed scope.
+
+### 28.3 Day-0 anchor compression removed
+
+The pre-v2 architecture had `compress_day0_anchor()` re-summarise the Day-0 rationale (a verbose first-person paragraph from the LLM) into a 1–2-sentence "anchor block" that was then injected into every subsequent day's context. The new architecture reads the verbatim Day-0 rationale **directly from `survey_reasoning[target_policy_id]`**. Specifically:
+
+- `agent.day0_anchors = {}` dict initialisation removed from `SurveyedCitizen.__init__`.
+- `compress_day0_anchor()` method removed.
+- Post-`_run_day0` compression loop removed from [src/cag/abm/sim.py](../src/cag/abm/sim.py).
+- `day0_anchors.csv` removed from `_RESULT_CSV_SCHEMAS` in [src/cag/io/results.py](../src/cag/io/results.py).
+- `day0_anchors.csv` hydration block and the `agent.day0_anchors = {}` reset line removed from [src/cag/io/checkpoint.py](../src/cag/io/checkpoint.py).
+- `_section_day0_anchor()` simplified to read `survey_reasoning.get(target_policy_id, [])` directly.
+
+**Effect:** one fewer LLM call per agent at Day 0 (n=100 agents × 6 policies → ~600 calls saved per run); the §2 text is now provably the same string the agent wrote during the Day-0 rationale step.
+
+### 28.4 Unified manage_memory cadence
+
+`manage_memory(day, policy_id, …)` is now called once per agent per day, **before** the EOD survey. If `day > 2`, it compresses day `d-2` into a single `daily_summaries[(d-2, policy_id)]` entry via `compress_daily_memory()` (and via `compress_memories()` underneath). Days `d-1` and `d` remain as full verbatim reflections in the "vivid window" (§4 and §5 above). This is the same compression policy as v0.7, but now with no `compress_day0_anchor()` side-call.
+
+### 28.5 Test coverage and ordering invariants
+
+[tests/test_memory.py](../tests/test_memory.py) covers:
+
+- `TestSectionOrder` — every legal combination of populated sections renders the six in the canonical order; missing sections are skipped (no blank lines, no orphan headers).
+- `TestDay0AnchorSection` — §2 is always sourced from `survey_reasoning[target_policy_id][0]` (the Day-0 entry), is target-scoped (one policy's anchor, not all six), and is verbatim.
+- `TestSectionOrder.test_full_package_mode_section_order` — package-mode survey path renders §1 + §2 (target-scoped) + §3 + §4 + §5 (target-scoped) + §6 (target-scoped, excludes the policy being asked), in that order.
+- `TestCompressDay0Anchor` removed (the method no longer exists).
+
+Test suite: **556 passed, 1 skipped** (was 538 at end of v0.7; +18 from new section-order tests).
+
+### 28.6 Backwards compatibility
+
+- Existing checkpoints written under v0.7 do not contain `day0_anchors.csv` consumers in the new code path; the file is silently ignored if present. Old runs in `data/output/experiments/` are unaffected.
+- `_RESUME_HARD_KEYS` and `_RESUME_SOFT_KEYS` are unchanged. A resume from a v0.7 checkpoint into v0.8 succeeds; the §2 anchor is rebuilt from `survey_reasoning` at the first `assemble_context()` call.
+- The `day0_anchor` SIM_CONFIG key (singular, the *anchor-mode* selector with values `llm_survey` / `ground_truth` / `ground_truth_with_rationale`) is **unchanged** and still in `SIM_CONFIG`. It controls how Day-0 is *seeded*, not how it is *compressed* — the latter no longer exists.
+
+---
+
+## 29. v0.8 operational fixes and researcher-onboarding doc (2026-06-23)
+
+A small cluster of operational cleanups landed in the same v0.8 cycle as the refactor and v2 memory work.
+
+### 29.1 Dead `SIM_CONFIG["output_dir"]` removed
+
+The key was never consumed. [src/cag/__main__.py](../src/cag/__main__.py) reads `--outdir` (default `data/output/experiments`) and passes it directly to `save_results(output_dir=…)`. Removed from `SIM_CONFIG` in [src/cag/abm/sim.py](../src/cag/abm/sim.py), from `_base_config()` in [tests/test_checkpoint.py](../tests/test_checkpoint.py), and from [notebooks/32_v06_outputs_smoke.ipynb](../notebooks/32_v06_outputs_smoke.ipynb) (which has a `set(config) == set(SIM_CONFIG)` parity assertion). `SIM_CONFIG` now has 33 keys (was 34). Not in `_RESUME_HARD_KEYS` or `_RESUME_SOFT_KEYS`, so resume contracts are unaffected.
+
+### 29.2 Network-type-aware `[peer]` config-log line
+
+`_log_experiment_config()` in [src/cag/abm/sim.py](../src/cag/abm/sim.py) previously printed `[peer] k_peers_per_day=K  network_type=T  p_intra=X  p_inter=Y` — but `p_intra` / `p_inter` are SBM-only legacy flat keys, misleading for `watts_strogatz` (`k`, `beta`), `barabasi_albert` (`m`), `erdos_renyi` (`p`), or `homophily_weighted` (`scale`, `threshold`, `attributes`). The line now renders the resolved params dict via `_resolve_network_params(cfg)`:
+
+```
+[peer] k_peers_per_day=K  network_type=stochastic_block  params={p_intra=0.15, p_inter=0.05}
+[peer] k_peers_per_day=K  network_type=watts_strogatz     params={k=8, beta=0.2}
+[peer] k_peers_per_day=K  network_type=barabasi_albert    params={m=3}
+[peer] k_peers_per_day=K  network_type=erdos_renyi        params={p=0.10}
+[peer] k_peers_per_day=K  network_type=homophily_weighted params={} (builder defaults)
+```
+
+Future network types added to `NETWORK_TYPES` automatically render correctly — no log-code change needed.
+
+### 29.3 AIRE Quickstart §6 first-time-model-download callout
+
+[docs/AIRE_Quickstart.md](../docs/AIRE_Quickstart.md) §6 ("First real experiment — split50 Run-14") gained a `> **Important — first-time model download.**` blockquote between the wall-clock estimate and the `sbatch --time=06:00:00` example. Explains that the first submission with a model not yet in the Hugging Face cache can exceed the **1500 s** vLLM-readiness wait baked into `scripts/aire/run.sh`, and recommends `--time=06:00:00` on that first submission. Subsequent runs warm from cache in <2 min and the standard wall-clock is fine.
+
+### 29.4 Code Tour — researcher onboarding doc
+
+[docs/Code_Tour.md](../docs/Code_Tour.md) is a new ~25-page walkthrough of `src/cag/` aimed at a newcomer who knows the science but has not opened the source code. Structure:
+
+- **A. Audience + conventions.**
+- **B. 30-minute skim sequence** — five files in order (`__main__.py` → `presets.py` → `sim.py` → `agent.py` → `io/results.py`).
+- **C. 15 file-by-file walkthroughs** — one-sentence summary + 2–5 key names + a single concrete breadcrumb per file. Medium depth on `sim.py` and `agent.py` with annotated excerpts; lighter elsewhere.
+- **D. Two side-trips** — the political-exposure affinity-rank mechanism (5-step explanation with the literature-anchoring rationale); the v2 memory architecture with a fully annotated example `survey_assembled_context.csv` row.
+- **E. Cookbook** — 6 recipes (add a 7th policy, swap LLM provider, new exposure preset, new message set, trace one agent, debug a survey response).
+- **F. Glossary** — 11 terms (PACKAGE_SCOPE, debias, day0_anchor modes, reach_*, audience_cap, political_exposure_mode, affinity_weights, thinking, P-A/P-B/C, package mode, vivid window / gist memory).
+- **G. AIRE pre-flight checklist** — 10 copy-pasteable steps plus 4 common pitfalls.
+
+The doc is model-agnostic; it does not assume the reader will use any particular provider. It pairs with [docs/AIRE_Quickstart.md](../docs/AIRE_Quickstart.md) for HPC submission and [docs/USER_GUIDE.md](../USER_GUIDE.md) for the canonical research config.
+
+### 29.5 NB 34 v2-memory smoke
+
+[notebooks/34_memory_v2_smoke.ipynb](../notebooks/34_memory_v2_smoke.ipynb) is a paired smoke for v0.8 §28: end-to-end run with the v2 6-section context order, asserting that §2 reads verbatim from `survey_reasoning`, §3 + §4 respect the `policy_id` filter, and §5 + §6 are target-scoped. The notebook is configured for local Qwen3-8B-4bit (`provider="local"`). Local Apple-Silicon throughput proved too low on this laptop for a Day-0 survey on n=10 agents in a reasonable time; AIRE re-run is the planned path. The notebook's diagnostic cells are valid regardless of LLM backend.
+
+---

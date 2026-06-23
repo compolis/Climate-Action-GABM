@@ -3,12 +3,13 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.7 — HPC-First Infrastructure, Audit-Trail Outputs, and Network Defence](#07--hpc-first-infrastructure-audit-trail-outputs-and-network-defence)
-4. [0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs](#06--canonical-defaults-offline-political-messages-and-full-stack-smoke-docs)
-5. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
-6. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
-7. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
-8. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
+3. [0.8 — Refactor Track: `sim.py` Split, v2 Memory Architecture, and Operational Polish](#08--refactor-track-simpy-split-v2-memory-architecture-and-operational-polish)
+4. [0.7 — HPC-First Infrastructure, Audit-Trail Outputs, and Network Defence](#07--hpc-first-infrastructure-audit-trail-outputs-and-network-defence)
+5. [0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs](#06--canonical-defaults-offline-political-messages-and-full-stack-smoke-docs)
+6. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
+7. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
+8. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
+9. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
 
 ## Overview
@@ -19,6 +20,38 @@ Version 0.5 was opened mid-stream rather than as a single planned sprint; this r
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
 Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
+
+
+## 0.8 — Refactor Track: `sim.py` Split, v2 Memory Architecture, and Operational Polish
+
+v0.8 is a **refactor-track release**: it consolidates two structural overhauls (the `sim.py` modular split and the v2 tiered-memory architecture) plus a cluster of operational polish, with no `__version__` bump. The 2755-line `src/cag/abm/sim.py` is split into six focused modules, the in-context memory assembly is rewritten as an ordered six-section build with a `policy_id` vs `target_policy_id` scope split, the Day-0 anchor compression LLM call is removed, and a researcher-onboarding [docs/Code_Tour.md](docs/Code_Tour.md) is added.
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | `sim.py` modular split — [src/cag/abm/sim.py](src/cag/abm/sim.py) 2755 → 838 lines; five new modules ([src/cag/abm/network_repair.py](src/cag/abm/network_repair.py), [src/cag/io/aggregators.py](src/cag/io/aggregators.py), [src/cag/io/plots.py](src/cag/io/plots.py), [src/cag/io/results.py](src/cag/io/results.py), [src/cag/io/checkpoint.py](src/cag/io/checkpoint.py)) | ✅ Done |
+| 2 | NB 32 bit-identical regression validation (deterministic outputs, 22 LLM-driven CSV schemas, distributional stats within gpt-5-mini @ T=0.5 noise) | ✅ Done |
+| 3 | v2 tiered memory architecture — [src/cag/abm/agent.py](src/cag/abm/agent.py) `assemble_context()` rewritten as ordered six-section build (§1 persona + values, §2 Day-0 anchor, §3 daily summaries, §4 recent reflections, §5 own reasoning, §6 today-so-far) | ✅ Done |
+| 4 | New `policy_id` vs `target_policy_id` scope split — context filter is independent of question scope; package-mode EOD survey now sees cross-policy reflections while anchored to the specific policy being asked | ✅ Done |
+| 5 | Day-0 anchor compression LLM call removed — `compress_day0_anchor()`, `agent.day0_anchors` dict, post-`_run_day0` compression loop, `day0_anchors.csv` schema, and checkpoint hydration block all deleted; §2 now verbatim from `survey_reasoning[target_policy_id]` | ✅ Done |
+| 6 | Dead `SIM_CONFIG["output_dir"]` key removed (now 33 keys); also stripped from `tests/test_checkpoint.py` and NB 32 parity assertion | ✅ Done |
+| 7 | Network-type-aware `[peer]` config-log line — renders resolved `_resolve_network_params(cfg)` dict for Watts–Strogatz, Barabási–Albert, Erdős–Rényi, homophily-weighted (no more misleading SBM-only `p_intra` / `p_inter`) | ✅ Done |
+| 8 | [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) §6 first-time-model-download callout (recommend `--time=06:00:00` on cold-cache HuggingFace downloads) | ✅ Done |
+| 9 | New [docs/Code_Tour.md](docs/Code_Tour.md) — ~25-page researcher onboarding doc (audience + conventions, 30-min skim sequence, 15 file walkthroughs, 2 side-trips, 6-recipe cookbook, 11-term glossary, AIRE pre-flight checklist) | ✅ Done |
+| 10 | NB 34 v2-memory smoke ([notebooks/34_memory_v2_smoke.ipynb](notebooks/34_memory_v2_smoke.ipynb)) — configured for local Qwen3-8B-4bit; full Day-0 deferred to AIRE for throughput | ✅ Done |
+| 11 | Docs sweep — `CHANGE_LOG.md` [0.8] extension, `ROADMAP.md` 0.8 (this section), `DEVELOPMENT_HISTORY.md` 2026-06-23 entries, `Model_Design.md` §27 / §28 / §29, `README.md` status bump | ✅ Done |
+| 12 | Test suite — `TestCompressDay0Anchor` removed; `TestSectionOrder` + `TestDay0AnchorSection` rewritten for verbatim/target-scoped path; suite **556 passed, 1 skipped, 21 subtests passed** (+18 from new coverage) | ✅ Done |
+| 13 | No `__version__` bump — v0.8 is a refactor-only label; bump held until next behaviour-bearing release | ✅ Done |
+
+**Current integration suite context:** 556 passed, 1 skipped, 21 subtests passed.
+
+### v0.8 carry-forward backlog (toward 1.0)
+
+- AIRE production smoke at n=30–100 to validate the v2 memory architecture end-to-end on a real LLM and a multi-day horizon (local Apple-Silicon throughput too low for in-laptop Day-0).
+- Deep rewrite of [docs/Run_Output_Guide.md](docs/Run_Output_Guide.md) and [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) — carried from v0.7.
+- Condition B 1P-debias bias re-measurement (NB 13 partial rerun, ~120 API calls) — carried from v0.5 / v0.6 / v0.7.
+- 30–50-agent Qwen3 rerun for per-agent Spearman ρ stability — carried from v0.5 / v0.6 / v0.7.
+- Async/parallel dispatch implementation from [docs/Model_Design.md](docs/Model_Design.md) §16 — carried from v0.7.
+- Package-message v2 authoring (bespoke package-level copy replacing concatenated placeholders) — carried from v0.6 / v0.7.
 
 
 ## 0.7 — HPC-First Infrastructure, Audit-Trail Outputs, and Network Defence

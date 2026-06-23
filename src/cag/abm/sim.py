@@ -85,7 +85,6 @@ SIM_CONFIG = {
     "political_exposure_targets": None,       # None → committed_minority_symmetric. Accepts preset name or literal dict.
     "affinity_weights": None,                 # None → balanced. Accepts preset name or literal {"A":..., "B":...}.
     "random_seed": 42,
-    "output_dir": "data/output/experiments",
     # Local-LLM provider (provider="local"). All optional.
     "local_base_url": None,     # None → CAG_LOCAL_BASE_URL env or http://localhost:8080/v1
     "local_extra_body": None,   # dict merged into every local request body (e.g. server-specific knobs)
@@ -356,6 +355,7 @@ def _resolve_runtime(cfg):
         "package_mode": _is_package_mode(cfg),
         "package_policies": _get_package_policies(cfg),
         "message_pool": message_pool,
+        "random_seed": cfg["random_seed"],
     }
 
 
@@ -409,7 +409,31 @@ def _run_one_day(nation, day, day_config, n_days, rt):
                 logging.warning(f"Unknown phase '{phase}' on day {day}, skipping.")
 
     if package_mode:
-        for policy_id in package_policies:
+        for agent in nation.agents_active.values():
+            agent.manage_memory(
+                day, PACKAGE_SCOPE,
+                api_key=rt["api_key"], model=rt["model"],
+                provider=rt["provider"], temperature=rt["temperature"],
+            )
+    else:
+        for agent in nation.agents_active.values():
+            agent.manage_memory(
+                day, policy,
+                api_key=rt["api_key"], model=rt["model"],
+                provider=rt["provider"], temperature=rt["temperature"],
+            )
+
+    if package_mode:
+        # Deterministic per-day shuffle of EOD policy order. Eliminates the
+        # systematic position effect baked in by the previous 1→6 walk
+        # (e.g. Carbon tax always asked 5th, after the today_so_far block
+        # had filled with policies 1–4). One shuffle per day applied to
+        # all agents (matches phase-order rationale: shuffled across days,
+        # consistent across agents within a day).
+        import random as _random
+        eod_order = list(package_policies)
+        _random.Random(int(rt["random_seed"]) * 1000 + int(day)).shuffle(eod_order)
+        for policy_id in eod_order:
             nation.run_end_of_day_survey(
                 policy_id, day,
                 api_key=rt["survey_api_key"], model=rt["survey_model"],
@@ -424,20 +448,6 @@ def _run_one_day(nation, day, day_config, n_days, rt):
             provider=rt["survey_provider"], temperature=rt["temperature"],
             thinking=rt["thinking"], debias=rt["debias"],
         )
-
-    for agent in nation.agents_active.values():
-        if package_mode:
-            agent.manage_memory(
-                day, PACKAGE_SCOPE,
-                api_key=rt["api_key"], model=rt["model"],
-                provider=rt["provider"], temperature=rt["temperature"],
-            )
-        else:
-            agent.manage_memory(
-                day, policy,
-                api_key=rt["api_key"], model=rt["model"],
-                provider=rt["provider"], temperature=rt["temperature"],
-            )
 
     if package_mode:
         _log_package_index(nation, package_policies, day)
@@ -497,10 +507,15 @@ def _log_experiment_config(cfg, resume, checkpoint_dir):
         cfg.get("political_message_source"),
         cfg.get("political_message_set"),
     )
+    net_params = _resolve_network_params(cfg)
+    if net_params:
+        params_str = "{" + ", ".join(f"{k}={v}" for k, v in net_params.items()) + "}"
+    else:
+        params_str = "{} (builder defaults)"
     logging.info(
-        "[peer]       k_peers_per_day=%s  network_type=%s  p_intra=%s  p_inter=%s",
+        "[peer]       k_peers_per_day=%s  network_type=%s  params=%s",
         cfg.get("k_peers_per_day"), cfg.get("network_type"),
-        cfg.get("p_intra"), cfg.get("p_inter"),
+        params_str,
     )
     logging.info(
         "[day0]       anchor=%s",

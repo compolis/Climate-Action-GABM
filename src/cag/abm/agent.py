@@ -24,6 +24,12 @@ from cag.abm.attributes.opinion import (
 
 NUMERIC_TO_LETTER = {-3: "A", -2: "B", -1: "C", 0: "D", 1: "E", 2: "F", 3: "G"}
 
+# Inverse of RESPONSE_SCALE for the within-day "today so far" section.
+_NUMERIC_TO_PHRASE = {
+    num: label.lower() for letter, label in RESPONSE_LABELS.items()
+    for num in [RESPONSE_SCALE[letter]]
+}
+
 # ── Debias prompt templates (Condition B from NB 13) ────────────────────────
 
 _ANTI_SYCOPHANCY = (
@@ -251,27 +257,48 @@ class SurveyedCitizen():
             return ""
         return "When it comes to my core values and worldview: " + " ".join(descriptions)
     
-    def get_system_prompt(self, day=0, policy_id=None) -> str:
-        """Delegates to assemble_context."""
-        return self.assemble_context(day, policy_id=policy_id)
+    def get_system_prompt(self, day=0, policy_id=None, target_policy_id=None) -> str:
+        """Delegates to assemble_context.
 
-    def assemble_context(self, day=0, policy_id=None) -> str:
+        ``target_policy_id`` is the specific policy the agent is being asked
+        about right now (used to scope the Day-0 anchor, the "considered
+        position in recent days" section, and the within-day section). When
+        omitted, it defaults to ``policy_id`` unless ``policy_id`` is
+        ``PACKAGE_SCOPE`` (in which case there is no per-policy target).
+        """
+        if target_policy_id is None and policy_id is not None and policy_id != PACKAGE_SCOPE:
+            target_policy_id = policy_id
+        return self.assemble_context(day, policy_id=policy_id, target_policy_id=target_policy_id)
+
+    def assemble_context(self, day=0, policy_id=None, target_policy_id=None) -> str:
         """Build the full LLM context for a given day.
 
-        Structure:
-        1. Persona + narrative (always)
-        2. Daily summaries (older than d-1)
-        3. Full reflections (days d-1 and d)
-        4. Day-0 rationales (when seeded via ``ground_truth_with_rationale``)
-        5. Persona reminder
+        v2 section order (skipping empties):
+            1. Persona + values (always)
+            2. Original prior position on <target_policy>   (Day-0 anchor)
+            3. Summary of recent days                       (days 1..d-2)
+            4. Recent reflections following received messages (days d-1, d)
+            5. Your considered position in recent days      (own reasoning d-1, d; target-scoped)
+            6. Your answers so far in today's survey        (package mode only)
+
+        ``policy_id`` continues to control the context-scope filter for
+        reflections / summaries (single-policy id, or ``PACKAGE_SCOPE`` to
+        keep all package-scoped entries). ``target_policy_id`` controls the
+        target-scoped sections (2, 5, 6).
         """
         sections = []
         sections.append(self.get_persona())
 
+        anchor = self._section_day0_anchor(target_policy_id)
+        if anchor:
+            sections.append(anchor)
+
         if day == 0:
+            today = self._section_today_so_far(day, policy_id, target_policy_id)
+            if today:
+                sections.append(today)
             return "\n\n".join(sections)
 
-        # 2. Daily summaries (everything older than d-1)
         daily_parts = []
         for key in sorted(self.daily_summaries.keys()):
             d, pid = key
@@ -280,65 +307,112 @@ class SurveyedCitizen():
         if daily_parts:
             sections.append("Summary of recent days:\n" + "\n".join(daily_parts))
 
-        # 3. Full reflections for days d-1 and d
         recent_days = {day - 1, day}
         recent_reflections = [r for r in self.reflections
                               if r["day"] in recent_days
                               and (policy_id is None or r.get("policy_id") == policy_id)]
         if recent_reflections:
-            ref_lines = [f"- {r['text']}" for r in recent_reflections]
-            sections.append("Your recent reflections following received messages:\n" + "\n".join(ref_lines))
+            ref_lines = [f"- Day {r['day']}: {r['text']}" for r in recent_reflections]
+            sections.append("Recent reflections following received messages:\n" + "\n".join(ref_lines))
 
-        rationale_policy = None if policy_id == PACKAGE_SCOPE else policy_id
-        rationales = self._build_day0_rationales(policy_id=rationale_policy)
-        if rationales:
-            sections.append("Your earlier reasoning on these policies:\n" + rationales)
+        own = self._section_recent_own_reasoning(day, target_policy_id)
+        if own:
+            sections.append(own)
 
-        # remind about their persona (demographics-only, for focus):
-        sections.append("Remember who you are: " + self._build_demographics_text())
+        today = self._section_today_so_far(day, policy_id, target_policy_id)
+        if today:
+            sections.append(today)
 
         return "\n\n".join(sections)
 
-    def _build_day0_rationales(self, policy_id=None):
-        """Bulleted Day-0 rationales from ``survey_reasoning``.
-
-        Returns the agent's first-person Day-0 rationale (one bullet per
-        policy) so the LLM has access to *why* the agent held its initial
-        position, without surfacing the numeric answer label itself.
-        Only Day-0 entries are included; later survey reasoning is not
-        replayed into the prompt.
+    def _section_day0_anchor(self, target_policy_id):
+        """Target-scoped Day-0 anchor block: the agent's verbatim Day-0
+        rationale for ``target_policy_id`` from ``survey_reasoning``.
         """
-        def _day0_text(history):
-            for d, text in history:
-                if d == 0:
-                    return text
-            return None
+        if target_policy_id is None or target_policy_id == PACKAGE_SCOPE:
+            return ""
+        text = None
+        for d, rationale in self.survey_reasoning.get(target_policy_id, []):
+            if d == 0:
+                text = rationale
+                break
+        if not text:
+            return ""
+        label = SURVEY_SHORT_LABELS.get(target_policy_id, str(target_policy_id))
+        return f'Original prior position on "{label}":\n{text.strip()}'
 
-        if policy_id is not None:
-            history = self.survey_reasoning.get(policy_id, [])
-            text = _day0_text(history)
-            if text is None:
-                return ""
-            policy_name = SURVEY_SHORT_LABELS.get(policy_id, str(policy_id))
-            return f"- {policy_name}: {text}"
+    def _section_recent_own_reasoning(self, day, target_policy_id):
+        """Verbatim own survey reasoning for days d-1, d. Target-scoped.
 
+        Cross-policy reasoning lives in ``daily_summaries`` (gist memory) and
+        ``_section_today_so_far`` (within-day); this section's job is
+        specifically "what did I think about THIS policy on d-1 and d".
+        Day-0 entries are excluded — they live in the anchor section.
+        """
+        if day < 1 or target_policy_id is None or target_policy_id == PACKAGE_SCOPE:
+            return ""
+        keep_days = {day - 1, day}
+        entries = self.survey_reasoning.get(target_policy_id, [])
+        label = SURVEY_SHORT_LABELS.get(target_policy_id, str(target_policy_id))
+        lines = [
+            f"- Day {d} \u2014 {label}: {text.strip()}"
+            for d, text in entries
+            if d in keep_days and d > 0
+        ]
+        if not lines:
+            return ""
+        return "Your considered position in recent days:\n" + "\n".join(lines)
+
+    def _section_today_so_far(self, day, policy_id, target_policy_id):
+        """Within-day answers for OTHER policies already asked today.
+
+        Fires only when the agent is being asked about a specific policy in
+        package-mode context (``policy_id == PACKAGE_SCOPE`` and
+        ``target_policy_id`` is a real policy). For each other policy with
+        a today-stamped entry in ``opinion_history``, emit the position
+        phrase plus a ``(Why: ...)`` clause from today's ``survey_reasoning``
+        if available. Iterates ``opinion_history`` keys in sorted order for
+        determinism.
+        """
+        if policy_id != PACKAGE_SCOPE:
+            return ""
+        if target_policy_id is None or target_policy_id == PACKAGE_SCOPE:
+            return ""
         lines = []
-        for pid, history in self.survey_reasoning.items():
-            text = _day0_text(history)
-            if text is None:
+        for pid in sorted(self.opinion_history.keys(), key=str):
+            if pid == target_policy_id or pid == PACKAGE_SCOPE:
                 continue
-            policy_name = SURVEY_SHORT_LABELS.get(pid, str(pid))
-            lines.append(f"- {policy_name}: {text}")
-        return "\n".join(lines)
+            today_numerics = [n for d, n in self.opinion_history[pid] if d == day]
+            if not today_numerics:
+                continue
+            numeric = today_numerics[-1]
+            phrase = _NUMERIC_TO_PHRASE.get(numeric, str(numeric))
+            label = SURVEY_SHORT_LABELS.get(pid, str(pid))
+            todays_reasoning = [
+                t for d, t in self.survey_reasoning.get(pid, []) if d == day
+            ]
+            if todays_reasoning:
+                lines.append(
+                    f"- {label}: {phrase}. (Why: {todays_reasoning[-1].strip()})"
+                )
+            else:
+                lines.append(f"- {label}: {phrase}.")
+        if not lines:
+            return ""
+        return "Your answers so far in today's survey:\n" + "\n".join(lines)
 
     def compress_memories(self, memories, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
-
+        """Summarise a day's experience (reflections + own survey reasoning) in
+        4-5 first-person sentences. Asks about the position landed on, key
+        reasoning, what was compelling vs pushed back on, and any shift.
+        """
         user_prompt = (
-            "Concisely summarise the following reflections from your day in "
-            "4–5 first-person sentences. Focus on which received messages you "
-            "found compelling and which you pushed back on, and whether your "
-            "thinking shifted on any aspect of the policy.\n\n"
-            "Reflections:\n{}"
+            "Concisely summarise the following day in 4–5 first-person "
+            "sentences. Cover: the positions you landed on and your key "
+            "reasoning, which received messages you found compelling and "
+            "which you pushed back on, and whether your thinking shifted on "
+            "any aspect of the policy.\n\n"
+            "Day's reflections and your own reasoning:\n{}"
         ).format(memories)
         system_prompt = "You are a concise summariser."
 
@@ -347,20 +421,63 @@ class SurveyedCitizen():
         return summary
 
     def compress_daily_memory(self, day, policy_id, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
-        """Summarise all reflections from a given day and policy into 2-3 sentences."""
-        day_reflections = [r for r in self.reflections
-                          if r["day"] == day and r.get("policy_id") == policy_id]
-        if not day_reflections:
+        """Unified per-day compression of reflections AND own survey reasoning.
+
+        In package mode (``policy_id == PACKAGE_SCOPE``) includes every
+        reflection from that day (all phases) plus every same-day
+        ``survey_reasoning`` entry across all policies. In single-policy
+        mode, includes only the matching-policy reflections plus same-day
+        reasoning for that policy. Stores one summary at
+        ``daily_summaries[(day, policy_id)]``.
+        """
+        if policy_id == PACKAGE_SCOPE:
+            day_reflections = [r for r in self.reflections if r["day"] == day]
+        else:
+            day_reflections = [r for r in self.reflections
+                              if r["day"] == day and r.get("policy_id") == policy_id]
+
+        day_reasoning = []
+        if policy_id == PACKAGE_SCOPE:
+            for pid in sorted(self.survey_reasoning.keys(), key=str):
+                if pid == PACKAGE_SCOPE:
+                    continue
+                for d, text in self.survey_reasoning[pid]:
+                    if d == day:
+                        label = SURVEY_SHORT_LABELS.get(pid, str(pid))
+                        day_reasoning.append((label, text))
+        else:
+            for d, text in self.survey_reasoning.get(policy_id, []):
+                if d == day:
+                    label = SURVEY_SHORT_LABELS.get(policy_id, str(policy_id))
+                    day_reasoning.append((label, text))
+
+        if not day_reflections and not day_reasoning:
             return ""
-        reflection_texts = "\n".join(f"- {r['text']}" for r in day_reflections)
-        summary = self.compress_memories(reflection_texts, api_key=api_key, model=model, provider=provider, temperature=temperature)
+
+        parts = []
+        if day_reflections:
+            parts.append(
+                "Reflections after messages:\n"
+                + "\n".join(f"- {r['text']}" for r in day_reflections)
+            )
+        if day_reasoning:
+            parts.append(
+                "My own survey reasoning today:\n"
+                + "\n".join(f"- {label}: {text}" for label, text in day_reasoning)
+            )
+        memories = "\n\n".join(parts)
+        summary = self.compress_memories(memories, api_key=api_key, model=model, provider=provider, temperature=temperature)
         self.daily_summaries[(day, policy_id)] = summary
         self._daily_summary_steps[(day, policy_id)] = self._sim_step()
         return summary
 
     def manage_memory(self, day, policy_id, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5):
-        """Called at the end of each simulation day to compress old memories."""
-        # Compress day d-2 into a daily summary (keep d-1 and d as full reflections)
+        """Called once per day (before the EOD survey, post v2) to compress old memories.
+
+        Compresses day ``d-2`` into a unified daily summary. Days ``d-1`` and
+        ``d`` remain as full verbatim reflections / own reasoning in the
+        vivid window.
+        """
         if day > 2:
             compress_day = day - 2
             if (compress_day, policy_id) not in self.daily_summaries:
@@ -388,11 +505,14 @@ class SurveyedCitizen():
 
     def administer_survey(self, policy_id, day=0, model="gpt-5-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, debias=False, context_policy_id=None) -> tuple[str, int]:
         # context_policy_id selects which slice of memory the system prompt sees;
-        # policy_id still selects the question, storage keys, and history bucket.
-        # In package mode the caller passes PACKAGE_SCOPE so package-scoped
-        # reflections/summaries survive assemble_context()'s per-policy filter.
+        # policy_id still selects the question, storage keys, history bucket,
+        # AND is the target_policy_id for the v2 anchor / own-reasoning /
+        # today-so-far sections. In package mode the caller passes
+        # PACKAGE_SCOPE for context_policy_id so package-scoped reflections /
+        # summaries survive assemble_context()'s per-policy filter, but the
+        # target stays the specific policy being asked about.
         ctx_policy = policy_id if context_policy_id is None else context_policy_id
-        system_prompt = self.get_system_prompt(day=day, policy_id=ctx_policy)
+        system_prompt = self.get_system_prompt(day=day, policy_id=ctx_policy, target_policy_id=policy_id)
         # Capture the exact assembled context the LLM will see for this
         # survey call. Diagnostic ground truth for context-staleness bugs.
         if policy_id not in self.survey_assembled_context:

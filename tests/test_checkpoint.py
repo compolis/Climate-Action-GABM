@@ -45,7 +45,6 @@ def _base_config(tmp_dir):
         "communication_mode": "single_policy",
         "llm_model": "mock-model",
         "llm_provider": "openai",
-        "output_dir": tmp_dir,
     }
 
 

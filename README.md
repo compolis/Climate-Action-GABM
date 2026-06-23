@@ -39,23 +39,28 @@ Changes in individual agents beliefs/desires/stances can cascade through their n
 
 The first model simulates how citizen opinions on six UK climate policies evolve over repeated "days" of competing political messaging and peer-to-peer deliberation. Two fixed political group agents — one pro-climate-action, one anti-climate-action — broadcast persuasive messages to citizen agents through a configurable network (default: stochastic block model). Between broadcasts, citizens converse with network neighbours and produce private reflections. At the end of each day, every citizen is re-administered the original survey instrument and their opinion is recorded on a 7-point scale (Strongly oppose → Strongly support). A post-hoc clamping function limits opinion shifts to empirically realistic magnitudes.
 
-Citizen agents are constructed from real **YouGov survey data** (UK, April 2024). Each agent's persona — demographics, voting history, and psychological value profile — is assembled into a natural-language prompt that the LLM adopts for the duration of the simulation. A tiered memory architecture (full reflections → daily summaries → weekly summaries) manages context window limits while preserving experiential continuity.
+Citizen agents are constructed from real **YouGov survey data** (UK, April 2024). Each agent's persona — demographics, voting history, and psychological value profile — is assembled into a natural-language prompt that the LLM adopts for the duration of the simulation. A **v2 six-section tiered memory architecture** ([docs/Model_Design.md](docs/Model_Design.md) §28) ranks context as persona + values → Day-0 anchor (verbatim from the agent's own Day-0 rationale, target-scoped) → daily summaries (older days) → recent reflections → own reasoning → today-so-far (package mode only). The split between **context scope** (`policy_id`) and **question scope** (`target_policy_id`) lets package-mode end-of-day surveys see cross-policy reflections while staying anchored to the specific policy being asked.
 
 
 ## Current Status
 
-**v0.7 — HPC-first infrastructure, audit-trail outputs (17 → 29 saved artefacts), network connectivity defence, NB-31 package-mode survey-context fix.**
+**v0.8 — refactor track: `sim.py` modular split (2755 → 838 lines), v2 tiered-memory architecture (six-section ordering, `policy_id` vs `target_policy_id` scope split, Day-0 anchor compression removed), operational polish (network-type-aware `[peer]` config log, dead `output_dir` key removed, AIRE first-time-download callout), new [docs/Code_Tour.md](docs/Code_Tour.md) researcher onboarding doc, NB 34 v2-memory smoke. No `__version__` bump (refactor-only release).**
 
 | Metric | Value |
 |--------|-------|
-| Tests | 539 collected; 538 passing, 1 skipped |
-| Runtime extensions (v0.7) | AIRE / SLURM thin sbatch launchers + sweep submitter ([scripts/aire/](scripts/aire/)) and preset-bundle CLI composition ([src/cag/presets.py](src/cag/presets.py), [src/cag/\_\_main\_\_.py](src/cag/__main__.py)); package-mode survey-context fix (NB-31; 12.6× Run-14 v2 amplification); outputs expansion (bucket-stratified CSVs, calibration table, message flow, network snapshot, per-agent timeline with 9 event types, full survey-prompt audit, monotonic `sim_step` counter); 3-layer network connectivity defence (literature-grounded SBM `p_inter=0.05`, adaptive small-N bump, deterministic auto-repair, visibility log); `k_peers=0` short-circuit; per-day checkpointing CLI default-on; `__version__` bulk-bumped to 0.7.0 across 18 modules |
-| Runtime extensions (v0.6, rolled into v0.7) | Canonical SIM defaults align with research runs (`n_citizens=100`, package-mode alternating phases, local Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`); offline political-message source first-class with strict startup validation and message-level provenance (`political_message_id`) |
-| Notebooks | 32 (01–32) |
-| Source files | 24 under `src/cag/` |
+| Tests | 557 collected; **556 passing, 1 skipped, 21 subtests passed** |
+| Refactor track (v0.8) | [src/cag/abm/sim.py](src/cag/abm/sim.py) split from **2755 → 838 lines** (orchestration only); five new focused modules: [src/cag/abm/network_repair.py](src/cag/abm/network_repair.py), [src/cag/io/aggregators.py](src/cag/io/aggregators.py), [src/cag/io/plots.py](src/cag/io/plots.py), [src/cag/io/results.py](src/cag/io/results.py), [src/cag/io/checkpoint.py](src/cag/io/checkpoint.py). NB 32 bit-identical regression validation (deterministic outputs, 22 LLM-driven CSV schemas, distributional stats within `gpt-5-mini @ T=0.5` noise). |
+| Memory architecture (v0.8) | `assemble_context()` rewritten as ordered six-section build; new `target_policy_id` parameter; `compress_day0_anchor()` LLM call + `day0_anchors.csv` schema removed (§2 now verbatim from `survey_reasoning`). v0.7 checkpoints resume cleanly into v0.8. |
+| Operational (v0.8) | Dead `SIM_CONFIG["output_dir"]` key removed (now 33 keys); `[peer]` config-log line renders resolved `_resolve_network_params(cfg)` dict (Watts–Strogatz, Barabási–Albert, Erdős–Rényi, homophily-weighted now report actual params); [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) §6 first-time-model-download callout. |
+| New onboarding doc (v0.8) | [docs/Code_Tour.md](docs/Code_Tour.md) — ~25-page newcomer walkthrough of `src/cag/`: audience + conventions, 30-min skim sequence, 15 file walkthroughs (medium depth on `sim.py` + `agent.py`), 2 side-trips (political-exposure affinity-rank, v2 memory annotated example), 6-recipe cookbook, 11-term glossary, AIRE pre-flight checklist. |
+| Carried from v0.7 | AIRE / SLURM thin sbatch launchers + sweep submitter ([scripts/aire/](scripts/aire/)); preset-bundle CLI composition ([src/cag/presets.py](src/cag/presets.py), [src/cag/\_\_main\_\_.py](src/cag/__main__.py)); NB-31 package-mode survey-context fix; outputs expansion (29 saved artefacts, bucket-stratified CSVs, calibration table, network snapshot, per-agent timeline with 9 event types, full survey-prompt audit, monotonic `sim_step` counter); 3-layer network connectivity defence (literature-grounded SBM `p_inter=0.05`, adaptive small-N bump, deterministic auto-repair); `k_peers=0` short-circuit; per-day checkpointing CLI default-on. |
+| Carried from v0.6 | Canonical SIM defaults align with research runs (`n_citizens=100`, package-mode alternating phases, local Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`); offline political-message source first-class with strict startup validation and message-level provenance (`political_message_id`). |
+| Notebooks | 34 (01–34) |
+| Source files | 29 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
 See [docs/Model_Design.md](docs/Model_Design.md) for the design specification.
+See [docs/Code_Tour.md](docs/Code_Tour.md) for a newcomer-friendly walkthrough of `src/cag/`.
 See [docs/result_report.md](docs/result_report.md) for experiment results and analysis.
 See [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) for canonical configuration options (supervisor brief + developer matrix).
 See [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) for the v0.7 HPC walkthrough.
@@ -66,19 +71,30 @@ See [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) for the v0.7 HPC walkthro
 ```
 src/cag/
 ├── abm/
-│   ├── agent.py               # SurveyedCitizen, PoliticalAgent
+│   ├── agent.py               # SurveyedCitizen (v2 six-section assemble_context), PoliticalAgent
 │   ├── environment.py         # SurveyedNation (network, broadcast, peer messaging)
-│   ├── sim.py                 # run_simulation(), SIM_CONFIG, collect_ground_truth()
-│   ├── output.py              # CSV/JSON export, share aggregations, plotting
+│   ├── sim.py                 # run_simulation(), _run_one_day(), _resolve_runtime(), SIM_CONFIG (838 lines, orchestration only)
+│   ├── network_repair.py      # 3-layer connectivity defence (_adjust_network_params_for_small_n, _auto_connect_components, _log_network_summary)
+│   ├── networks.py            # Network factory (stochastic_block, watts_strogatz, barabasi_albert, erdos_renyi, homophily_weighted)
 │   ├── political_messages.py  # Offline political-message loader, validation, selection
+│   ├── attribute_maps.py      # ID → string maps for all demographic enums
 │   ├── attributes/
-│   │   └── opinion.py         # ClimatePolicyID, survey constants, clamping, package index
+│   │   ├── opinion.py         # ClimatePolicyID, survey constants, clamping, package index, PACKAGE_SCOPE
+│   │   ├── politics.py        # Party / vote enums
+│   │   ├── education.py | ethnicity.py | family.py | income.py | region.py | narratives.py
 │   └── democracy/             # Brexit & UKGE2019 vote enums (from gabm)
 ├── io/
 │   ├── llm.py                 # send_chat() (openai/genai/anthropic/local), load_api_key(), parse_letter_response(), configure_local(), ping_local()
+│   ├── aggregators.py         # _collect_results post-processing: build_*_by_bucket, build_calibration_table, build_message_flow, build_agent_timeline (506 lines)
+│   ├── plots.py               # save_result_plots + every per-figure plotter (555 lines)
+│   ├── results.py             # save_results, _RESULT_CSV_SCHEMAS, _write_all_csvs, JSON serialisation (512 lines)
+│   ├── checkpoint.py          # _write_checkpoint, _load_checkpoint, resume-key validation, sim_step rehydration (366 lines)
 │   └── survey.py              # Survey loading utilities
-└── __main__.py
+├── presets.py                 # RUN_BUNDLE_PRESETS (smoke, r14_canonical) for CLI --preset composition
+└── __main__.py                # Full argparse coverage for every SIM_CONFIG knob; --preset / --list-presets / --dry-run
 ```
+
+A newcomer-friendly walkthrough of this layout — with a 30-minute skim sequence, file-by-file reading guide, and an AIRE pre-flight checklist — is in [docs/Code_Tour.md](docs/Code_Tour.md).
 
 
 ## Notebooks
@@ -116,6 +132,11 @@ Interactive demos live in `notebooks/`. Each covers one simulation component:
 | 27 | Affinity Exposure Demo | `rule_affinity_rank` validation on the full YouGov pool (target presets, weight presets, validation gates) |
 | 28 | Offline Political Messages Smoke | Curated offline message pool: loader, validation, selection/rotation, and `political_message_id` provenance |
 | 29 | Canonical Full Smoke | End-to-end canonical defaults run (package mode, local Qwen3, debias, ground-truth anchor, offline messages) |
+| 30 | Surgical Survey Replay | Cross-model surgical replay isolating the package-mode survey-context surface (pre-NB-31 discovery) |
+| 31 | Package-Mode Fix Validation | NB-31 fix-replay confirming `PACKAGE_SCOPE` plumbing through `administer_survey()` / `run_end_of_day_survey()` |
+| 32 | v0.6 Outputs Smoke | End-to-end validation of 29-artefact outputs expansion + network connectivity defence + v0.8 `sim.py` modular split regression |
+| 33 | `assemble_context` v2 Sandbox | Iterative-design sandbox notebook used to scope the v0.8 six-section context order, `policy_id` vs `target_policy_id` split, and verbatim Day-0 anchor path before NB 34 |
+| 34 | v2 Memory Smoke | End-to-end smoke for the v0.8 v2 six-section context order, `target_policy_id` scope split, and verbatim Day-0 anchor path (local Qwen3-8B-4bit) |
 
 
 ## License
