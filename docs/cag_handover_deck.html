@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Climate-Action-GABM — code &amp; HPC handover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#15181C; --paper:#F4F2EC; --surface:#FBFAF6; --muted:#6C7178; --line:#DAD6CC;
+    --c-a:#B0472F; --c-c:#E2AE7E; --c-f:#3E8C78; --c-g:#1E6B5B;
+    --orch:#C0841F; --io:#5C6E88; --domain:#5C7E5A; --vocab:#9C6FA0;
+    --pro:#2E7D63; --anti:#B0472F; --peer:#5C6E88;
+    --display:"Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--display); -webkit-font-smoothing:antialiased; overflow:hidden}
+  .deck{position:fixed; inset:0; display:flex; flex-direction:column}
+  .topbar{display:flex; align-items:baseline; justify-content:space-between; padding:18px clamp(20px,4vw,60px) 0}
+  .brand{font-weight:700; letter-spacing:-.01em; font-size:clamp(12px,1.4vw,15px)}
+  .brand b{color:var(--c-f)}
+  .brand .sub{font-family:var(--mono); color:var(--muted); font-weight:500; margin-left:10px; font-size:.82em; letter-spacing:0}
+  .eyebrow{font-family:var(--mono); font-size:clamp(10px,1.2vw,12.5px); color:var(--muted); letter-spacing:.04em; text-transform:uppercase}
+
+  .stagewrap{flex:1; position:relative; min-height:0}
+  .slide{position:absolute; inset:0; padding:4px clamp(20px,4vw,60px) 6px; display:flex; flex-direction:column; gap:clamp(6px,1.2vh,14px); opacity:0; transform:translateY(8px); pointer-events:none; transition:opacity .4s ease, transform .4s ease}
+  .slide.is-active{opacity:1; transform:none; pointer-events:auto}
+  .headline{font-weight:700; line-height:1.03; letter-spacing:-.02em; font-size:clamp(22px,3.1vw,40px); max-width:24ch}
+  .headline .q{color:var(--muted); font-weight:500}
+  .lede{font-size:clamp(12px,1.45vw,16.5px); color:#3a3e44; max-width:74ch; line-height:1.4; font-weight:400}
+  .lede b{font-weight:600; color:var(--ink)}
+  .stage{flex:1; min-height:0; display:flex; align-items:center; justify-content:center}
+  .stage svg{width:100%; height:100%; max-height:100%}
+  .takeaway{font-family:var(--mono); font-size:clamp(10px,1.25vw,14px); color:var(--muted); border-left:3px solid var(--c-f); padding-left:12px; line-height:1.4; max-width:96ch}
+  .takeaway b{color:var(--ink); font-weight:600}
+
+  /* ---- card grids (text-dense slides; auto-flow, never overlap) ---- */
+  .cards{display:grid; gap:10px; width:100%; align-content:start}
+  .cards.c2{grid-template-columns:1fr 1fr}
+  .cards.c3{grid-template-columns:1fr 1fr 1fr}
+  .card{background:var(--surface); border:1px solid var(--line); border-left-width:4px; border-radius:11px; padding:10px 13px}
+  .card.dom{border-left-color:var(--domain)} .card.io{border-left-color:var(--io)}
+  .card.voc{border-left-color:var(--vocab)} .card.cli{border-left-color:var(--orch)}
+  .card .ttl{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:3px}
+  .card .path{font-family:var(--mono); font-size:13px; font-weight:600}
+  .card .ln{font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap}
+  .card .what{font-size:12.7px; color:#3a3e44; line-height:1.32; margin:0 0 5px}
+  .card .names{font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.4}
+  .badge{display:inline-block; min-width:16px; height:16px; line-height:16px; text-align:center; border-radius:50%; background:var(--orch); color:#fff; font-family:var(--mono); font-size:10px; font-weight:600; padding:0 4px; margin-right:5px; vertical-align:1px}
+
+  /* ---- layered overview (act 2 opener) ---- */
+  .layers{display:flex; flex-direction:column; gap:9px; width:100%}
+  .layer{display:flex; align-items:center; gap:14px; background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:11px 14px}
+  .layer .lab{min-width:172px; font-weight:600; font-size:14px}
+  .layer .lab small{display:block; font-family:var(--mono); font-size:10.5px; color:var(--muted); font-weight:500; letter-spacing:.02em}
+  .layer .files{display:flex; flex-wrap:wrap; gap:6px}
+  .tag{font-family:var(--mono); font-size:11.5px; padding:3px 8px; border-radius:6px; background:#EFEDE6; color:#3a3e44; border:1px solid var(--line)}
+  .L-cli{border-left:4px solid var(--orch)} .L-orch{border-left:4px solid var(--orch)}
+  .L-dom{border-left:4px solid var(--domain)} .L-io{border-left:4px solid var(--io)} .L-voc{border-left:4px solid var(--vocab)}
+
+  /* ---- AIRE node cards / storage callout ---- */
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:14px; width:100%; align-content:start}
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px}
+  .panel h3{margin:0 0 8px; font-size:15px; font-weight:600}
+  .nodecard{display:flex; gap:11px; padding:9px 0; border-top:1px solid var(--line)}
+  .nodecard:first-of-type{border-top:none}
+  .nodecard .k{font-family:var(--mono); font-size:12.5px; font-weight:600; min-width:120px}
+  .nodecard .v{font-size:12.7px; color:#3a3e44; line-height:1.34}
+  .callout{border-left:4px solid var(--c-a); background:#FBF1EE; border-radius:10px; padding:11px 14px; font-size:13px; line-height:1.4}
+  .callout b{color:var(--c-a)}
+  .store{display:flex; gap:12px; margin-top:6px}
+  .store .box{flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--surface)}
+  .store .box .h{font-family:var(--mono); font-weight:600; font-size:13px}
+  .store .box.scr .h{color:var(--io)} .store .box.home .h{color:var(--domain)}
+  .store .box .d{font-size:12px; color:#3a3e44; line-height:1.35; margin-top:4px}
+
+  /* ---- step list (run.sh) ---- */
+  .steps{display:flex; flex-direction:column; gap:8px; width:100%}
+  .step{display:flex; gap:12px; align-items:flex-start; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px}
+  .step .n{flex:none; width:24px; height:24px; border-radius:50%; background:var(--orch); color:#fff; font-family:var(--mono); font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:center}
+  .step .b{font-size:13.5px; line-height:1.38}
+  .step .b b{font-family:var(--mono); font-weight:600}
+  .step .b small{color:var(--muted); font-family:var(--mono)}
+
+  .codeline{font-family:var(--mono); font-size:13px; background:#1e2228; color:#e8e6df; border-radius:9px; padding:11px 14px; line-height:1.5; overflow-x:auto}
+  .codeline .fl{color:#E2AE7E} .codeline .cm{color:#7f8893}
+
+  /* title / agenda */
+  .title-wrap{flex:1; display:flex; flex-direction:column; justify-content:center; gap:18px}
+  .title-wrap h1{font-size:clamp(30px,5vw,62px); font-weight:700; letter-spacing:-.025em; line-height:1; margin:0}
+  .title-wrap h1 b{color:var(--c-f)}
+  .title-wrap .deck-sub{font-size:clamp(14px,1.8vw,20px); color:#3a3e44; max-width:60ch; line-height:1.4}
+  .agenda{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; max-width:900px}
+  .agenda .a{border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--surface); border-top:4px solid var(--c-f)}
+  .agenda .a:nth-child(2){border-top-color:var(--io)} .agenda .a:nth-child(3){border-top-color:var(--orch)}
+  .agenda .a .e{font-family:var(--mono); font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em}
+  .agenda .a .t{font-weight:600; font-size:16px; margin:4px 0 4px}
+  .agenda .a .d{font-size:12.5px; color:#3a3e44; line-height:1.35}
+
+  /* ---- footer / nav ---- */
+  .footer{padding:0 clamp(20px,4vw,60px) 16px; display:flex; align-items:center; gap:14px}
+  .arrows{display:flex; gap:8px}
+  .arrows button{font-family:var(--mono); font-size:13px; cursor:pointer; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:6px 11px}
+  .arrows button:disabled{opacity:.35; cursor:default}
+  .arrows button:focus-visible{outline:2px solid var(--c-f); outline-offset:2px}
+  .thread{flex:1; height:7px; border-radius:6px; overflow:hidden; display:flex; box-shadow:inset 0 0 0 1px var(--line)}
+  .thread span{flex:1; opacity:.26; transition:opacity .35s ease}
+  .thread span.lit{opacity:1}
+  .hint{font-family:var(--mono); font-size:11px; color:var(--muted)}
+  .counter{font-family:var(--mono); font-size:12.5px; color:var(--muted); min-width:54px; text-align:right}
+
+  svg text{font-family:var(--mono); fill:var(--ink)}
+  .t-node{font-family:var(--display); font-weight:600}
+  .t-sub{fill:var(--muted); font-size:12px}
+  .t-tag{font-size:11px}
+  .t-big{font-family:var(--display); font-weight:700}
+
+  @media (max-width:880px){
+    .cards.c2,.cards.c3{grid-template-columns:1fr}
+    .two,.agenda{grid-template-columns:1fr}
+    .hint{display:none}
+  }
+  @media (prefers-reduced-motion: reduce){ .slide,.thread span{transition:none} }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <div class="topbar">
+    <div class="brand">CLIMATE-<b>ACTION</b>-GABM<span class="sub" id="brandsub">handover · src/ + AIRE</span></div>
+    <div class="eyebrow" id="eyebrow">cover</div>
+  </div>
+
+  <div class="stagewrap" id="stagewrap">
+
+    <!-- ===== 0 · TITLE / AGENDA ===== -->
+    <section class="slide is-active" aria-label="Title and agenda">
+      <div class="title-wrap">
+        <h1>Climate-Action-<b>GABM</b><br>code &amp; HPC handover</h1>
+        <p class="deck-sub">A 30-minute tour: the mental model, what every file in <b>src/cag/</b> does, and how a run is operationalised on Leeds's <b>AIRE</b> cluster.</p>
+        <div class="agenda">
+          <div class="a"><div class="e">Act 1 · ~5 min</div><div class="t">Orientation</div><div class="d">The one mental model, where code lives, and what happens in a single simulated day.</div></div>
+          <div class="a"><div class="e">Act 2 · ~12 min</div><div class="t">The code, file by file</div><div class="d">Every module in src/cag/, grouped by layer, with the 2–3 names that unlock each one.</div></div>
+          <div class="a"><div class="e">Act 3 · ~8 min</div><div class="t">Running on AIRE</div><div class="d">What AIRE is, the run lifecycle, and the two files that drive it: run.sh and __main__.py.</div></div>
+        </div>
+      </div>
+      <p class="takeaway">Use <b>← →</b> (or space) to move · click the dots to jump · the bar below is coloured by act.</p>
+    </section>
+
+    <!-- ===== 1 · MENTAL MODEL ===== -->
+    <section class="slide" aria-label="The mental model">
+      <h1 class="headline"><span class="q">What is this,</span> and what's the one model to hold?</h1>
+      <p class="lede"><b>100 LLM-driven citizens</b> debate <b>6 UK climate policies</b> over repeated "days". Two broadcasters — one pro-climate, one anti — push competing messages; citizens talk to neighbours, then re-take the survey each night. Everyone is seeded from real <b>YouGov</b> data. The whole codebase is one pipeline:</p>
+      <div class="stage">
+        <svg viewBox="0 0 1040 330" role="img" aria-label="Pipeline: config, phases, day loop, memory, survey, outputs">
+          <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#9AA0A6"/></marker></defs>
+          <text x="8" y="34" class="t-big" font-size="14" fill="#6C7178">THE PIPELINE</text>
+          <line x1="8" y1="48" x2="1032" y2="48" stroke="#DAD6CC"/>
+          <text x="8" y="78" class="t-sub" font-size="12.5">config → phases → day-loop → agent memory → end-of-day survey → output CSVs</text>
+          <g>
+            <rect x="8" y="110" width="156" height="104" rx="14" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="86" y="142" text-anchor="middle" class="t-node" font-size="17">Config</text>
+            <text x="86" y="168" text-anchor="middle" class="t-sub">your --flags →</text>
+            <text x="86" y="188" text-anchor="middle" class="t-sub">one settings dict</text>
+            <rect x="180" y="110" width="156" height="104" rx="14" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="258" y="142" text-anchor="middle" class="t-node" font-size="17">Phases</text>
+            <text x="258" y="168" text-anchor="middle" class="t-sub">who speaks,</text>
+            <text x="258" y="188" text-anchor="middle" class="t-sub">each day</text>
+            <rect x="352" y="110" width="156" height="104" rx="14" fill="#F0EFE8" stroke="#15181C" stroke-width="1.5"/>
+            <text x="430" y="142" text-anchor="middle" class="t-node" font-size="17">Day loop</text>
+            <text x="430" y="168" text-anchor="middle" class="t-sub">run, day</text>
+            <text x="430" y="188" text-anchor="middle" class="t-sub" fill="#B0472F">★ the heart</text>
+            <rect x="524" y="110" width="156" height="104" rx="14" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="602" y="142" text-anchor="middle" class="t-node" font-size="17">Memory</text>
+            <text x="602" y="168" text-anchor="middle" class="t-sub">remembers,</text>
+            <text x="602" y="188" text-anchor="middle" class="t-sub">freshest first</text>
+            <rect x="696" y="110" width="156" height="104" rx="14" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="774" y="142" text-anchor="middle" class="t-node" font-size="15">EOD survey</text>
+            <text x="774" y="168" text-anchor="middle" class="t-sub">re-ask the 6,</text>
+            <text x="774" y="188" text-anchor="middle" class="t-sub">record opinion</text>
+            <rect x="868" y="110" width="164" height="104" rx="14" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="950" y="142" text-anchor="middle" class="t-node" font-size="17">Outputs</text>
+            <text x="950" y="168" text-anchor="middle" class="t-sub">CSVs you</text>
+            <text x="950" y="188" text-anchor="middle" class="t-sub">read after</text>
+          </g>
+          <g stroke="#9AA0A6" stroke-width="2" marker-end="url(#ar)">
+            <line x1="166" y1="162" x2="178" y2="162"/><line x1="338" y1="162" x2="350" y2="162"/>
+            <line x1="510" y1="162" x2="522" y2="162"/><line x1="682" y1="162" x2="694" y2="162"/>
+            <line x1="854" y1="162" x2="866" y2="162"/>
+          </g>
+          <path d="M430 214 C430 268, 602 268, 602 214" fill="none" stroke="#C0841F" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#ar)"/>
+          <text x="516" y="292" text-anchor="middle" class="t-tag" fill="#C0841F">repeat phases → memory → survey, every day</text>
+        </svg>
+      </div>
+      <p class="takeaway">If you remember one thing: <b>everything is the day loop</b>. The other five boxes feed it or read from it.</p>
+    </section>
+
+    <!-- ===== 2 · WHERE CODE LIVES (HTML, overlap-proof) ===== -->
+    <section class="slide" aria-label="Where the code lives">
+      <h1 class="headline"><span class="q">Where does the code live,</span> and where's the weight?</h1>
+      <p class="lede">Five directories under <b>src/cag/</b>. The numbered files are the 30-minute skim path — read them in order and you have the skeleton. Bigger files carry more weight, shown by line count.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="two" style="grid-template-columns:1.55fr 1fr">
+          <div class="panel">
+            <h3 style="font-family:var(--mono);font-size:13px;color:#6C7178;font-weight:600">src/cag/  —  the tree</h3>
+            <div style="font-family:var(--mono);font-size:13px;line-height:1.85">
+              <div><span class="badge">1</span>__main__.py <span class="ln" style="color:var(--orch)">631</span> &nbsp;<span style="color:#9AA0A6">· the CLI</span></div>
+              <div><span class="badge">2</span>presets.py <span class="ln">73</span></div>
+              <div style="color:#5C7E5A;margin-top:4px">abm/ <span style="color:#9AA0A6;font-size:11px">· domain</span></div>
+              <div style="padding-left:18px"><span class="badge">3</span>sim.py <span class="ln" style="color:var(--orch)">853</span></div>
+              <div style="padding-left:18px"><span class="badge">4</span>agent.py <span class="ln">878</span></div>
+              <div style="padding-left:18px">environment.py <span class="ln">1382</span></div>
+              <div style="padding-left:18px">networks.py <span class="ln">508</span> · network_repair.py <span class="ln">263</span></div>
+              <div style="padding-left:18px">political_messages.py <span class="ln">456</span></div>
+              <div style="padding-left:18px;color:#9C6FA0">attributes/ · democracy/ <span style="color:#9AA0A6;font-size:11px">· vocabulary</span></div>
+              <div style="color:#5C6E88;margin-top:4px">io/ <span style="color:#9AA0A6;font-size:11px">· persistence</span></div>
+              <div style="padding-left:18px">llm.py <span class="ln">740</span> · <span class="badge">5</span>results.py <span class="ln">512</span></div>
+              <div style="padding-left:18px">aggregators.py <span class="ln">506</span> · plots.py <span class="ln">555</span></div>
+              <div style="padding-left:18px">checkpoint.py <span class="ln">366</span> · survey.py <span class="ln">179</span></div>
+            </div>
+          </div>
+          <div class="panel" style="background:#F0EFE8">
+            <h3 style="font-family:var(--mono);font-size:13px;color:#8a5d12;font-weight:600">READ FIRST · ≈30 min</h3>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:4px;font-size:13px">
+              <div><span class="badge">1</span><b>__main__.py</b> — flags become config</div>
+              <div><span class="badge">2</span><b>presets.py</b> — named run-bundles</div>
+              <div><span class="badge">3</span><b>sim.py</b> — the day loop</div>
+              <div><span class="badge">4</span><b>agent.py</b> — memory + survey</div>
+              <div><span class="badge">5</span><b>results.py</b> — what comes out</div>
+            </div>
+            <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px;font-size:12px;color:#6C7178;line-height:1.5">
+              <span style="color:var(--orch)">■</span> orchestrator &nbsp; <span style="color:var(--domain)">■</span> domain &nbsp; <span style="color:var(--io)">■</span> persistence<br>
+              v0.8 split sim.py 2755 → 853 lines; results / aggregators / plots / checkpoint moved into io/.
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="takeaway">The heavy <b>io/</b> files are post-run plumbing, not simulation logic. The actual simulation lives in <b>sim.py + agent.py + environment.py</b>.</p>
+    </section>
+
+    <!-- ===== 3 · ONE DAY ===== -->
+    <section class="slide" aria-label="What runs in one day">
+      <h1 class="headline"><span class="q">What runs</span> when I hit "go"?</h1>
+      <p class="lede">Each citizen is first seeded from their <b>real YouGov answer</b> (Day 0). Then every day repeats the same rhythm — two broadcasts, peer chat, a memory pass, a re-survey — for N days.</p>
+      <div class="stage">
+        <svg viewBox="0 0 1040 340" role="img" aria-label="One simulated day">
+          <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#9AA0A6"/></marker></defs>
+          <rect x="6" y="118" width="150" height="120" rx="14" fill="#F0EFE8" stroke="#15181C" stroke-width="1.4"/>
+          <text x="81" y="150" text-anchor="middle" class="t-node" font-size="16">Day 0</text>
+          <text x="81" y="176" text-anchor="middle" class="t-sub">seed each citizen</text>
+          <text x="81" y="196" text-anchor="middle" class="t-sub">from real YouGov</text>
+          <line x1="158" y1="178" x2="176" y2="178" stroke="#9AA0A6" stroke-width="2" marker-end="url(#ar2)"/>
+          <rect x="182" y="68" width="780" height="222" rx="16" fill="none" stroke="#C0841F" stroke-width="1.6" stroke-dasharray="6 5"/>
+          <text x="196" y="90" class="t-big" font-size="13" fill="#C0841F">DAY d  ·  repeats × N</text>
+          <rect x="196" y="108" width="118" height="92" rx="12" fill="#FBFAF6" stroke="#2E7D63" stroke-width="1.6"/>
+          <text x="255" y="138" text-anchor="middle" class="t-node" font-size="14" fill="#1f5a47">P-A</text>
+          <text x="255" y="160" text-anchor="middle" class="t-sub">pro-climate</text>
+          <text x="255" y="178" text-anchor="middle" class="t-sub">broadcast</text>
+          <rect x="324" y="108" width="118" height="92" rx="12" fill="#FBFAF6" stroke="#B0472F" stroke-width="1.6"/>
+          <text x="383" y="138" text-anchor="middle" class="t-node" font-size="14" fill="#8c3825">P-B</text>
+          <text x="383" y="160" text-anchor="middle" class="t-sub">anti-climate</text>
+          <text x="383" y="178" text-anchor="middle" class="t-sub">broadcast</text>
+          <rect x="452" y="108" width="118" height="92" rx="12" fill="#FBFAF6" stroke="#5C6E88" stroke-width="1.6"/>
+          <text x="511" y="138" text-anchor="middle" class="t-node" font-size="14" fill="#3f4d63">C</text>
+          <text x="511" y="160" text-anchor="middle" class="t-sub">peer messaging</text>
+          <text x="511" y="178" text-anchor="middle" class="t-sub">(neighbours)</text>
+          <rect x="580" y="108" width="160" height="92" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+          <text x="660" y="138" text-anchor="middle" class="t-node" font-size="13.5">manage_memory</text>
+          <text x="660" y="160" text-anchor="middle" class="t-sub">compress day d−2</text>
+          <text x="660" y="178" text-anchor="middle" class="t-sub" fill="#B0472F">before the survey</text>
+          <rect x="750" y="108" width="120" height="92" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+          <text x="810" y="138" text-anchor="middle" class="t-node" font-size="13">EOD survey</text>
+          <text x="810" y="160" text-anchor="middle" class="t-sub">all 6 policies,</text>
+          <text x="810" y="178" text-anchor="middle" class="t-sub">shuffled</text>
+          <rect x="880" y="108" width="70" height="92" rx="12" fill="#F0EFE8" stroke="#E2DED4"/>
+          <text x="915" y="146" text-anchor="middle" class="t-node" font-size="13">record</text>
+          <text x="915" y="168" text-anchor="middle" class="t-sub" font-size="11">opinion</text>
+          <g stroke="#9AA0A6" stroke-width="1.8" marker-end="url(#ar2)">
+            <line x1="314" y1="154" x2="322" y2="154"/><line x1="442" y1="154" x2="450" y2="154"/>
+            <line x1="570" y1="154" x2="578" y2="154"/><line x1="740" y1="154" x2="748" y2="154"/>
+            <line x1="870" y1="154" x2="878" y2="154"/>
+          </g>
+          <text x="383" y="222" text-anchor="middle" class="t-tag" fill="#6C7178">phase order is configurable &amp; alternates across days</text>
+          <path d="M915 200 C915 248, 600 248, 320 248 L 260 248" fill="none" stroke="#C0841F" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#ar2)"/>
+          <text x="600" y="270" text-anchor="middle" class="t-tag" fill="#C0841F">checkpoint saved after each day</text>
+          <text x="196" y="314" class="t-sub" font-size="12.5">No clamping: opinions shift freely — the model moves each citizen as far as its own answer implies.</text>
+        </svg>
+      </div>
+      <p class="takeaway">The detail that trips people up: memory compresses <b>before</b> the survey — older days are summarised before the agent answers again.</p>
+    </section>
+
+    <!-- ===== 4 · MEMORY ===== -->
+    <section class="slide" aria-label="The memory architecture">
+      <h1 class="headline"><span class="q">The memory trick</span> — what does the model see?</h1>
+      <p class="lede">Before every survey question, each citizen's prompt is rebuilt as <b>six sections</b>: freshest days verbatim, older days compressed. Two independent "scopes" decide what goes in.</p>
+      <div class="stage">
+        <svg viewBox="0 0 1040 340" role="img" aria-label="assemble_context six sections and two scopes">
+          <text x="6" y="18" class="t-big" font-size="13" fill="#6C7178">ONE PROMPT · built top-to-bottom, empty sections skipped</text>
+          <g>
+            <rect x="6" y="30" width="650" height="42" rx="9" fill="#FBFAF6" stroke="#DAD6CC"/><rect x="6" y="30" width="6" height="42" rx="3" fill="#9AA0A6"/>
+            <text x="26" y="49" font-size="13.5" font-weight="600">§1 · Persona + values</text>
+            <text x="26" y="65" class="t-sub" font-size="11.5">who this citizen is</text>
+            <text x="642" y="56" text-anchor="end" class="t-tag" fill="#6C7178">always</text>
+            <rect x="6" y="78" width="650" height="42" rx="9" fill="#FBF6EE" stroke="#E8C893"/><rect x="6" y="78" width="6" height="42" rx="3" fill="#C0841F"/>
+            <text x="26" y="97" font-size="13.5" font-weight="600">§2 · Day-0 anchor</text>
+            <text x="26" y="113" class="t-sub" font-size="11.5">the agent's own Day-0 words, kept verbatim</text>
+            <text x="642" y="104" text-anchor="end" class="t-tag" fill="#8a5d12">verbatim</text>
+            <rect x="6" y="126" width="650" height="42" rx="9" fill="#F1F6F1" stroke="#BBD3BB"/><rect x="6" y="126" width="6" height="42" rx="3" fill="#5C7E5A"/>
+            <text x="26" y="145" font-size="13.5" font-weight="600">§3 · Summary of older days</text>
+            <text x="26" y="161" class="t-sub" font-size="11.5">days ≤ d−2, compressed to a few sentences</text>
+            <text x="642" y="152" text-anchor="end" class="t-tag" fill="#3f5a3d">gist</text>
+            <rect x="6" y="174" width="650" height="42" rx="9" fill="#F1F6F1" stroke="#BBD3BB"/><rect x="6" y="174" width="6" height="42" rx="3" fill="#5C7E5A"/>
+            <text x="26" y="193" font-size="13.5" font-weight="600">§4 · Recent reflections</text>
+            <text x="26" y="209" class="t-sub" font-size="11.5">days d−1 and d — the "vivid window", verbatim</text>
+            <text x="642" y="200" text-anchor="end" class="t-tag" fill="#3f5a3d">vivid</text>
+            <rect x="6" y="222" width="650" height="42" rx="9" fill="#FBF6EE" stroke="#E8C893"/><rect x="6" y="222" width="6" height="42" rx="3" fill="#C0841F"/>
+            <text x="26" y="241" font-size="13.5" font-weight="600">§5 · My own recent reasoning</text>
+            <text x="26" y="257" class="t-sub" font-size="11.5">what I argued on this policy, days d−1 / d</text>
+            <text x="642" y="248" text-anchor="end" class="t-tag" fill="#8a5d12">vivid</text>
+            <rect x="6" y="270" width="650" height="42" rx="9" fill="#FBF6EE" stroke="#E8C893"/><rect x="6" y="270" width="6" height="42" rx="3" fill="#C0841F"/>
+            <text x="26" y="289" font-size="13.5" font-weight="600">§6 · My other answers today</text>
+            <text x="26" y="305" class="t-sub" font-size="11.5">other policies answered earlier today</text>
+            <text x="642" y="296" text-anchor="end" class="t-tag" fill="#8a5d12">package only</text>
+          </g>
+          <g>
+            <rect x="684" y="30" width="350" height="134" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="702" y="54" class="t-big" font-size="13" fill="#6C7178">TWO SCOPES</text>
+            <rect x="702" y="66" width="13" height="13" rx="3" fill="#5C7E5A"/>
+            <text x="724" y="77" font-size="13" font-weight="600" fill="#3f5a3d">context scope</text>
+            <text x="702" y="97" class="t-sub" font-size="11.5">"what I've been thinking about"</text>
+            <text x="702" y="113" class="t-sub" font-size="11.5">→ fills §3 + §4</text>
+            <rect x="702" y="124" width="13" height="13" rx="3" fill="#C0841F"/>
+            <text x="724" y="135" font-size="13" font-weight="600" fill="#8a5d12">question scope</text>
+            <text x="702" y="155" class="t-sub" font-size="11.5">"the policy we're asking now" → §2 + §5 + §6</text>
+            <rect x="684" y="176" width="350" height="136" rx="12" fill="#F0EFE8" stroke="#E2DED4"/>
+            <text x="702" y="200" class="t-big" font-size="13" fill="#15181C">PACKAGE-MODE SURVEY</text>
+            <text x="702" y="224" font-size="12" fill="#3a3e44">All 6 policies asked the same night:</text>
+            <text x="702" y="250" font-size="12" fill="#5C7E5A">• context = the whole package</text>
+            <text x="718" y="266" class="t-sub" font-size="11">keeps cross-policy reflections in §3 / §4</text>
+            <text x="702" y="290" font-size="12" fill="#8a5d12">• question = this one policy</text>
+            <text x="718" y="306" class="t-sub" font-size="11">keeps §2 / §5 / §6 pinned to what's asked</text>
+          </g>
+        </svg>
+      </div>
+      <p class="takeaway">The invariant: <b>context scope</b> (what I've been thinking about) and <b>question scope</b> (what we're asking now) are set independently — that's what lets package mode stay broad <i>and</i> precise.</p>
+    </section>
+
+    <!-- ===== 5 · OUTPUTS (HTML, overlap-proof) ===== -->
+    <section class="slide" aria-label="How to see what happened">
+      <h1 class="headline"><span class="q">How do I see</span> what actually happened?</h1>
+      <p class="lede">Every run drops a timestamped folder of CSVs (on AIRE, under <b>$SCRATCH</b>). You don't need all of them — these four, in order, tell the whole story.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="cards" style="grid-template-columns:1fr">
+          <div class="card io"><div class="ttl"><span class="path"><span class="badge">1</span>agent_attributes.csv</span><span class="ln">the cast</span></div><p class="what" style="margin:0">Who the agents are — demographics, values, vote history.</p></div>
+          <div class="card io"><div class="ttl"><span class="path"><span class="badge">2</span>opinion_trajectories.csv</span><span class="ln">the result</span></div><p class="what" style="margin:0">What each agent answered, every policy, every day.</p></div>
+          <div class="card io"><div class="ttl"><span class="path"><span class="badge">3</span>survey_assembled_context.csv</span><span class="ln">the evidence</span></div><p class="what" style="margin:0">The exact prompt the model saw — start here when an answer looks odd.</p></div>
+          <div class="card" style="border-left-color:var(--orch);background:#FBF6EE"><div class="ttl"><span class="path"><span class="badge">4</span>agent_timeline.csv</span><span class="ln" style="color:#8a5d12">★ most useful</span></div><p class="what" style="margin:0">One agent's whole experience in true order — broadcasts, peer messages, reflections, surveys.</p></div>
+          <div class="card" style="border-left-color:var(--line)"><p class="what" style="margin:0;color:#6C7178">+ ~25 more — config.json · network_snapshot.json · reflections.csv · calibration.csv · daily_summaries.csv · plots/</p></div>
+        </div>
+      </div>
+      <p class="takeaway">Read these top-to-bottom and you can trace any run end-to-end. The schema list lives in <b>io/results.py</b>.</p>
+    </section>
+
+    <!-- ===== 6 · HOW src/ IS ORGANISED (layers) ===== -->
+    <section class="slide" aria-label="How src is organised">
+      <h1 class="headline"><span class="q">Act 2.</span> How the code is layered</h1>
+      <p class="lede">Four layers, top to bottom. Each only depends on the ones below it — so you can read it in this order without surprises. The next four slides walk each layer file by file.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="layers">
+          <div class="layer L-cli"><div class="lab">CLI surface<small>you run this</small></div><div class="files"><span class="tag">__main__.py</span><span class="tag">presets.py</span></div></div>
+          <div class="layer L-orch"><div class="lab">Orchestration<small>the conductor</small></div><div class="files"><span class="tag">abm/sim.py</span></div></div>
+          <div class="layer L-dom"><div class="lab">Domain<small>the simulation engine</small></div><div class="files"><span class="tag">abm/agent.py</span><span class="tag">abm/environment.py</span><span class="tag">abm/networks.py</span><span class="tag">abm/network_repair.py</span><span class="tag">abm/political_messages.py</span></div></div>
+          <div class="layer L-voc"><div class="lab">Data vocabulary<small>persona building blocks</small></div><div class="files"><span class="tag">abm/attributes/*</span><span class="tag">abm/democracy/elections/*</span></div></div>
+          <div class="layer L-io"><div class="lab">Persistence / I-O<small>the model + the files</small></div><div class="files"><span class="tag">io/llm.py</span><span class="tag">io/results.py</span><span class="tag">io/aggregators.py</span><span class="tag">io/plots.py</span><span class="tag">io/checkpoint.py</span><span class="tag">io/survey.py</span></div></div>
+        </div>
+      </div>
+      <p class="takeaway">Reading rule of thumb: <b>sim.py calls the domain layer; the domain layer calls io/llm.py and the vocabulary; results/plots read state out at the end.</b></p>
+    </section>
+
+    <!-- ===== 7 · abm/ CORE ===== -->
+    <section class="slide" aria-label="abm core files">
+      <h1 class="headline">The engine — <span class="q">src/cag/abm/</span></h1>
+      <p class="lede">The five files that actually run the simulation. If you only ever open three, make them <b>sim.py</b>, <b>agent.py</b>, and <b>environment.py</b>.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="cards c2">
+          <div class="card dom"><div class="ttl"><span class="path">sim.py</span><span class="ln">853 ln · orchestrator</span></div><p class="what">Runs the show: validates config, builds the world, runs Day 0, loops the days, writes checkpoints.</p><div class="names">run_simulation · _run_one_day · _resolve_runtime · SIM_CONFIG (33 keys)</div></div>
+          <div class="card dom"><div class="ttl"><span class="path">agent.py</span><span class="ln">878 ln</span></div><p class="what">One citizen: holds opinions, reflections and memory, and builds every LLM prompt it sends.</p><div class="names">SurveyedCitizen · assemble_context · manage_memory · administer_survey · PoliticalAgent</div></div>
+          <div class="card dom"><div class="ttl"><span class="path">environment.py</span><span class="ln">1382 ln</span></div><p class="what">The population: owns the network, runs broadcasts &amp; peer chat, and decides who hears whom (affinity scoring).</p><div class="names">SurveyedNation · run_package_broadcast · run_end_of_day_survey · assign_political_exposure</div></div>
+          <div class="card dom"><div class="ttl"><span class="path">networks.py</span><span class="ln">508 ln</span></div><p class="what">Builds the peer network — 5 topologies, default stochastic-block — plus connectivity diagnostics.</p><div class="names">build_network · compute_diagnostics</div></div>
+          <div class="card dom"><div class="ttl"><span class="path">network_repair.py</span><span class="ln">263 ln</span></div><p class="what">Safety net: bumps parameters for small N, and bridges any disconnected islands so no citizen is isolated.</p><div class="names">_adjust_network_params_for_small_n · _auto_connect_components</div></div>
+          <div class="card dom"><div class="ttl"><span class="path">political_messages.py</span><span class="ln">456 ln</span></div><p class="what">Loads the curated offline broadcast pool and serves one message per (side, policy), in a seeded rotation.</p><div class="names">MessagePool · load_message_pool</div></div>
+        </div>
+      </div>
+      <p class="takeaway">Mental split: <b>sim.py</b> = when things happen · <b>agent.py</b> = what one citizen thinks · <b>environment.py</b> = how citizens are wired together.</p>
+    </section>
+
+    <!-- ===== 8 · attributes + democracy ===== -->
+    <section class="slide" aria-label="attributes and democracy files">
+      <h1 class="headline">The vocabulary — <span class="q">attributes/ &amp; democracy/</span></h1>
+      <p class="lede">Small, mostly-static files. They turn YouGov's numeric codes into the readable persona text every prompt is built from. You'll rarely edit these unless you add a policy or a demographic.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="cards c2">
+          <div class="card voc"><div class="ttl"><span class="path">attributes/opinion.py</span><span class="ln">190 ln</span></div><p class="what">The heart of the vocabulary: the 6 climate policies, the A–G (−3…+3) scale, and the package index.</p><div class="names">ClimatePolicyID · PACKAGE_SCOPE · survey_to_numeric · compute_package_index</div></div>
+          <div class="card voc"><div class="ttl"><span class="path">attributes/narratives.py</span><span class="ln">176 ln</span></div><p class="what">Value-scale maps (Schwartz, SDO, RWA) → the sentences that describe a citizen's worldview.</p><div class="names">get_narrative · *Map tables</div></div>
+          <div class="card voc"><div class="ttl"><span class="path">attributes/ · demographics</span><span class="ln">~390 ln total</span></div><p class="what">One small map each: politics, region, education, income, family, ethnicity → readable labels.</p><div class="names">politics.py · region.py · education.py · income.py · family.py · ethnicity.py</div></div>
+          <div class="card voc"><div class="ttl"><span class="path">democracy/elections/</span><span class="ln">244 ln</span></div><p class="what">Vote-choice maps used in persona text and in the affinity scoring that assigns exposure.</p><div class="names">ukge2019.py → UKGE2019VoteMap · brexit.py → BrexitVoteMap</div></div>
+        </div>
+      </div>
+      <p class="takeaway">Heads-up for the handover: <b>opinion_suggested_edit.py</b> is a scratch copy of opinion.py — unused, ignore it. And <b>clamp_opinion_shift</b> still lives in opinion.py but is never called.</p>
+    </section>
+
+    <!-- ===== 9 · io ===== -->
+    <section class="slide" aria-label="io files">
+      <h1 class="headline">Persistence &amp; I/O — <span class="q">src/cag/io/</span></h1>
+      <p class="lede">Everything that touches the outside world: the model, the input CSV, and every output file. Pure plumbing — no simulation logic lives here.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="cards c2">
+          <div class="card io"><div class="ttl"><span class="path">llm.py</span><span class="ln">740 ln</span></div><p class="what">The only door to a model. One send_chat() covers OpenAI / Anthropic / Google / local vLLM, with retry on rejected params.</p><div class="names">send_chat · ping_local · parse_letter_response · load_api_key</div></div>
+          <div class="card io"><div class="ttl"><span class="path">results.py</span><span class="ln">512 ln</span></div><p class="what">Defines the CSV schemas and writes every artefact. The canonical list of outputs lives here.</p><div class="names">_RESULT_CSV_SCHEMAS · _collect_results · save_results</div></div>
+          <div class="card io"><div class="ttl"><span class="path">aggregators.py</span><span class="ln">506 ln</span></div><p class="what">Turns raw per-agent state into summary tables: opinion shares, calibration, the agent timeline.</p><div class="names">build_opinion_shares · build_calibration_table · build_agent_timeline</div></div>
+          <div class="card io"><div class="ttl"><span class="path">plots.py</span><span class="ln">555 ln</span></div><p class="what">Every figure, saved to disk (Agg backend, never shown). One entry point fans out to all plotters.</p><div class="names">save_result_plots · plot_opinion_trajectories · plot_calibration_by_policy</div></div>
+          <div class="card io"><div class="ttl"><span class="path">checkpoint.py</span><span class="ln">366 ln</span></div><p class="what">Per-day snapshots of agent state + the rules for safely resuming a killed run.</p><div class="names">_write_checkpoint · _load_checkpoint</div></div>
+          <div class="card io"><div class="ttl"><span class="path">survey.py</span><span class="ln">179 ln</span></div><p class="what">Loads and cleans the YouGov CSV that the whole model is seeded from.</p><div class="names">load</div></div>
+        </div>
+      </div>
+      <p class="takeaway">If a survey produces junk, the trail is <b>survey_raw_response.csv → parse_letter_response (llm.py) → the A–G scale (opinion.py)</b>.</p>
+    </section>
+
+    <!-- ===== 10 · CLI surface ===== -->
+    <section class="slide" aria-label="top level CLI files">
+      <h1 class="headline">The CLI surface — <span class="q">top of src/cag/</span></h1>
+      <p class="lede">How a command line becomes a run. <b>__main__.py</b> is the most important file for AIRE — we come back to it in Act 3.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="cards c3">
+          <div class="card cli"><div class="ttl"><span class="path">__main__.py</span><span class="ln">631 ln</span></div><p class="what">python -m cag. Flags → config → nation → run → outputs. The headless entry point AIRE calls.</p><div class="names">main · build_config · build_nation · parse_args</div></div>
+          <div class="card cli"><div class="ttl"><span class="path">presets.py</span><span class="ln">73 ln</span></div><p class="what">Named flag-bundles so a long run is one word: smoke (10×2) and r14_canonical (50×5).</p><div class="names">RUN_BUNDLE_PRESETS · list_presets</div></div>
+          <div class="card cli"><div class="ttl"><span class="path">__init__.py</span><span class="ln">1 ln</span></div><p class="what">Just the version marker. Nothing to read.</p><div class="names">__version__</div></div>
+        </div>
+        <div class="codeline" style="margin-top:12px">
+          <span class="cm"># the three layers that compose into one config (lowest → highest precedence)</span><br>
+          SIM_CONFIG defaults <span class="cm">(sim.py)</span> &nbsp;→&nbsp; preset bundle <span class="cm">(--preset)</span> &nbsp;→&nbsp; individual <span class="fl">--flags</span>
+        </div>
+      </div>
+      <p class="takeaway">New experiments never need a code change — every knob is a <b>--flag</b>, and a preset is just convenience.</p>
+    </section>
+
+    <!-- ===== 11 · WHAT AIRE IS ===== -->
+    <section class="slide" aria-label="What AIRE is">
+      <h1 class="headline"><span class="q">Act 3.</span> What is AIRE?</h1>
+      <p class="lede">AIRE is Leeds's HPC cluster, scheduled by <b>Slurm</b>. The golden rule: you don't run heavy work yourself — you <b>submit a job</b>, and Slurm runs it on a shared compute node when resources free up.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="two">
+          <div class="panel">
+            <h3>Three kinds of node</h3>
+            <div class="nodecard"><div class="k">Login node</div><div class="v">Where you SSH in. Edit files, build the environment, submit jobs. <b>Never</b> run simulations here.</div></div>
+            <div class="nodecard"><div class="k">Compute node</div><div class="v">Where jobs actually run. 168 cores, ~773 GB. You get a slice via Slurm, not by SSH.</div></div>
+            <div class="nodecard"><div class="k">GPU node</div><div class="v">Requested explicitly (partition=gpu). This is where our vLLM model server runs.</div></div>
+          </div>
+          <div class="panel">
+            <h3>Two places for data</h3>
+            <div class="store">
+              <div class="box home"><div class="h">$HOME</div><div class="d">65 GB · backed up.<br>Code, scripts, the conda env.</div></div>
+              <div class="box scr"><div class="h">$SCRATCH</div><div class="d">1 TB · not backed up.<br><b>All run output.</b></div></div>
+            </div>
+            <div class="callout" style="margin-top:14px"><b>Two hard rules.</b> Output goes to <b>$SCRATCH</b>, never $HOME or the repo tree (filling $HOME can suspend the account). And modules / conda <b>don't carry over</b> from the login node — every job re-loads them itself.</div>
+          </div>
+        </div>
+      </div>
+      <p class="takeaway">Our repo already satisfies the AIRE contract: a headless CLI, all parameters as flags, output via <b>--outdir</b>, logging to stdout.</p>
+    </section>
+
+    <!-- ===== 12 · AIRE RUN LIFECYCLE (figure) ===== -->
+    <section class="slide" aria-label="AIRE run lifecycle">
+      <h1 class="headline"><span class="q">One AIRE run,</span> end to end</h1>
+      <p class="lede">You submit one job. Inside it, the GPU node boots a model server and then runs the simulation against it — both on the same node, talking over localhost.</p>
+      <div class="stage">
+        <svg viewBox="0 0 1040 440" role="img" aria-label="AIRE run lifecycle diagram">
+          <defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#9AA0A6"/></marker></defs>
+          <!-- login -->
+          <rect x="6" y="74" width="184" height="84" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+          <text x="98" y="104" text-anchor="middle" class="t-node" font-size="15">Login node</text>
+          <text x="98" y="128" text-anchor="middle" class="t-sub" font-size="11.5">you type</text>
+          <text x="98" y="146" text-anchor="middle" class="t-sub" font-size="11.5">sbatch run.sh …</text>
+          <!-- slurm -->
+          <rect x="6" y="196" width="184" height="84" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+          <text x="98" y="226" text-anchor="middle" class="t-node" font-size="15">Slurm</text>
+          <text x="98" y="250" text-anchor="middle" class="t-sub" font-size="11.5">queues the job</text>
+          <text x="98" y="268" text-anchor="middle" class="t-sub" font-size="11.5">(fair-share)</text>
+          <line x1="98" y1="158" x2="98" y2="194" stroke="#9AA0A6" stroke-width="2" marker-end="url(#ar3)"/>
+          <!-- gpu node container -->
+          <rect x="236" y="44" width="560" height="352" rx="16" fill="none" stroke="#C0841F" stroke-width="1.6"/>
+          <text x="256" y="72" class="t-big" font-size="13" fill="#C0841F">GPU COMPUTE NODE · 1 GPU · 8 cores · 80 GB</text>
+          <line x1="190" y1="232" x2="234" y2="210" stroke="#9AA0A6" stroke-width="2" marker-end="url(#ar3)"/>
+          <text x="212" y="196" text-anchor="middle" class="t-tag" fill="#6C7178">allocates</text>
+          <!-- vLLM box -->
+          <rect x="262" y="96" width="508" height="108" rx="12" fill="#F1F6F1" stroke="#5C7E5A" stroke-width="1.4"/>
+          <text x="282" y="124" class="t-node" font-size="15" fill="#3f5a3d">vLLM server</text>
+          <text x="282" y="146" class="t-sub" font-size="12">runs in an Apptainer container (the .sif image)</text>
+          <text x="282" y="166" class="t-sub" font-size="12">serves Qwen3-8B · weights cached on $SCRATCH</text>
+          <text x="282" y="186" class="t-sub" font-size="12">first run downloads the model (waits up to 25 min)</text>
+          <!-- cag box -->
+          <rect x="262" y="256" width="508" height="108" rx="12" fill="#FBF6EE" stroke="#C0841F" stroke-width="1.4"/>
+          <text x="282" y="284" class="t-node" font-size="15" fill="#8a5d12">python -m cag</text>
+          <text x="282" y="306" class="t-sub" font-size="12">the simulation (everything in Acts 1–2)</text>
+          <text x="282" y="326" class="t-sub" font-size="12">your --flags are forwarded straight through</text>
+          <text x="282" y="346" class="t-sub" font-size="12">writes results to --outdir on $SCRATCH</text>
+          <!-- double arrow -->
+          <line x1="516" y1="204" x2="516" y2="256" stroke="#5C6E88" stroke-width="2" marker-end="url(#ar3)"/>
+          <line x1="540" y1="256" x2="540" y2="204" stroke="#5C6E88" stroke-width="2" marker-end="url(#ar3)"/>
+          <text x="528" y="234" text-anchor="middle" class="t-tag" fill="#3f4d63">HTTP · localhost:8000/v1</text>
+          <!-- scratch -->
+          <rect x="844" y="96" width="190" height="108" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+          <text x="939" y="126" text-anchor="middle" class="t-node" font-size="14" fill="#3f4d63">$SCRATCH</text>
+          <text x="939" y="150" text-anchor="middle" class="t-sub" font-size="11.5">CSVs · PNGs</text>
+          <text x="939" y="168" text-anchor="middle" class="t-sub" font-size="11.5">run.log</text>
+          <text x="939" y="186" text-anchor="middle" class="t-sub" font-size="11.5">(1 TB, not backed up)</text>
+          <line x1="770" y1="310" x2="844" y2="160" stroke="#9AA0A6" stroke-width="2" marker-end="url(#ar3)"/>
+          <!-- laptop -->
+          <rect x="844" y="256" width="190" height="92" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+          <text x="939" y="290" text-anchor="middle" class="t-node" font-size="14">Your laptop</text>
+          <text x="939" y="314" text-anchor="middle" class="t-sub" font-size="11.5">rsync results back</text>
+          <text x="939" y="332" text-anchor="middle" class="t-sub" font-size="11.5">to keep them</text>
+          <line x1="939" y1="204" x2="939" y2="254" stroke="#9AA0A6" stroke-width="2" marker-end="url(#ar3)"/>
+        </svg>
+      </div>
+      <p class="takeaway">The trick: the model server and the simulation run <b>side by side on one GPU node</b>, so the LLM calls never leave the machine.</p>
+    </section>
+
+    <!-- ===== 13 · run.sh ===== -->
+    <section class="slide" aria-label="run.sh launcher">
+      <h1 class="headline">The launcher — <span class="q">aire/run.sh</span></h1>
+      <p class="lede">One deliberately <b>thin</b> Slurm script. It owns the GPU + server plumbing; every research knob stays on the sbatch line. In order, the job does five things:</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="steps">
+          <div class="step"><div class="n">1</div><div class="b"><b>Start vLLM</b> in an Apptainer container, serving <small>$HF_MODEL</small> (default Qwen/Qwen3-8B).</div></div>
+          <div class="step"><div class="n">2</div><div class="b"><b>Wait until ready</b> — poll <small>/v1/models</small> until it answers (up to 25 min on a cold model download).</div></div>
+          <div class="step"><div class="n">3</div><div class="b"><b>Run the sim</b> — load conda, then <small>python -m cag --provider local --base-url … --outdir … "$@"</small>, forwarding all your flags.</div></div>
+          <div class="step"><div class="n">4</div><div class="b"><b>Save to $SCRATCH</b> — results land in <small>$SCRATCH/cag/runs/run_&lt;jobid&gt;/</small>, never the repo.</div></div>
+          <div class="step"><div class="n">5</div><div class="b"><b>Shut the server down</b> — a cleanup trap kills vLLM on exit, win or lose.</div></div>
+        </div>
+        <div class="codeline" style="margin-top:10px">
+          <span class="cm"># a real submission — preset for the bulk, one flag for the experimental fork</span><br>
+          sbatch aire/run.sh <span class="fl">--preset</span> r14_canonical <span class="fl">--exposure-targets</span> split50
+        </div>
+      </div>
+      <p class="takeaway">One-time prep: an <b>HF token</b>, <b>conda env create -f environment.yaml</b>, and <b>apptainer pull</b> the vLLM image. After that, every experiment is just a new sbatch line.</p>
+    </section>
+
+    <!-- ===== 14 · __main__.py ===== -->
+    <section class="slide" aria-label="main entry point">
+      <h1 class="headline">The entry point — <span class="q">__main__.py</span></h1>
+      <p class="lede">What <b>python -m cag</b> actually does. This is the file that makes the repo AIRE-ready: headless, every parameter a flag, output via <b>--outdir</b>, logs to stdout (which Slurm captures into the .out file).</p>
+      <div class="stage">
+        <svg viewBox="0 0 1040 230" role="img" aria-label="main flow">
+          <defs><marker id="ar4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#9AA0A6"/></marker></defs>
+          <g>
+            <rect x="8" y="60" width="178" height="96" rx="12" fill="#FBF6EE" stroke="#C0841F"/>
+            <text x="97" y="98" text-anchor="middle" class="t-node" font-size="14">your --flags</text>
+            <text x="97" y="120" text-anchor="middle" class="t-sub" font-size="11.5">+ optional --preset</text>
+            <rect x="217" y="60" width="178" height="96" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="306" y="92" text-anchor="middle" class="t-node" font-size="14">build_config</text>
+            <text x="306" y="114" text-anchor="middle" class="t-sub" font-size="11">defaults ← preset</text>
+            <text x="306" y="132" text-anchor="middle" class="t-sub" font-size="11">← CLI</text>
+            <rect x="426" y="60" width="178" height="96" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="515" y="92" text-anchor="middle" class="t-node" font-size="14">build_nation</text>
+            <text x="515" y="114" text-anchor="middle" class="t-sub" font-size="11">from the</text>
+            <text x="515" y="132" text-anchor="middle" class="t-sub" font-size="11">YouGov CSV</text>
+            <rect x="635" y="60" width="178" height="96" rx="12" fill="#F0EFE8" stroke="#15181C" stroke-width="1.4"/>
+            <text x="724" y="92" text-anchor="middle" class="t-node" font-size="14">run_simulation</text>
+            <text x="724" y="114" text-anchor="middle" class="t-sub" font-size="11">the day loop</text>
+            <text x="724" y="132" text-anchor="middle" class="t-sub" font-size="11">(Acts 1–2)</text>
+            <rect x="844" y="60" width="188" height="96" rx="12" fill="#FBFAF6" stroke="#DAD6CC"/>
+            <text x="938" y="92" text-anchor="middle" class="t-node" font-size="14">save_results</text>
+            <text x="938" y="114" text-anchor="middle" class="t-sub" font-size="11">+ plots →</text>
+            <text x="938" y="132" text-anchor="middle" class="t-sub" font-size="11">--outdir</text>
+          </g>
+          <g stroke="#9AA0A6" stroke-width="2" marker-end="url(#ar4)">
+            <line x1="188" y1="108" x2="215" y2="108"/><line x1="397" y1="108" x2="424" y2="108"/>
+            <line x1="606" y1="108" x2="633" y2="108"/><line x1="815" y1="108" x2="842" y2="108"/>
+          </g>
+          <text x="8" y="196" class="t-sub" font-size="12">Inspect without running:  <tspan fill="#8a5d12">--list-presets</tspan>  ·  <tspan fill="#8a5d12">--dry-run</tspan> (prints the fully-resolved config and exits)</text>
+        </svg>
+      </div>
+      <p class="takeaway">On AIRE, run.sh fills in the model plumbing (<b>--provider local --base-url … --outdir $SCRATCH/…</b>) and forwards the rest of your flags straight to this entry point.</p>
+    </section>
+
+    <!-- ===== 15 · WHERE NEXT ===== -->
+    <section class="slide" aria-label="Where to go next">
+      <h1 class="headline">Where to go <span class="q">next</span></h1>
+      <p class="lede">Three docs, in increasing depth, plus the single command to launch a baseline run.</p>
+      <div class="stage" style="align-items:stretch">
+        <div class="cards c3">
+          <div class="card dom"><div class="ttl"><span class="path">docs/Code_Tour.md</span></div><p class="what" style="margin:0">The file-by-file deep dive — one breadcrumb per module, a 30-min skim path, the v2 memory worked example.</p></div>
+          <div class="card cli"><div class="ttl"><span class="path">AIRE_Quickstart.md</span></div><p class="what" style="margin:0">The recipe: clone → build env → smoke test → sbatch → pull results back. Start here on the cluster.</p></div>
+          <div class="card io"><div class="ttl"><span class="path">AIRE_HPC_repo_primer.md</span></div><p class="what" style="margin:0">The cluster's own rules — node types, storage limits, the repo contract. Good background reading.</p></div>
+        </div>
+        <div class="codeline" style="margin-top:14px">
+          <span class="cm"># from the repo root on an AIRE login node — one baseline run</span><br>
+          sbatch aire/run.sh <span class="fl">--preset</span> r14_canonical <span class="fl">--exposure-targets</span> split50<br>
+          squeue --me &nbsp;<span class="cm"># watch it · results in $SCRATCH/cag/runs/run_&lt;jobid&gt;/</span>
+        </div>
+      </div>
+      <p class="takeaway">That's the whole picture: <b>config → day loop → outputs</b>, served by a vLLM model on one GPU node. Thanks — questions welcome.</p>
+    </section>
+
+  </div>
+
+  <div class="footer">
+    <div class="arrows">
+      <button id="prev" aria-label="Previous slide">←</button>
+      <button id="next" aria-label="Next slide">→</button>
+    </div>
+    <div class="thread" id="thread" aria-hidden="true"></div>
+    <div class="hint">← → to move</div>
+    <div class="counter" id="counter">01 / 16</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var meta = [
+    ["cover","#9AA0A6"],
+    ["act 1 · 01 the mental model","#1E6B5B"],
+    ["act 1 · 02 where the code lives","#1E6B5B"],
+    ["act 1 · 03 one simulated day","#1E6B5B"],
+    ["act 1 · 04 the memory trick","#1E6B5B"],
+    ["act 1 · 05 reading the output","#1E6B5B"],
+    ["act 2 · 06 how the code is layered","#5C6E88"],
+    ["act 2 · 07 the engine — abm/","#5C6E88"],
+    ["act 2 · 08 the vocabulary","#5C6E88"],
+    ["act 2 · 09 persistence — io/","#5C6E88"],
+    ["act 2 · 10 the CLI surface","#5C6E88"],
+    ["act 3 · 11 what AIRE is","#C0841F"],
+    ["act 3 · 12 one AIRE run","#C0841F"],
+    ["act 3 · 13 the launcher — run.sh","#C0841F"],
+    ["act 3 · 14 the entry point","#C0841F"],
+    ["act 3 · 15 where to go next","#C0841F"]
+  ];
+  var n = slides.length, i = 0;
+  var threadEl = document.getElementById('thread');
+  var counter = document.getElementById('counter');
+  var eyebrow = document.getElementById('eyebrow');
+  var prev = document.getElementById('prev'), next = document.getElementById('next');
+
+  for(var k=0;k<n;k++){
+    var s=document.createElement('span'); s.style.background=meta[k][1]; threadEl.appendChild(s);
+  }
+  var threadSpans = threadEl.querySelectorAll('span');
+  function pad(x){ return (x<10?'0':'')+x; }
+  function render(){
+    for(var k=0;k<n;k++){
+      slides[k].classList.toggle('is-active', k===i);
+      threadSpans[k].classList.toggle('lit', k<=i);
+    }
+    counter.textContent = pad(i+1)+' / '+pad(n);
+    eyebrow.textContent = meta[i][0];
+    prev.disabled=(i===0); next.disabled=(i===n-1);
+  }
+  function go(idx){ i=Math.max(0,Math.min(n-1,idx)); render(); }
+  prev.addEventListener('click',function(){go(i-1);});
+  next.addEventListener('click',function(){go(i+1);});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    else if(e.key==='Home'){go(0);} else if(e.key==='End'){go(n-1);}
+  });
+  var x0=null;
+  document.addEventListener('touchstart',function(e){x0=e.touches[0].clientX;},{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(x0===null)return; var dx=e.changedTouches[0].clientX-x0;
+    if(Math.abs(dx)>50){go(i+(dx<0?1:-1));} x0=null;
+  },{passive:true});
+  render();
+})();
+</script>
+</body>
+</html>

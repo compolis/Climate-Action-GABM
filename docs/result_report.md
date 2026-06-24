@@ -24,6 +24,94 @@ Notes:
 
 ---
 
+## v0.8 — Qwen3-8B AIRE split50 (run_6267094) — first production run on v2 memory + Day-0 refactor
+
+**Date:** 2026-06-24
+**Run:** [`data/output/experiments/run_6267094/20260624_012156/`](../data/output/experiments/run_6267094/20260624_012156/)
+**AIRE job:** `6267094` (Qwen3-8B via vLLM on a single GPU node)
+**Invocation:** `sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50`
+**Model:** `Qwen/Qwen3-8B` (`llm_provider=local`, vLLM, `T=0.5`)
+**Config:** `n_citizens=50`, `days=5` (alternating `P-A`/`P-B`/`C`), `k_peers_per_day=0`, `communication_mode=package` (all 6 policies), `political_exposure_mode=rule_affinity_rank`, `political_exposure_targets=split50` (→ 25 A-only / 25 B-only), `reach_a=reach_b=1.0`, `day0_anchor=ground_truth_with_rationale`, `debias=True`, `thinking=False`, `random_seed=42`
+
+**TL;DR.** First full-scale (n=50, 5-day) AIRE run since the **v0.8 memory-v2 rewrite** (six-section `assemble_context`) and the **Day-0 anchor compression removal** (§2 anchor now reads verbatim from `survey_reasoning`; no `compress_day0_anchor()`, no `day0_anchors.csv`). Bit-identical configuration to the [Run-14 v2 post-NB-31-fix split50](#run-14-v2-post-nb-31-fix-split50--first-end-to-end-validation) baseline (same seed, same 50 sampled agents, same 25/25 split, same GT anchor), so the **only** things differing between the two runs are the v0.8 memory architecture and the Day-0 refactor. **The bucket-asymmetric persuasion signature that NB-31 recovered has disappeared.** Under v2 memory, B-only agents — who hear *only* anti-climate broadcasts — drift strongly pro-climate on every policy (+0.08 to +2.20), and their total package-index movement (+1.31) *exceeds* A-only's (+1.19). The cross-bucket gap therefore **narrows** by −0.11 over 5 days, where Run-14 v2 *widened* it by +0.67. The Qwen3-8B pro-climate prior now dominates the broadcast direction under the richer memory. Status: single-seed production smoke of the v0.8 stack on AIRE; the **headline is that the refactor runs clean end-to-end on AIRE (no `day0_anchors.csv`, 140 min wall-clock, all artefacts populated) but materially changes the opinion dynamics** versus the pre-refactor baseline.
+
+### v0.8 refactor confirmed end-to-end on AIRE
+
+- **No `day0_anchors.csv` in the output bundle** — confirms the §28/§29 Day-0 compression removal works on a real AIRE production run. The §2 Day-0 anchor is now sourced verbatim from `survey_reasoning[target_policy_id]`.
+- Day-0 package index is **bit-identical** to Run-14 v2 by construction (A-only +1.320, B-only −0.147) — the GT anchor bypasses the LLM, so the determinism path through `_resolve_runtime` → cohort sampling → affinity-rank bucketing → ground-truth anchor is unchanged by the refactor.
+- 30 artefacts written (19 CSV, 9 PNG, 2 JSON), all populated; `sim.py` modular split + aggregators + plots all fire without error at n=50.
+
+### Operational
+
+| Metric | Value |
+|---|---|
+| Wall-clock (simulation) | 8418.1 s = **140.3 min** |
+| Total wall-clock | 8422.5 s = 140.4 min |
+| Per agent-day | ~33.7 s (50 agents × 5 days) |
+| Network | 50 nodes, 130 edges, density 0.106, mean degree 5.2, **1 component (natural)**, `auto_connected_edges=0` |
+| Network defence | Layer-1 bumped `p_inter` 0.05 → 0.06 (30 ≤ n < 100); Layer-2 did **not** fire (graph connected at draw) |
+
+Note: with `k_peers_per_day=0` the peer network is decorative — the only influence channels are the political broadcasts (split50, reach 1.0) and the survey/memory chain. The denser SBM defaults (v0.6, `p_inter` 0.05 vs Run-14 v2's 0.02) therefore do **not** confound the comparison: no peer messages traverse the graph either way.
+
+### Headline — cross-bucket package index (vs Run-14 v2)
+
+| Day | A-only (NEW) | B-only (NEW) | gap (NEW) | A-only (v2) | B-only (v2) | gap (v2) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 (GT anchor) | +1.320 | −0.147 | **+1.467** | +1.320 | −0.147 | +1.467 |
+| 1 | +2.373 | +0.767 | +1.607 | +1.980 | +0.160 | +1.820 |
+| 2 | +2.533 | +1.040 | +1.493 | +2.067 | +0.107 | +1.960 |
+| 3 | +2.480 | +1.073 | +1.407 | +2.153 | +0.153 | +2.000 |
+| 4 | +2.520 | +1.140 | +1.380 | +2.100 | +0.180 | +1.920 |
+| 5 | +2.513 | +1.160 | **+1.353** | +2.140 | +0.007 | **+2.133** |
+
+- **Gap-widening (Δgap, Day-0 → Day-5): NEW = −0.114 vs Run-14 v2 = +0.667.** The sign flipped. Run-14 v2's headline "12.6× amplification of bucket-asymmetric persuasion" does **not** reproduce under v2 memory.
+- **Day-0 → Day-5 bucket movement: A-only +1.193, B-only +1.307.** B-only — exposed only to anti-climate broadcasts — moved *more* than A-only. In Run-14 v2, B-only stalled at +0.15 then retreated to +0.007 (net +0.15); here it climbs steadily to +1.16 (net +1.31).
+
+### Per-policy D0 → D5 signed shift (vs Run-14 v2)
+
+| policy | A (NEW) | A (v2) | B (NEW) | B (v2) | B-side change |
+|---|---:|---:|---:|---:|---|
+| ClimatePolicyID(1) Carbon Tax | +0.56 | +0.36 | +0.16 | +0.04 | both small + |
+| ClimatePolicyID(2) Climate Compensation | +1.40 | +1.16 | **+1.96** | +0.60 | B amplified |
+| ClimatePolicyID(3) Green Housing | +1.40 | +1.00 | **+2.16** | −0.08 | **B flipped + (was −)** |
+| ClimatePolicyID(4) Ban Petrol Cars | +0.72 | +0.36 | +0.08 | −0.20 | **B flipped + (was −)** |
+| ClimatePolicyID(5) Renewable Energy | +1.24 | +0.84 | +1.28 | +0.36 | B amplified |
+| ClimatePolicyID(6) Ban Fossil Fuels | +1.84 | +1.20 | **+2.20** | −0.60 | **B flipped + (was −)** |
+
+In Run-14 v2 the three *contestable* policies (Green Housing, Ban Petrol Cars, Ban Fossil Fuels) had B-only flipping **negative** under sustained anti-climate broadcasts — that was the persuasion-responsiveness signal. Here **every B-only cell is positive**, and the three formerly-negative policies are now among the *largest* pro-climate movers (+2.16, +0.08, +2.20). The contestable-vs-saturated partition that held across NB 14, NB 31, and Run-14 v2 has collapsed.
+
+### Calibration vs YouGov ground truth (final day, per policy)
+
+| Policy | Pearson r | MAE | Signed bias |
+|---|---:|---:|---:|
+| ClimatePolicyID(1) Carbon Tax | 0.51 | 0.72 | +0.36 |
+| ClimatePolicyID(2) Climate Compensation | 0.32 | 1.80 | +1.68 |
+| ClimatePolicyID(3) Green Housing | 0.42 | 1.90 | +1.78 |
+| ClimatePolicyID(4) Ban Petrol Cars | 0.68 | 0.76 | +0.40 |
+| ClimatePolicyID(5) Renewable Energy | 0.47 | 1.38 | +1.26 |
+| ClimatePolicyID(6) Ban Fossil Fuels | 0.33 | **2.14** | **+2.02** |
+
+Day-0 is perfect by construction (r = 1.0, MAE = 0, bias = 0). By Day 5 the signed bias is large and uniformly positive, worst on the cost-/burden-framed policies (Compensation +1.68, Green Housing +1.78, Ban Fossil Fuels +2.02) and tight on the two behavioural-framed policies (Carbon Tax +0.36, Ban Petrol Cars +0.40). This is the same cost-framed-inflation pattern documented since Run 5 — but **much larger here than the gpt-5-mini smoke** (which sat at +0.7–0.9): the v2-memory + Qwen3-8B combination over-inflates the contestable policies by ~2 full scale points after 5 days.
+
+### Message flow — broadcasts only
+
+`k_peers=0`, so the only `messages.csv` rows are political broadcasts: 25 A-only recipients per `P-A` phase, 25 B-only recipients per `P-B` phase, every day, mean length ~1430–1595 chars. Zero peer-message rows (the `run_package_peer_messaging` early-return is firing). Broadcast delivery is symmetric and complete — the asymmetry collapse is a *response* effect, not a delivery artefact.
+
+### Interpretation
+
+1. **The NB-31 / Run-14 v2 persuasion signal was real but fragile.** It required the per-policy survey context to surface the day's broadcast reflection (the NB-31 fix) *without* also surfacing a strong, persistent pro-climate Day-0 rationale. The v2 six-section memory now keeps the verbatim Day-0 anchor rationale (pro-climate-leaning, written per-policy by the GT-with-rationale step) vivid alongside the accumulating reflections, and the Qwen3-8B pro-climate prior resolves the resulting conflict upward — even for agents hearing only anti-climate content.
+2. **This is genuine pro-climate convergence, not the NB-31 static-context artefact.** Under the old bug the survey ignored the broadcast entirely (bit-identical context across days). Here the memory chain *does* reach the survey (v2 works), but the model interprets the conflict in favour of its prior. B-only moving +1.31 is movement, not a flatline.
+3. **The day0-refactor + memory-v2 cannot be isolated from each other in this single run** — both landed together in v0.8. Attributing the asymmetry collapse to one or the other needs an ablation (toggle one change at a time, same seed). The verbatim Day-0 anchor (now un-compressed and more prominent in §2) is the prime suspect for amplifying the pro-climate pull on B-only.
+4. **Single seed, n=25 per bucket.** Treat the magnitudes as a smoke-scale signal. The clean part is the paired A/B against Run-14 v2: same agents, same broadcasts, bit-identical Day-0, only the v0.8 stack differs — and the gap-widening sign flips from +0.67 to −0.11.
+
+### What this means for the next run
+
+- **Re-open the Run-14 persuasion question under v2 memory.** The "Qwen3-8B is non-persuasive / pro-climate prior dominates" conclusion from Run 14 is *back* — but now via genuine upward convergence rather than a context bug. Whether this is desirable depends on the research claim: if the goal is to show broadcast-direction asymmetry, v2 memory currently buries it.
+- **Ablation needed:** run the same split50 config with (a) v2 memory but compressed Day-0 anchor, and (b) v2 memory but Day-0 anchor demoted/omitted from §2, to localise which v0.8 change drives the B-only upward pull.
+- **The cost-framed bias is now ~2 scale points** on Compensation / Green Housing / Ban Fossil Fuels — large enough that the debias chain is not holding under v2 memory on Qwen3-8B. Worth a targeted debias re-measurement on the contestable policies.
+
+---
+
 ## v0.8 — v2 memory smoke on gpt-5-mini (PRE-day0-refactor caveat)
 
 **Date:** 2026-06-23
