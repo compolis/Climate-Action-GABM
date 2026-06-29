@@ -1888,6 +1888,69 @@ Nigel Farage, Richard Tice). For the v0.5 paper this is reframed as a
   and is expected to *reduce* baseline sycophancy slightly, but this
   is not measured.
 
+### 20.7 Day-0 anchor: cross-step memory consistency (2026-06-28)
+
+Bug-fix to the v0.8 memory-v2 layer (§ assemble_context six-section
+design). In **package mode**, the system prompt the agent reads
+depended on *which step* it was performing:
+
+- The end-of-day **survey** calls
+  `get_system_prompt(day, policy_id=PACKAGE_SCOPE, target_policy_id=<one policy>)`,
+  so the three target-scoped sections (Day-0 anchor, recent considered
+  position, answers-so-far) were populated.
+- **Peer-message generation and reflection** call
+  `get_system_prompt(day, policy_id=PACKAGE_SCOPE)` with no target, so
+  those three sections were all empty.
+
+Net effect: an agent "forgot" its verbatim Day-0 identity anchor while
+writing a peer message or reflecting, then "remembered" it again at
+survey time. This is poor cognitive modelling and an experimental-
+validity concern (peer messages were generated from a thinner
+self-model than survey answers). Single-policy mode was unaffected —
+every step there passes the same `policy_id`, so the sections are
+already consistent.
+
+**Decision (consistency vs relevance).** Only the **Day-0 anchor**
+(section 2) is propagated across steps, because it is identity-level,
+anti-drift memory that is relevant whenever the agent forms or
+expresses an opinion. The other two target-scoped sections are
+deliberately **not** propagated:
+
+- *Recent considered position* (section 5, verbatim own survey
+  reasoning) is largely redundant during a holistic package step — the
+  daily summaries (section 3) and recent reflections (section 4)
+  already carry that recent thinking — and its anti-drift value is
+  specific to answering a single policy's survey question. Kept
+  survey- and target-scoped, unchanged.
+- *Answers so far in today's survey* (section 6) is chronologically
+  transient: the agent has not taken today's survey when it writes a
+  morning peer message, so its absence there is correct. Unchanged.
+
+**Implementation.** New `_section_day0_anchor_all()` emits every
+policy's Day-0 rationale (canonical `SURVEY_QUESTIONS` order) under the
+header `Original prior positions:` as `- <short label>: <text>`
+bullets. `assemble_context` now branches: a real `target_policy_id`
+uses the focused single-policy `_section_day0_anchor()` (survey,
+unchanged — option (a): the survey stays focused on the policy being
+asked); otherwise, package-scoped context with no single target uses
+the all-policy form (peer messaging / reflection). Nothing is ever
+"forgotten" going peer→survey — the survey's single anchor is a subset
+of the package form the agent saw earlier in the day. The
+peer/reflection call sites are unchanged; they simply start receiving
+the anchor.
+
+**Tests.** `tests/test_memory.py::TestDay0AnchorSection` — the former
+`test_anchor_omitted_when_target_is_package_scope` is replaced by
+`test_package_anchor_lists_all_policies_when_no_single_target` and
+`test_package_anchor_present_on_peer_reflection_path` (the
+`target_policy_id=None` path). Single-target anchor tests and all
+`TestRecentOwnReasoning` (section 5) tests are unchanged. Full suite:
+557 passed, 1 skipped.
+
+**Out of scope.** Dumping peer/reflection assembled contexts to a CSV
+for auditability (only `survey_assembled_context.csv` exists today);
+`__version__` bumps.
+
   ---
 
 ## 21. v0.6 Canonical Runtime Consolidation (2026-05-24)

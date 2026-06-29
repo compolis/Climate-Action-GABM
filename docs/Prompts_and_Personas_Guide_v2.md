@@ -1,10 +1,13 @@
 # Climate-Action-GABM — Prompts & Personas Guide (V2)
 
-A reader-friendly tour of every prompt the simulation sends to the LLM and of the persona text that gives each agent its identity. V2 reflects the post-v0.5 prompt overhaul (May 2026): consistent first-person perspective throughout, merged persona concept, daily-context-aware end-of-day surveys, repaired Day-0 rationale labels, and phase-tag-free reflection memory.
+A reader-friendly tour of every prompt the simulation sends to the LLM and of the persona text that gives each agent its identity. V2 reflects two rounds of changes:
 
-**Supersedes:** [Prompts_and_Personas_Guide.md](Prompts_and_Personas_Guide.md). The V1 guide is preserved with a banner for historical reference of pre-v0.5 prompts.
+- The **prompt overhaul (May 2026):** a consistent first-person voice throughout, a merged persona concept, end-of-day surveys that point the model at its own memory, and reflection memory with the internal phase tags stripped out.
+- The **memory rewrite (the "memory-v2" change):** the system prompt the model reads now has **six** clearly-named sections instead of five (§2.2). The biggest differences: the agent's original Day-0 position on the policy being asked about is now quoted **word-for-word** near the top (instead of all six policies being squeezed in together), and the model is no longer given a separate "remember who you are" reminder line at the bottom.
 
-**All quoted prompt text is byte-identical to the templates in code** ([src/cag/abm/agent.py](../src/cag/abm/agent.py), [src/cag/abm/attributes/opinion.py](../src/cag/abm/attributes/opinion.py) as of this commit). No paraphrasing.
+**Supersedes:** [Prompts_and_Personas_Guide.md](Prompts_and_Personas_Guide.md). The V1 guide is preserved with a banner for historical reference of the earliest prompts.
+
+**Every quoted prompt below exactly matches the template in code** ([src/cag/abm/agent.py](../src/cag/abm/agent.py), [src/cag/abm/attributes/opinion.py](../src/cag/abm/attributes/opinion.py) as of this commit). Nothing is paraphrased.
 
 ---
 
@@ -45,15 +48,27 @@ The two paragraphs are produced by `_build_demographics_text()` and `_build_valu
 
 ### 2.2 The "memory" layer — `assemble_context()`
 
-After Day 0, the system prompt grows. The structure (verbatim from the docstring of `assemble_context`):
+After Day 0, the system prompt grows. Two ideas make the whole section easy to read:
+
+- **The day being surveyed** decides *which* days are recent (full text) versus old (compressed into a one-line summary).
+- **Two different "scopes."** Each call carries a *context scope* (`policy_id`) and a *question scope* (`target_policy_id`). The context scope decides which reflections and summaries are pulled in — in package mode (`policy_id = PACKAGE_SCOPE`) everything is kept; in single-policy mode only that one policy's entries are kept. The question scope is the *one* policy the model is about to be asked about right now, and it controls the recent own-position section and the within-day answers. The Day-0 anchor (section 2) follows the question scope when there is one, and otherwise falls back to a package-wide form (see below) so the agent keeps its identity anchor in every step, not only at the survey.
+
+The prompt is built from up to **six** sections, in this order (empty ones are skipped). Verbatim from the docstring of `assemble_context`:
 
 1. **Persona** (always) — the merged demographics + values block from §2.1.
-2. **Daily summaries** — for every day older than `d-1`, a 4–5-sentence first-person summary produced by `compress_daily_memory()` (which delegates to `compress_memories()`). Surfaced as `Day k: <summary>`.
-3. **Recent full reflections** — the agent's full reflection text from `d-1` and `d`, filtered by policy when running in single-policy mode. Bulleted as plain `- <text>` lines. **No `[P-A] / [P-B] / [C]` tags are shown to the LLM** (the tags are still preserved in `reflections.csv` for audit; this is a v0.5 simplification).
-4. **Day-0 rationales** — the agent's first-person Day-0 rationale per policy, surfaced as bullets keyed by a short policy label (e.g. `- Carbon fee and dividend: <rationale>`). The numeric/letter Day-0 answer is **not** surfaced — the LLM is reminded of *why* it held its initial position, not what letter it picked.
-5. **Persona reminder** — a short line `"Remember who you are: " + demographics` (demographics only, no values) is appended at the very bottom so the persona doesn't get lost behind the memory text.
+2. **Original prior position** — the agent's own verbatim Day-0 rationale from `survey_reasoning`, the persistent "in my own words" anchor that justifies seeding the Day-0 opinion from the YouGov ground truth. It takes **two forms** depending on the scope:
+   - *Single-policy form* (when there is a question-scope policy, e.g. the end-of-day survey): just that one policy, under the header `Original prior position on "<short label>":`. Built by `_section_day0_anchor()`.
+   - *Package form* (package-scoped context with no single target, e.g. package-mode peer messaging and reflection): every policy's Day-0 rationale, bulleted under `Original prior positions:` as `- <short label>: <text>`, in canonical policy order. Built by `_section_day0_anchor_all()`.
 
-The Day-0 rationale label comes from `SURVEY_SHORT_LABELS` in [`opinion.py`](../src/cag/abm/attributes/opinion.py) (≤ 5 words per policy), replacing the V1 `SURVEY_QUESTIONS[pid][:60]` truncation which produced six identical-looking labels (every policy question starts with the same 84-character preamble).
+   This split keeps the survey focused on the policy being asked while making sure the agent never "forgets" its starting position when it writes a peer message or reflects — the identity anchor is present in **every** step (see §20 of [Model_Design.md](Model_Design.md)).
+3. **Summary of recent days** — for every day older than `d-1`, a 4–5-sentence first-person summary produced by `compress_daily_memory()` (which delegates to `compress_memories()`). Surfaced under `Summary of recent days:` as `Day k: <summary>`.
+4. **Recent reflections following received messages** — the agent's full reflection text from `d-1` and `d`, filtered to the context-scope policy. Bulleted as `- Day k: <text>`. **No `[P-A] / [P-B] / [C]` phase tags are shown to the model** (the tags are still preserved in `reflections.csv` for the audit trail; this is a deliberate simplification).
+5. **Your considered position in recent days** — the agent's own end-of-day survey reasoning for the *question-scope* policy on `d-1` and `d`, bulleted as `- Day k — <short label>: <text>`. This is the "what did I decide about *this* policy yesterday and today" companion to the cross-policy summaries above. Built by `_section_recent_own_reasoning()`.
+6. **Your answers so far in today's survey** (package mode only) — when the model is part-way through today's six-policy survey, the positions it has already given today on the *other* policies, as `- <short label>: <phrase>. (Why: <today's reasoning>)`. This lets the model keep its package internally consistent. Built by `_section_today_so_far()`.
+
+The short policy labels in sections 2, 5 and 6 come from `SURVEY_SHORT_LABELS` in [`opinion.py`](../src/cag/abm/attributes/opinion.py) (≤ 5 words per policy), which replaced the old `SURVEY_QUESTIONS[pid][:60]` truncation — that produced six identical-looking labels, because every policy question starts with the same 84-character preamble.
+
+> **What changed from the earlier version of this guide.** The old layer had five sections and ended with a separate `"Remember who you are: …"` reminder line; it also crammed *all six* Day-0 rationales into one block regardless of which policy was being asked. The reminder line is gone and the persona now appears once at the top. The Day-0 anchor (section 2) now has the two-form behaviour described above: focused on the asked policy at survey time, package-wide during peer messaging / reflection. For the deeper "why" of this design, see [Code_Tour.md](Code_Tour.md) §5.1 and Appendix B, and §20 of [Model_Design.md](Model_Design.md).
 
 ---
 
@@ -119,7 +134,7 @@ Used when `day0_anchor = "ground_truth_with_rationale"`. The Day-0 opinion is se
   > In 2-3 sentences, explain why, given your background and values, you genuinely hold this position.
 
 - `{response_label}` is one of *Strongly oppose / Somewhat oppose / Slightly oppose / Neutral / Slightly support / Somewhat support / Strongly support* (mapped from the YouGov 1–7 score).
-- Output: free-text rationale. Stored in `survey_reasoning[policy_id]` and surfaced from Day 1 onward via §2.2 step 4.
+- Output: free-text rationale. Stored in `survey_reasoning[policy_id]` and surfaced from Day 1 onward as the **Original prior position** anchor (§2.2, section 2).
 
 **v0.5 change:** previously included "someone with your background and values might genuinely hold this position. Speak in the first person." — refactored to direct second-person ("you") for consistency with §4.6–4.7.
 
@@ -230,13 +245,13 @@ The simple version. Used when `debias = False` (and at Day 0 when not anchoring 
 - **User prompt — Day 0 (when not anchored):** identical except the framing sentence ("Please answer…") is dropped.
 - Output: a single letter A–G, parsed by `parse_letter_response()` into the `-3..+3` opinion value.
 
-**v0.5 change:** the Day ≥ 1 framing previously said *"Consider how today's messages and discussions have shaped your thinking."* — replaced with an explicit pointer to the structural sections of the system prompt (`assemble_context`'s daily summaries / Day-0 rationales / recent reflections). This was driven by the observation that the LLM was largely ignoring the in-context memory when asked vaguely about "today".
+**v0.5 change:** the Day ≥ 1 framing previously said *"Consider how today's messages and discussions have shaped your thinking."* — replaced with an explicit pointer to the structural sections of the system prompt (`assemble_context`'s *Original prior position*, *Summary of recent days*, and *Recent reflections* blocks — §2.2). This was driven by the observation that the LLM was largely ignoring the in-context memory when asked vaguely about "today".
 
 ### 4.7 End-of-day survey (debiased two-step, Condition B) — `administer_survey(debias=True)`
 
-The version used in most v0.3+ experimental runs. Two LLM calls per (agent, policy) per day. Designed in NB 13 to neutralise pro-climate sycophancy in raw LLM survey responses.
+The version used in most v0.3+ experimental runs. Two LLM calls per (agent, policy) per day. Designed in NB 13 to neutralise pro-climate sycophancy — the LLM's tendency to give the agreeable, socially-approved answer — in raw survey responses.
 
-**Step 1 — elicit reasoning with anti-sycophancy preamble:**
+**Step 1 — elicit reasoning, after a preamble that explicitly tells the model not to give the socially-desirable answer:**
 
 - **System prompt:** `assemble_context(day, policy_id)`.
 - **User prompt:**
@@ -273,81 +288,90 @@ The version used in most v0.3+ experimental runs. Two LLM calls per (agent, poli
 The two-step trick deliberately decouples *reasoning* from *answer*. NB 13 found this collapses ~97% of the aggregate pro-climate bias on Ban Petrol Cars (measured on `gpt-4.1-mini`) and generalises to 3 of 4 policies (see [docs/result_report.md](result_report.md)).
 
 **v0.5 changes (all in this template):**
-1. Flipped from third-person ("this person", "their values") to first-person ("you", "your values"). Originally Step 1's deliberate switch to third-person came from NB 12 / NB 13 explorations; subsequent thinking judged the inconsistency with the rest of the prompt chain (Day-0 rationale, reflections, peer messages — all 1P) to be a larger risk than the perspective-shift benefit. The aggregate bias-reduction number from NB 13 should not be assumed to transfer; a Condition B re-measurement on the new 1P chain is on the deferred backlog (Phase 5 of the v0.5 prompt-overhaul plan).
+1. Flipped from third-person — 3P, "this person", "their values" — to first-person — 1P, "you", "your values". Originally Step 1's deliberate switch to third-person came from NB 12 / NB 13 explorations; subsequent thinking judged the inconsistency with the rest of the prompt chain (Day-0 rationale, reflections, peer messages — all first-person) to be a larger risk than the perspective-shift benefit. The aggregate bias-reduction number from NB 13 should not be assumed to transfer; a Condition B re-measurement on the new first-person chain is on the deferred backlog (Phase 5 of the v0.5 prompt-overhaul plan).
 2. Step 1's factor list now includes *"the messages and reflections from today"* — explicitly cuing the LLM to use the in-context memory, mirroring the v0.5 vanilla-survey framing change.
 
 ### 4.8 Memory compression — `compress_memories()` / `compress_daily_memory()`
 
-A small auxiliary call used to keep the system prompt short on long runs. After Day 2, day `d-2`'s reflections are compressed into a short summary which then takes the place of the full reflection text in `assemble_context()`.
+A small auxiliary call used to keep the system prompt short on long runs. Once a day is older than `d-1`, its full reflections **and the agent's own end-of-day survey reasoning** are compressed into a short summary, which then takes the place of the full text in `assemble_context()` (section 3).
 
 - **System prompt:** *"You are a concise summariser."*
 - **User prompt:**
 
-  > Concisely summarise the following reflections from your day in 4–5 first-person sentences. Focus on which received messages you found compelling and which you pushed back on, and whether your thinking shifted on any aspect of the policy.
+  > Concisely summarise the following day in 4–5 first-person sentences. Cover: the positions you landed on and your key reasoning, which received messages you found compelling and which you pushed back on, and whether your thinking shifted on any aspect of the policy.
   >
-  > Reflections:
-  > {reflections}
+  > Day's reflections and your own reasoning:
+  > {memories}
 
+- The `{memories}` block is assembled by `compress_daily_memory()`: it gathers that day's reflections (under `Reflections after messages:`) and that day's own survey reasoning across the relevant policies (under `My own survey reasoning today:`), then hands the combined text to `compress_memories()`.
 - Output: free-text summary, stored on the agent and surfaced as `Day k: <summary>` in future system prompts.
 
-**v0.5 changes:**
-- Bumped from 2 sentences to 4–5 sentences — V1's compression was too aggressive; cross-day continuity of *why* an opinion shifted was being lost.
-- Generalised to be phase-agnostic (no mention of "Phase A / Phase B / Phase C") — works equally for runs with arbitrary phase orderings (e.g. asymmetric-reach experiments with `["P-A","P-A","P-A","P-B","C"]`).
-- Asks specifically about *which messages were compelling / pushed back on* — directing the summariser toward the persuasion-dynamics signal, not boilerplate.
+**Design notes:**
+- The summary is 4–5 sentences — an earlier 2-sentence version was too aggressive; cross-day continuity of *why* an opinion shifted was being lost.
+- It is phase-agnostic (no mention of "Phase A / Phase B / Phase C") so it works for runs with any phase ordering (e.g. asymmetric-reach experiments with `["P-A","P-A","P-A","P-B","C"]`).
+- It now folds in the agent's **own** survey reasoning, not just its reflections on others' messages — so the gist memory records what the agent decided, not only what it heard.
 
 ---
 
 ## 5. What the LLM sees over time — worked example
 
-Citizen `agent_id = 1923` from [`data/output/experiments/20260425_082317/`](../data/output/experiments/20260425_082317/) (30 citizens, 7 days, `package` mode, `day0_anchor = "ground_truth_with_rationale"`, `debias = True`, `gpt-5-mini`). All text below is **verbatim from the CSVs** for that agent.
+Citizen `agent_id = 165` from [`data/output/experiments/run_6267094/20260624_012156/`](../data/output/experiments/run_6267094/20260624_012156/) (50 citizens, 5 days, `package` mode, `day0_anchor = "ground_truth_with_rationale"`, `debias = True`, model `Qwen/Qwen3-8B` served through the `local` provider). All text below is **verbatim from the CSVs** for that agent, lightly truncated where marked with "…".
 
-> **Caveat — this run pre-dates the v0.5 prompt overhaul.** The reflections, summaries, and Day≥1 survey reasoning shown were generated with the V1 prompts. Most visibly, Day≥1 entries in `survey_reasoning.csv` are written in **third person** ("she would be broadly sympathetic to carbon pricing…") because the V1 debias Step 1 referred to "this person". Post-overhaul they will be first-person. The *structure* of `assemble_context()` is unchanged — only the wording inside each section.
+This is the latest full-scale run, produced with the current six-section memory layer, so it shows the real headers a model reads. The example follows the context built when the agent is asked about **one specific policy** — "Accelerate renewable energy roll-out" — partway through a package survey, so every section is populated.
 
 ### Day 0 — `assemble_context(day=0)`
 
-Just §2.1 of this guide: the persona block. Nothing else. The Day-0 LLM calls are:
+Just §2.1 of this guide: the persona block, plus (if the policy being asked about already has a Day-0 rationale) the **Original prior position** anchor. The Day-0 LLM calls are:
 
-1. Six `seed_opinion_with_rationale` calls (one per policy), each writing one bullet of `survey_reasoning.csv`. Example (Carbon Tax):
+1. Six `seed_opinion_with_rationale` calls (one per policy), each writing one entry of `survey_reasoning`. Example (renewable energy):
 
-   > While I care about the environment and support action on climate change, I find myself genuinely uncertain about whether a carbon fee and dividend scheme is the most effective or equitable approach — the tax could disproportionately burden lower-income households in the short term, even with dividend redistribution, and I'm not fully convinced the mechanism would drive the systemic change needed.
+   > I somewhat support the acceleration of renewable energy production because I believe in balancing human progress with environmental respect, which aligns with my values of sustainability and long-term thinking. While I am not an environmental activist, I recognize the importance of reducing reliance on fossil fuels and ensuring a cleaner future for future generations, which I care about as a parent. I support this policy as part of a broader, measured approach to energy development…
 
-2. No survey calls. Day-0 opinion is set to the YouGov ground truth directly (citizen 1923's GT on Carbon Tax = `0`, i.e. *Neutral*).
+2. No survey calls. The Day-0 opinion is set to the YouGov ground truth directly.
 
-### Day 2 — `assemble_context(day=2, policy_id=PACKAGE_SCOPE)`
+### Day 5 — `assemble_context(day=5, policy_id=PACKAGE_SCOPE, target_policy_id=`renewable energy`)`
 
-Sections in order:
+This is the system prompt the model reads when answering the renewable-energy question on the final day, after it has already answered some other policies earlier in the same survey. All six sections are present, in order:
 
-1. **Persona** (§2.1, unchanged).
-2. **Daily summaries** — *empty* (rule: only days older than `d-1` are summarised; on Day 2 that means Day 0, which has no reflections to compress).
-3. **Recent reflections** — every reflection from Day 1 and Day 2, bulleted. From `reflections.csv` for agent 1923 these are the three reflections from each of the two days (P-A, P-B, C). Example bullet (Day 2, P-A — verbatim, truncated for space):
+1. **Persona** (§2.1):
 
-   > - Accelerate roll-out of renewables (more offshore and onshore wind parks): Slightly support. I want to move away from fossil fuels and value the local economic and bill-saving benefits of clean power, but I'm cautious about large-scale infrastructure that can damage landscapes and ecosystems or be imposed without meaningful local consent. I'd favour community-led projects and careful siting. …
+   > I am a 46 year old female living in the South West. My ethnicity is white. … I am a parent. I voted for the Conservative party candidate in the 2019 General Election. I voted to leave in the 2016 EU Referendum.
+   > When it comes to my core values and worldview: I care about the people close to me and have a basic respect for nature, but I do not actively champion global equality or make environmental protection a primary, driving life… —
 
-4. **Day-0 rationales** — all six bullets, e.g.:
+2. **Original prior position** — the verbatim Day-0 anchor for *this* policy only:
 
-   > - Carbon fee and dividend: While I care about the environment and support action on climate change, I find myself genuinely uncertain about whether a carbon fee and dividend scheme…
+   > Original prior position on "Accelerate renewable energy roll-out":
+   > I somewhat support the acceleration of renewable energy production because I believe in balancing human progress with environmental respect, which aligns with my values of sustainability and long-term thinking. While I am not an environmental activist, I recognize the importance of reducing reliance on fossil fuels and ensuring a cleaner future for future generations, which I care about as a parent…
 
-   (V2 short labels replace V1's truncated full-question strings — see §2.2 step 4.)
+3. **Summary of recent days** — the compressed gist of every day older than Day 4:
 
-5. **Persona reminder** — `Remember who you are: I am a 32 year old female living in the Wales. …` (demographics only).
+   > Summary of recent days:
+   > Day 1: Today, I somewhat support accelerating renewable energy roll-out and banning new fossil fuel licenses, but with reservations due to concerns about financial strain on working families. I lean against the 2030 petrol car ban, prioritizing gradual change over strict regulations. I somewhat support green housing standards and a carbon fee with dividend, but remain cautious about implementation fairness… —
 
-### Day 5 — `assemble_context(day=5, policy_id=PACKAGE_SCOPE)`
+4. **Recent reflections following received messages** — full reflection text from Day 4 and Day 5, no phase tags:
 
-Same structure, but section 2 has filled in:
+   > Recent reflections following received messages:
+   > - Day 4: This message really challenges some of my existing views, especially around the balance between environmental goals and economic realities. The argument about lifting the carbon tax and ending renewable subsidies feels compelling because it directly addresses the cost of living, which is a real concern for working families like mine… —
 
-1. **Persona.**
-2. **Daily summaries** — Days 1, 2, 3 (every day < `d-1 = 4`). Example (Day 3 summary for agent 1923, verbatim, truncated):
+5. **Your considered position in recent days** — the agent's own survey reasoning on *this* policy on Day 4 and Day 5:
 
-   > Day 3: I broadly support the package's shift away from polluters toward people and the planet—especially community-led renewables and future-proofing new homes—but I'm cautious about large-scale infrastructure that can be imposed without local consent…
+   > Your considered position in recent days:
+   > - Day 4 — Accelerate renewable energy roll-out: I would **somewhat support** accelerating the roll-out of renewable energy production, but with reservations. On one hand, I believe in balancing human progress with environmental respect, and I see the long-term benefits of reducing reliance on fossil fuels, especially as a parent concerned about the future. However, I'm wary of the potential financial strain on working families… —
 
-3. **Recent reflections** — every Day 4 and Day 5 reflection.
-4. **Day-0 rationales** — unchanged from Day 2.
-5. **Persona reminder.**
+6. **Your answers so far in today's survey** — the positions already given today on *other* policies, each with today's reasoning:
 
-Two things to notice:
+   > Your answers so far in today's survey:
+   > - Ban new oil/gas/coal licences: somewhat support. (Why: I would **somewhat support** a ban on new oil, gas, and coal licenses, but with reservations. On one hand, I recognize the long-term environmental benefits and the need to move away from fossil fuels, especially as a parent concerned about the future. However, I'm wary of how such a ban might affect working families during the cost-of-living crisis…) —
 
-- **Raw broadcasts appear in the prompt exactly once** — at the time the citizen reflects on them (§4.3). After that they leave the system prompt; the reflection text remains until it's two days old, at which point it gets compressed into a `Day k:` summary.
-- **The Day-0 rationales never leave**. They are the persistent "in your own words" anchor that justifies the ground-truth Day-0 seeding (see Day-0 anchoring discussion in [Model_Design.md](Model_Design.md)).
+Three things to notice:
+
+- **Only the policy being asked about appears in sections 2, 5 and 6's target slot.** Ask the same agent about a different policy later in the same survey and sections 2 and 5 swap to that policy's anchor and recent reasoning, while section 6 lists renewable energy among the "already answered" policies.
+- **Raw broadcasts appear in the prompt exactly once** — at the time the citizen reflects on them (§4.3). After that they leave the system prompt; the reflection text remains until it is older than `d-1`, at which point it is compressed into a `Day k:` summary (section 3).
+- **The Day-0 anchor never leaves.** It is the persistent "in my own words" anchor that justifies the ground-truth Day-0 seeding (see the Day-0 anchoring discussion in [Model_Design.md](Model_Design.md)).
+
+- **Only the policy being asked about appears in sections 2, 5 and 6's target slot.** Ask the same agent about a different policy later in the same survey and sections 2 and 5 swap to that policy's anchor and recent reasoning, while section 6 lists renewable energy among the "already answered" policies.
+- **Raw broadcasts appear in the prompt exactly once** — at the time the citizen reflects on them (§4.3). After that they leave the system prompt; the reflection text remains until it is older than `d-1`, at which point it is compressed into a `Day k:` summary (section 3).
+- **The Day-0 anchor never leaves.** It is the persistent "in my own words" anchor that justifies the ground-truth Day-0 seeding (see the Day-0 anchoring discussion in [Model_Design.md](Model_Design.md)).
 
 ---
 
@@ -356,7 +380,7 @@ Two things to notice:
 | Concept | File | Symbols |
 |---|---|---|
 | Persona (merged) | [`src/cag/abm/agent.py`](../src/cag/abm/agent.py) | `get_persona`, `_build_demographics_text`, `_build_values_text` |
-| Memory assembly | [`src/cag/abm/agent.py`](../src/cag/abm/agent.py) | `assemble_context`, `_build_day0_rationales` |
+| Memory assembly (six sections) | [`src/cag/abm/agent.py`](../src/cag/abm/agent.py) | `assemble_context`, `_section_day0_anchor`, `_section_recent_own_reasoning`, `_section_today_so_far` |
 | Citizen-side prompts | [`src/cag/abm/agent.py`](../src/cag/abm/agent.py) | `receive_political_message`, `receive_package_political_message`, `generate_peer_message`, `generate_package_peer_message`, `receive_peer_messages`, `receive_package_peer_messages` |
 | Survey prompts (vanilla + debias) | [`src/cag/abm/agent.py`](../src/cag/abm/agent.py) | `administer_survey`, `_DEBIAS_STEP1_TEMPLATE`, `_DEBIAS_STEP2_TEMPLATE`, `_ANTI_SYCOPHANCY` |
 | Day-0 anchoring | [`src/cag/abm/agent.py`](../src/cag/abm/agent.py) | `seed_opinion_from_ground_truth`, `seed_opinion_with_rationale` |
@@ -371,6 +395,6 @@ Two things to notice:
 1. **Persona realism.** Read 3–5 personas from `messages.csv` / `reflections.csv`. Does the values paragraph (§2.1, second half) read as a plausible accompaniment to the demographic paragraph, or does it sometimes contradict the political-history attributes?
 2. **Political-agent voices.** Are §3.1 and §3.2 sufficiently distinctive *and* sufficiently fair? Should we add a centrist / "transition realist" third agent for the next round, or instead replace both with a real-world-message ingestion pipeline (the roadmap option)?
 3. **Reflection vs. survey separation.** We tell the LLM "do not state a final position" in reflections, then ask for one only at the end-of-day survey. Spot-check the v0.5 `reflections.csv` text — does the separation hold, or do reflections sneak in positions anyway?
-4. **Debias Step 1 reasoning quality (post-overhaul).** With the 1P rewrite, does `survey_reasoning.csv` for Day ≥ 1 genuinely weigh both support- and oppose-side factors? Compare to V1's 3P text from [`data/output/experiments/20260425_082317/`](../data/output/experiments/20260425_082317/) for a baseline. NB 13's bias-reduction number is **not** assumed to transfer until re-measured (see §4.7 v0.5 change note).
+4. **Debias Step 1 reasoning quality (post-overhaul).** With the first-person rewrite, does `survey_reasoning.csv` for Day ≥ 1 genuinely weigh both support- and oppose-side factors? Compare to the older third-person text from [`data/output/experiments/20260425_082317/`](../data/output/experiments/20260425_082317/) for a baseline. NB 13's bias-reduction number is **not** assumed to transfer until re-measured (see §4.7 v0.5 change note).
 5. **Memory cuing.** The v0.5 vanilla-survey framing and debias Step 1 both now reference the in-context memory explicitly. Spot-check whether end-of-day answers actually shift when reflections suggest they should, or whether the LLM still inertially repeats yesterday's letter.
 6. **Day-0 anchor mode.** The example run uses `ground_truth_with_rationale`, which seeds opinion from YouGov and asks for a rationale (§4.1). Open question (deferred in v0.5): should the rationale be injected into the persona itself, into the system prompt as a separate block (current), or replaced by a literal LLM Day-0 survey (the original v0.2 default)?
