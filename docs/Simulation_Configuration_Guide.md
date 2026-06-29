@@ -1,541 +1,572 @@
 # Climate-Action-GABM — Simulation Configuration Guide
 
-A two-layer reference for the dict you pass to [`run_simulation(config, nation)`](../src/cag/abm/sim.py).
+This guide explains the **configuration** of a simulation run: the small dictionary of settings
+you hand to `run_simulation(config, nation)` to control who is in the model, how many days it runs,
+which AI model speaks for the citizens, and who hears which politician.
 
-- **Layer 1 — Supervisor brief** (§1–§3): a short narrative of what the canonical run does, which six defaults define the research design, and what is frozen versus tunable. 
-- **Layer 2 — Developer / operator matrix** (§4 onward): every active `SIM_CONFIG` key with source location, type, valid values, validating notebook, interactions with other keys, and copy-paste canonical profiles.
+You almost never set every option by hand. The model ships with a complete set of defaults
+(`SIM_CONFIG`), and your `config` only needs to list the things you want to change. Anything you
+leave out keeps its default. So a perfectly valid run is `config = {}` — that just uses the defaults
+described in the next section.
 
-> **Companion docs.** Prompts and persona text: [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md). Output artefacts: [Run_Output_Guide.md](Run_Output_Guide.md). Local-LLM server setup: [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md). Design rationale and decision history: [Model_Design.md](Model_Design.md).
+The guide is organised so you can stop reading as soon as you have what you need:
 
-> **All line numbers in this guide are accurate as of the commit that introduced this doc.** If a `file.py:NNN` pointer no longer matches, search for the named symbol — those are stable.
+- **Section 1** — what a default run actually does, in plain language.
+- **Section 2** — the handful of settings most people change.
+- **Section 3** — the settings to leave alone unless you have a specific reason.
+- **Section 4** — a full plain-language reference for every one of the 33 settings.
+- **Sections 5–7** — ready-to-copy examples, what the model rejects, and how resuming works.
+- **Section 8** — companion guides and a short note for developers (code locations).
 
----
-
-## 1. What the canonical run is configured to do
-
-Out of the box `SIM_CONFIG` ([sim.py L29–L99](../src/cag/abm/sim.py#L29-L99)) describes one specific experimental setup. A run with **no overrides** would:
-
-1. Simulate **100 citizens** drawn from the YouGov April 2024 climate survey.
-2. Use **local Qwen3-8B-4bit** served from `http://localhost:8080/v1` (an `mlx_lm.server` process) as the LLM for every prompt — citizen reflections, peer messages, surveys, Day-0 rationales. API providers (OpenAI / Anthropic / Google) are supported but treated as an *outsider path*: documented and tested, but not the research default.
-3. Run **package mode**: every broadcast and peer message addresses **all 6 climate policies at once** (Renewable Energy, Ban Fossil Fuel Licenses, Ban Petrol Cars, Green Housing, Carbon Tax, Climate Compensation). Days alternate phase order — odd days `[P-A, P-B, C]`, even days `[P-B, P-A, C]` — to balance recency effects across sides.
-4. Pull political-broadcast text from the **offline pool** under `data/political_messages/messages_v1.csv` (40 package cells, 20 per side, plus single-policy cells). No LLM call is made on the political-agent side; the run aborts at start if any required cell is missing.
-5. Seed **Day-0 opinions from YouGov ground truth** and ask the LLM only to write the rationale (`day0_anchor='ground_truth_with_rationale'`). This eliminates the Day-0 pro-climate bias the LLM otherwise exhibits (NB11–14) without throwing away the qualitative narrative trace.
-6. Apply **Condition B debias** to every end-of-day survey (`debias=True`) — a two-step prompt chain validated in NB13–15 to remove most of the LLM's residual pro-climate inflation on end-of-day surveys.
-7. Build a **stochastic-block peer network** with intra-block edge probability 0.15 and inter-block 0.02, partitioned by `political_exposure` (A-only / B-only / both / neither).
-8. Assign `political_exposure` by the **affinity-rank rule** targeting a **committed-minority symmetric** preset (11% A-only / 11% B-only / 33% both / 45% neither), using the **balanced** affinity-weight preset.
-9. Use **symmetric reach** (`reach_a = reach_b = 1.0`) and **no audience cap** — every exposed citizen receives every broadcast on their side.
-10. Have each citizen send peer messages to **3 network neighbours per day**.
-
-`config` passed to `run_simulation()` is merged on top of `SIM_CONFIG` (`cfg = {**SIM_CONFIG, **config}`, [sim.py L529](../src/cag/abm/sim.py#L529)), so only keys you want to *change* need to appear in your override dict.
+> **Companion guides.** The exact wording of every prompt and persona is in
+> [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md). What each output file
+> contains is in [Run_Output_Guide.md](Run_Output_Guide.md). Setting up a local AI model is in
+> [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md). The reasoning behind the design choices is
+> in [Model_Design.md](Model_Design.md), and a tour of the code is in [Code_Tour.md](Code_Tour.md).
 
 ---
 
-## 2. The six defaults that define the research design
+## 1. What a default run does
 
-These are the **canon defaults**. Changing them invalidates the validating notebook chain (NB11–15, NB25, NB29) and should be done only deliberately.
+If you run the model with no changes at all, here is what happens.
 
-| Key | Canon value | Validated by | Why this default |
-|---|---|---|---|
-| `llm_model` | `mlx-community/Qwen3-8B-4bit` | NB25 (parity with API providers) | Local, reproducible, no API spend; Qwen3 has a clean thinking-mode toggle. |
-| `llm_provider` | `local` | NB24, NB25 | Decouples research runs from API rate limits and pricing changes. |
-| `communication_mode` | `package` | NB16 (sanity), NB29 (full smoke) | Single-policy mode artificially under-states cross-policy spillover; package mode is the research direction. |
-| `day0_anchor` | `ground_truth_with_rationale` | (locked in v0.6 defaults overhaul) | Eliminates Day-0 LLM pro-climate bias by construction while preserving rationale traces for qualitative review. |
-| `debias` | `True` | NB13 (Condition B), NB14 (4-policy generalisation), NB15 (Sonnet + thinking) | Reduces residual LLM pro-climate inflation on end-of-day surveys by 73–97%. |
-| `political_message_source` | `offline` | NB16, NB29 | Real-world political text (party press releases / MP speeches) is the research direction; LLM-generated political messages are a fallback. |
+1. **The citizens.** The model creates **100 citizens**, each built from a real person's answers in
+   the YouGov April 2024 climate survey. Their demographics, voting history, and values all come
+   from that survey.
 
-Day-0 anchor and debias **interact**: when `day0_anchor != "llm_survey"`, the `debias` flag is *ignored on Day 0* (a Day-0 LLM survey is not run; rationale is generated by a different code path) but still applies to end-of-day surveys. The simulation logs an INFO message at start ([sim.py L304–L308](../src/cag/abm/sim.py#L304-L308)).
+2. **The AI model.** Every time a citizen needs to think, write a message, or answer a survey, the
+   model asks a **local AI model** (`Qwen3-8B`) running on your own machine. You can switch to a
+   cloud model from OpenAI, Anthropic, or Google instead — that is fully supported — but the default
+   keeps everything local so runs are reproducible and cost nothing in API fees.
 
----
+3. **The topic.** Each day, citizens hear about and are surveyed on **all six climate policies at
+   once** (renewable energy, banning new fossil-fuel licences, banning new petrol cars, greener
+   housing, a carbon tax, and climate compensation). This is called **package mode**.
 
-## 3. Frozen vs tunable, and what is deferred
+4. **The politicians.** Two political voices broadcast at the citizens each day: a **pro-climate**
+   one and an **anti-climate** one. Their messages are drawn from a curated file of real-world
+   political text, not made up by the AI. If any required message is missing, the run stops
+   immediately rather than quietly carrying on.
 
-**Frozen (research canon — do not change without re-validation):**
-the six keys above, plus the broadcast / peer / survey / memory prompt templates in [agent.py](../src/cag/abm/agent.py) (audited in [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md)).
+5. **The starting point (Day 0).** Each citizen's opinions on Day 0 are set **directly from their
+   real survey answers**, and the AI is only asked to write a short reason for that position. This
+   avoids a known problem where the AI, asked cold, leans more pro-climate than real people do.
 
-**Tunable per run (experimental knobs):**
-`n_citizens`, `days` (length, phase order, broadcast frequency), `k_peers_per_day`, `network_type` + `network_params`, `reach_a` / `reach_b`, `audience_cap`, `political_exposure_targets` (preset or literal), `affinity_weights` (preset or literal), `random_seed`. The reach / audience / target / weight knobs are explicitly designed as experimental controls — see [Literature_Political_Exposure.md](Literature_Political_Exposure.md) §6–§7.
+6. **The end-of-day surveys.** At the end of each day every citizen is re-surveyed. The survey uses
+   a **two-step bias-correction process** (it first asks the AI to reason, then to commit to an
+   answer) to keep the AI from drifting pro-climate.
 
-**Deferred decisions** (in flight; see [Model_Design.md §20](Model_Design.md) and the progress log):
+7. **The social network.** Citizens are connected in a friendship-style network, with people who
+   share a political leaning more likely to be linked than people who don't.
 
-- **Day-0 anchoring side-by-side comparison.** All three modes (`llm_survey`, `ground_truth`, `ground_truth_with_rationale`) are implemented; running all three in parallel on the same cohort to disentangle priming from regression-to-prior remains future work.
-- **Condition B re-measurement on the v0.5 first-person prompt chain.** NB13's ~97% bias-reduction figure was measured on the pre-v0.5 mixed-perspective prompts; a partial NB13 rerun on the unified 1P chain is queued.
-- **Async / parallel agent dispatch** ([Model_Design.md §16](Model_Design.md)).
-- **Version bump** 0.3.0 → 0.6.0 across the 12 source modules (currently lagging; CHANGE_LOG is ahead).
+8. **Who hears whom.** Citizens are sorted into four groups: those who hear only the pro-climate
+   side, only the anti-climate side, both, or neither. By default this is a **committed-minority**
+   split — small, equal pro and anti minorities (11% each), a third who hear both sides, and a
+   disengaged 45% who hear no political broadcasts.
 
----
+9. **Broadcast reach.** By default every citizen in a politician's audience hears every one of that
+   politician's broadcasts (no one is dropped).
 
-## 4. How to read the matrix
+10. **Peer chat.** Each day, every citizen sends a short message to **3 of their network
+    neighbours**.
 
-Every key in §6 uses a four-block layout:
+11. **Day plan.** A default run is **2 days long**, and the two politicians take turns going first
+    (to avoid one side always having the last word before the survey).
 
-1. **Signature** — `key`, default, type / range.
-2. **What it does at runtime** — code pointer in `file:line` form.
-3. **Why this default** — citation to a notebook (`NB11`–`NB29`) or a [Model_Design.md](Model_Design.md) section.
-4. **Interactions / gotchas** — which other keys it couples with.
-
-Tag legend used in the at-a-glance table (§5):
-
-- `[canon]` — research-canon default; do not change without re-validation.
-- `[tune]` — tunable per run; explicitly designed as an experimental knob.
-- `[infra]` — infrastructure / I/O; safe to change for environment reasons.
-
-`config` passed to `run_simulation()` is merged with `**SIM_CONFIG`, so partial overrides are the norm.
+That is the canonical research setup. Everything below tells you how to change parts of it.
 
 ---
 
-## 5. The 32 keys at a glance
+## 2. The settings you'll most likely change
 
-Source: [sim.py L29–L99](../src/cag/abm/sim.py#L29-L99). Grouped by family.
+These are the knobs designed for experiments. Changing them is normal and expected.
 
-| # | Key | Default | Type | Tag | Validated by |
-|---|---|---|---|---|---|
-| **Population** | | | | | |
-| 1 | `n_citizens` | `100` | int | [tune] | NB29 |
-| **Day plan** | | | | | |
-| 2 | `days` | `[{"phases":["P-A","P-B","C"]}, {"phases":["P-B","P-A","C"]}]` | list[dict] | [tune] | NB29 |
-| 3 | `k_peers_per_day` | `3` | int ≥ 0 | [tune] | NB05 |
-| **Peer network** | | | | | |
-| 4 | `network_type` | `"stochastic_block"` | str (see §6.3) | [tune] | NB26 (factory demo) |
-| 5 | `network_params` | `None` | dict \| None | [tune] | NB26 |
-| 6 | `p_intra` | `0.15` | float [0,1] | [tune] | legacy SBM default |
-| 7 | `p_inter` | `0.02` | float [0,1] | [tune] | legacy SBM default |
-| 8 | `block_sizes` | `None` | list[int] \| None | [tune] | — |
-| 9 | `diagnostics_timeout_s` | `30.0` | float ≥ 0 | [infra] | — |
-| **LLM (canonical)** | | | | | |
-| 10 | `llm_model` | `"mlx-community/Qwen3-8B-4bit"` | str | [canon] | NB25 |
-| 11 | `llm_provider` | `"local"` | str | [canon] | NB24, NB25 |
-| 12 | `llm_temperature` | `0.5` | float | [tune] | — |
-| 13 | `survey_model` | `None` | str \| None | [tune] | NB15 (split-model run) |
-| 14 | `survey_provider` | `None` | str \| None | [tune] | NB15 |
-| 15 | `thinking` | `False` | bool | [tune] | NB15, NB22 |
-| 16 | `debias` | `True` | bool | [canon] | NB13, NB14, NB15 |
-| **Communication mode** | | | | | |
-| 17 | `communication_mode` | `"package"` | str | [canon] | NB16, NB29 |
-| 18 | `package_policies` | `ALL_CLIMATE_POLICIES` (6) | tuple[ClimatePolicyID] | [tune] | NB16 |
-| **Political messaging** | | | | | |
-| 19 | `political_message_source` | `"offline"` | str | [canon] | NB29 |
-| 20 | `political_message_set` | `"v1"` | str | [tune] | NB29 |
-| **Day-0 anchor** | | | | | |
-| 21 | `day0_anchor` | `"ground_truth_with_rationale"` | str (3 options) | [canon] | v0.6 defaults overhaul |
-| **Reach / audience** | | | | | |
-| 22 | `reach_a` | `1.0` | float [0,1] | [tune] | NB20, NB21 |
-| 23 | `reach_b` | `1.0` | float [0,1] | [tune] | NB20, NB21 |
-| 24 | `audience_cap` | `None` | int ≥ 0 \| None | [tune] | NB21 |
-| **Political exposure** | | | | | |
-| 25 | `political_exposure_mode` | `"rule_affinity_rank"` | str (3 options) | [tune] | NB23 |
-| 26 | `political_exposure_targets` | `None` (→ committed_minority_symmetric) | str preset \| dict \| None | [tune] | Literature_Political_Exposure §6 |
-| 27 | `affinity_weights` | `None` (→ balanced) | str preset \| dict \| None | [tune] | NB23 |
-| **Reproducibility / IO** | | | | | |
-| 28 | `random_seed` | `42` | int | [tune] | — |
-| 29 | `output_dir` | `"data/output/experiments"` | str (path) | [infra] | — |
-| **Local-LLM runtime** | | | | | |
-| 30 | `local_base_url` | `None` (→ env or `http://localhost:8080/v1`) | str \| None | [infra] | NB24, NB25 |
-| 31 | `local_extra_body` | `None` | dict \| None | [infra] | Local_LLM_Setup_Guide |
-| 32 | `local_timeout_s` | `None` (→ env or 600 s) | float \| None | [infra] | NB24 |
+| What you want to change | Setting(s) |
+|---|---|
+| How many citizens are in the run | `n_citizens` |
+| How many days, and what happens each day | `days` |
+| How many peers each citizen messages per day | `k_peers_per_day` |
+| The shape of the social network | `network_type`, `network_params` |
+| Who hears which politician, and in what proportions | `political_exposure_targets`, `affinity_weights`, `political_exposure_mode` |
+| How far each politician's broadcasts reach | `reach_a`, `reach_b`, `audience_cap` |
+| Which climate policies are in the package | `package_policies` |
+| Using a cloud AI model instead of the local one | `llm_provider`, `llm_model` |
+| Using a stronger model just for the surveys | `survey_provider`, `survey_model`, `thinking` |
+| Reproducing or varying randomness | `random_seed` |
+
+Full explanations of each are in [Section 4](#4-every-setting-explained).
 
 ---
 
-## 6. Per-key reference
+## 3. The settings to leave as-is (unless you know why)
 
-### 6.1 Population
+Six settings define the research design. They have been chosen and validated deliberately, and
+changing them means your run is no longer comparable to the standard ones. Change them only on
+purpose, and note it when you report results.
 
-#### `n_citizens` — int, default `100`
-
-- *Runtime:* upper bound on YouGov rows loaded; actual cohort size = `len(nation.agents_active)` after dropping unusable rows. Used by `_run_baseline_surveys` and every per-agent loop in [sim.py](../src/cag/abm/sim.py).
-- *Why this default:* 100 is the current source default and a practical mid-point between smoke-scale checks and full cohorts; the [Model_Design.md](Model_Design.md) target is often 30–50 agents for full research runs depending on cost and throughput.
-- *Interactions:* couples with `n_citizens` is what `apply_audience_cap` and `apply_reach_subsample` operate on; a cohort smaller than ~30 produces extreme stochasticity in exposure cells and is only appropriate for smoke tests (NB29 uses 10).
-
-### 6.2 Day plan
-
-#### `days` — list[dict], default `[{"phases":["P-A","P-B","C"]}, {"phases":["P-B","P-A","C"]}]`
-
-- *Runtime:* iterated literally by `run_simulation` ([sim.py L671](../src/cag/abm/sim.py#L671)); each entry is one simulated day. `_resolve_day_phases` ([sim.py L195](../src/cag/abm/sim.py#L195)) expands a day entry to a phase list.
-- *Two ways to specify a day:*
-  - **Canonical:** `{"phases": ["P-A", "P-B", "C"]}` — verbatim list of `P-A` / `P-B` / `C` tokens. Repeats allowed (`["P-A","P-A","P-B","C"]` makes agent A broadcast twice).
-  - **Sugar via [`make_phases`](../src/cag/abm/sim.py#L102):** `{"broadcasts_a": 3, "broadcasts_b": 1, "peer": True, "interleave": False, "a_first": True}` — convenient for asymmetric-broadcast experiments.
-  - Mixing `phases` with sugar keys in the same day entry **raises `ValueError`** ([sim.py L201–L205](../src/cag/abm/sim.py#L201-L205)).
-- *Single-policy mode also needs `policy`*: in `communication_mode='single_policy'`, every day dict **must** also contain `"policy": ClimatePolicyID.X`. Under `package` mode any `policy` key is silently ignored ([sim.py L42–L46](../src/cag/abm/sim.py#L42-L46) comment).
-- *Why this default:* alternating phase order balances which side speaks first on a given day, mitigating recency bias in the end-of-day survey.
-
-#### `k_peers_per_day` — int ≥ 0, default `3`
-
-- *Runtime:* number of network neighbours each citizen sends a peer message to during a `C` phase ([sim.py L463–L468 / L479–L484](../src/cag/abm/sim.py#L463-L484)).
-- *Why this default:* matches v0.3 NB05 baseline. Higher values multiply LLM cost linearly per peer phase.
-- *Interactions:* if the network is very sparse (e.g. Erdős–Rényi with low `p`) some citizens will have fewer than `k_peers_per_day` neighbours and simply send to all of them.
-
-### 6.3 Peer network
-
-#### `network_type` — str, default `"stochastic_block"`
-
-One of the five builders registered in [networks.py L40](../src/cag/abm/networks.py#L40):
-
-| `network_type` | `network_params` keys (with defaults) | Use case |
+| Setting | Default | Why it's set this way |
 |---|---|---|
-| `"stochastic_block"` | `p_intra` (0.15), `p_inter` (0.02) | Default; 2 blocks driven by `political_exposure` (A-only → block 0, B-only → block 1, swing round-robined) |
-| `"erdos_renyi"` | `p` (0.05) | `G(n, p)` null model |
-| `"watts_strogatz"` | `k` (6, even, < n), `beta` (0.1) | Small-world |
-| `"barabasi_albert"` | `m` (3, 1 ≤ m < n) | Preferential attachment / scale-free |
-| `"homophily_weighted"` | `attributes` (defaults to `("ukge2019_vote_id", "brexit_vote_id", "region_id")`), `weights` (None → uniform; must be same length as `attributes`), `scale` (6.0), `threshold` (3.0) | Continuous similarity-weighted random graph; edge probability `sigmoid(scale·sim − threshold)` |
-
-Source: per-builder docstrings in [networks.py L100–L270](../src/cag/abm/networks.py#L100-L270).
-
-- *Runtime:* `nation.create_network(network_type, network_params, seed)` ([environment.py L944](../src/cag/abm/environment.py#L944)) dispatches via `build_network()`.
-
-#### `network_params` — dict | None, default `None`
-
-- *Runtime:* type-specific param dict; merged with `p_intra` / `p_inter` legacy keys via `_resolve_network_params` ([sim.py L221–L237](../src/cag/abm/sim.py#L221-L237)) for back-compat with the SBM.
-- *Example overrides:*
-  ```python
-  # Watts–Strogatz small-world
-  {"network_type": "watts_strogatz", "network_params": {"k": 8, "beta": 0.2}}
-  # Homophily on a custom attribute set with explicit weights
-  {"network_type": "homophily_weighted",
-   "network_params": {
-       "attributes": ["ukge2019_vote_id", "selftransc_id", "openness_id"],
-       "weights":    [2.0, 1.0, 1.0],
-       "scale": 6.0, "threshold": 3.0,
-   }}
-  ```
-
-#### `p_intra` (0.15), `p_inter` (0.02), `block_sizes` (None) — legacy SBM flat keys
-
-- *Runtime:* recognised by `_resolve_network_params` only when `network_type == "stochastic_block"`. Folded into `network_params` if not already present there. `block_sizes` defaults to equal split.
-- *Resume behaviour:* these keys are *folded into the resolved network params before resume comparison* ([sim.py L1042–L1051](../src/cag/abm/sim.py#L1042-L1051)), so upgrading a config from flat keys to `network_params={...}` does not trigger a spurious resume mismatch.
-
-#### `diagnostics_timeout_s` — float ≥ 0, default `30.0`
-
-- *Runtime:* wall-clock cap (POSIX-only, SIGALRM-based) on the conditional metric block in `compute_diagnostics` (clustering / shortest-path / diameter). The cheap metrics (degree, density, components, assortativity) always run. Set `0` or `None` to disable. Per-metric size caps (5000 / 2000 / 2000 nodes) still apply.
-
-### 6.4 LLM (canonical)
-
-#### `llm_model` — str, default `"mlx-community/Qwen3-8B-4bit"`
-
-- *Runtime:* passed to `send_chat()` for every non-survey LLM call ([sim.py L455–L488](../src/cag/abm/sim.py#L455-L488)). For local provider, fuzzily matched against `_MODEL_REGISTRY` in [llm.py L104–L148](../src/cag/io/llm.py#L104-L148) to pick sampling defaults and `max_tokens`.
-- *Local-LLM model registry* (substring match, first wins):
-
-  | Family match | Sampling (non-thinking) | Sampling (thinking) | Thinking knob | `max_tokens_msg` / `_thinking` |
-  |---|---|---|---|---|
-  | `qwen3` | temp 0.7, top_p 0.8 | temp 0.6, top_p 0.95 | `chat_template_kwargs.enable_thinking` | 2048 / 16384 |
-  | `deepseek-r1` | temp 0.6, top_p 0.95 | temp 0.6, top_p 0.95 | (always reasons) | 4096 / 16384 |
-  | `llama` | temp 0.7, top_p 0.9 | temp 0.7, top_p 0.9 | — | 2048 / 4096 |
-  | `apertus` | temp 0.7, top_p 0.9 | temp 0.7, top_p 0.9 | — | 2048 / 4096 |
-  | `mistral` | temp 0.7, top_p 0.9 | temp 0.7, top_p 0.9 | — | 2048 / 4096 |
-- *Why this default:* parity-tested in NB25 against API providers; Qwen3 has a clean thinking-mode toggle and fits in 8B-4bit MLX memory budget.
-
-#### `llm_provider` — str, default `"local"`
-
-- *Runtime:* selects the backend in `send_chat()`. Valid: `"local"`, `"openai"`, `"anthropic"`, `"google"`.
-- *Side effect when `local`:* `_resolve_runtime` calls `configure_local()` + `ping_local()` at start ([sim.py L344–L352](../src/cag/abm/sim.py#L344-L352)); a missing server **aborts the run** before any agent call.
-- *Why this default:* see §2.
-
-#### `llm_temperature` — float, default `0.5`
-
-- *Runtime:* sampling temperature for every LLM call. For local provider, **the model registry overrides this** with per-family defaults unless `local_extra_body` explicitly sets `temperature`.
-- *Gotcha:* changing only `llm_temperature` on a local Qwen3 run has no effect; pass `local_extra_body={"temperature": X}` instead.
-
-#### `survey_model` — str | None, default `None`
-
-- *Runtime:* if set, overrides `llm_model` for **end-of-day surveys and Day-0 LLM survey** only ([sim.py L380–L389](../src/cag/abm/sim.py#L380-L389)). `None` → use `llm_model` for surveys too.
-- *Why:* lets you run cheap-model broadcasts/reflections but a stronger-model survey (used in NB15 Sonnet-survey setup).
-
-#### `survey_provider` — str | None, default `None`
-
-- *Runtime:* if set, overrides `llm_provider` for surveys. Used together with `survey_model` to enable dual-provider runs.
-
-#### `thinking` — bool, default `False`
-
-- *Runtime:* **passed only to surveys** — `_run_day0` ([sim.py L283](../src/cag/abm/sim.py#L283)) and `nation.run_end_of_day_survey` ([sim.py L484–L489](../src/cag/abm/sim.py#L484-L489)). **NOT** passed to broadcasts, peer messaging, or memory management — those always run with `thinking=False` defaults at the agent/environment layer.
-- *Why decoupled:* survey reasoning quality benefits most from thinking mode; reflections and peer messages are length-bound and thinking blows past the budget. See NB15 for the rationale.
-
-#### `debias` — bool, default `True`
-
-- *Runtime:* turns on the two-step Condition B prompt chain in `administer_survey()` and `run_end_of_day_survey()`. On Day 0, the flag is **ignored** when `day0_anchor != "llm_survey"` (logged at INFO, [sim.py L304–L308](../src/cag/abm/sim.py#L304-L308)).
-- *Why this default:* NB13 (97% bias reduction on Ban Petrol Cars), NB14 (3/4 policies improved), NB15 (Sonnet + debias + thinking gave the strongest run to date).
-
-### 6.5 Communication mode
-
-#### `communication_mode` — str, default `"package"`
-
-- *Valid:* `"package"` or `"single_policy"`.
-- *Runtime:* `_is_package_mode(cfg)` ([sim.py L213](../src/cag/abm/sim.py#L213)) selects the entire P-A / P-B / C / EOD-survey / memory pipeline ([sim.py L443–L500](../src/cag/abm/sim.py#L443-L500)).
-- *Single-policy mode contract:* every entry in `days` **must** contain `"policy": ClimatePolicyID.X`. Under `package` mode `policy` is silently ignored.
-
-#### `package_policies` — tuple[ClimatePolicyID], default `ALL_CLIMATE_POLICIES`
-
-- *Runtime:* the policies broadcast together each phase and surveyed each end-of-day. Used in `run_package_broadcast`, `run_package_peer_messaging`, `run_end_of_day_survey` loop.
-- *Override example:* `{"package_policies": (ClimatePolicyID.CARBON_TAX, ClimatePolicyID.RENEWABLE_ENERGY)}` to restrict the package to a 2-policy subset.
-
-### 6.6 Political messaging
-
-#### `political_message_source` — str, default `"offline"`
-
-- *Valid:* `"offline"` or `"llm"`. Anything else **raises `ValueError`** at start ([sim.py L356–L360](../src/cag/abm/sim.py#L356-L360)).
-- *Offline contract:* `_resolve_runtime` calls `load_message_pool(cfg["political_message_set"])` then `message_pool.validate_required(sides=("A","B"), policy_ids=..., include_package=...)` ([sim.py L362–L380](../src/cag/abm/sim.py#L362-L380)). Any missing cell aborts the run **before the first LLM call**. No silent fallback.
-
-#### `political_message_set` — str, default `"v1"`
-
-- *Runtime:* resolves to `data/political_messages/messages_<set>.csv` + `sources_<set>.csv`. The shipping set is `v1` (40 package + 240 single-policy rows).
-
-### 6.7 Day-0 anchor
-
-#### `day0_anchor` — str, default `"ground_truth_with_rationale"`
-
-- *Valid:* `"llm_survey"` | `"ground_truth"` | `"ground_truth_with_rationale"` (`VALID_DAY0_ANCHORS`, [sim.py L101](../src/cag/abm/sim.py#L101)). Anything else **raises `ValueError`** at start.
-- *Runtime semantics* ([sim.py L268–L316](../src/cag/abm/sim.py#L268-L316)):
-  - **`llm_survey`** — administer the full LLM survey on Day 0 (legacy v0.3 behaviour; preserves the NB11–14 bias-measurement story).
-  - **`ground_truth`** — seed `opinion_history[(0)]` directly from YouGov; **no LLM call** on Day 0.
-  - **`ground_truth_with_rationale`** — seed from YouGov *and* ask the LLM to write a rationale for that position; rationale stored in `survey_reasoning.csv`.
-- *Interactions:* `debias` is ignored on Day 0 when this is not `llm_survey`; the warning is logged once.
-
-### 6.8 Reach / audience
-
-#### `reach_a`, `reach_b` — float [0, 1], default `1.0`
-
-- *Runtime:* `nation.apply_reach_subsample(reach_a, reach_b, seed)` ([environment.py L885](../src/cag/abm/environment.py#L885)). Replaces each political agent's `connected_citizens` with `floor(reach * |connected|)` random members. RNG seeds: `seed` for A, `seed + 1` for B — independent draws, reproducible.
-- *Validation:* values outside `[0.0, 1.0]` **raise `ValueError`** at start ([sim.py L549–L553](../src/cag/abm/sim.py#L549-L553)).
-- *Use case:* model asymmetric broadcast reach (e.g. Reform UK media presence > Green party).
-
-#### `audience_cap` — int ≥ 0 | None, default `None`
-
-- *Runtime:* `nation.apply_audience_cap(cap, seed)` ([environment.py L826](../src/cag/abm/environment.py#L826)) — uniform random subsample to at most `cap` per political agent. RNG seeds: `seed + 100` for A, `seed + 101` for B (independent).
-- *Order:* `assign_political_exposure` → `apply_audience_cap` → `apply_reach_subsample`. So `reach` is a fraction of the **capped** audience.
-- *Why this knob exists:* at small N the YouGov sample composition produces structurally asymmetric audiences (e.g. A=27 vs B=20 at N=30). Setting `cap = min(|A|, |B|)` makes `reach_a = reach_b = 1.0` a true symmetric baseline.
-- *Validation:* non-int / bool / negative → **`ValueError`** at start ([sim.py L555–L562](../src/cag/abm/sim.py#L555-L562)).
-
-### 6.9 Political exposure
-
-#### `political_exposure_mode` — str, default `"rule_affinity_rank"`
-
-- *Valid* (`VALID_EXPOSURE_MODES`, [environment.py L165](../src/cag/abm/environment.py#L165)):
-  - `"rule_affinity_rank"` — **default.** Deterministic top-K on a weighted affinity score; realised marginals hit `targets` exactly (±1 per cell from rounding).
-  - `"rule_priority_chain"` — legacy v0.5 vote-based rule. Cells fall out of the YouGov sample; `targets` ignored. Preserved for reproducibility.
-  - `"rule_signal_count"` — currently an alias of `priority_chain` (reserved).
-
-#### `political_exposure_targets` — str preset | dict | None, default `None`
-
-- *Preset registry* (`TARGET_PRESETS`, [environment.py L84](../src/cag/abm/environment.py#L84)):
-
-  | Preset | A-only | B-only | both | neither | Notes |
-  |---|---|---|---|---|---|
-  | `committed_minority_symmetric` *(default when `None`)* | 0.11 | 0.11 | 0.33 | 0.45 | Symmetric committed minorities; 45% disengaged anchored to Reuters DNR 2024 + Hansard Audit 16. |
-  | `committed_minority_uk_2024` | 0.08 | 0.14 | 0.33 | 0.45 | Asymmetric (B > A), JL Partners GB News viewer panel (Apr 2024). |
-  | `legacy_v05` | 0.225 | 0.225 | 0.20 | 0.35 | v0.5 default; pre-committed-minority. |
-- *Literal dict allowed:* `{"A-only": ..., "B-only": ..., "both": ..., "neither": ...}` — must sum to 1.0.
-- *Why this default:* see the long block comment at [environment.py L37–L72](../src/cag/abm/environment.py#L37-L72) and [Literature_Political_Exposure.md](Literature_Political_Exposure.md) §6.
-
-#### `affinity_weights` — str preset | dict | None, default `None`
-
-- *Preset registry* (`AFFINITY_WEIGHT_PRESETS`, [environment.py L157](../src/cag/abm/environment.py#L157)):
-
-  | Preset | Idea | Headline weights (per side; identical A and B) |
-  |---|---|---|
-  | `balanced` *(default when `None`)* | All three signal families contribute | `openness` 1.5, `selftransc` 1.5, `conformtrad` 1.0, `sdo` 1.0, `rwa` 1.0, `age` 1.0, `education` 1.0, `region` 0.75, `brexit` 1.5, `politics` 1.5, `vote_bonus` 2.0 |
-  | `vote_dominant` | "Is it all just vote choice?" | doubles `brexit` / `politics` / `vote_bonus`, halves values + demographics |
-  | `values_dominant` | "Can values alone reproduce the cells?" | doubles values + SDO + RWA + conformtrad, halves vote-related signals |
-- *Literal dict allowed:* `{"A": {...}, "B": {...}}` with the same key set as the presets.
-- *Why these weights:* full rationale at [environment.py L92–L122](../src/cag/abm/environment.py#L92-L122):
-  - Vote bonus highest (2.0) — vote choice is the strongest empirical proxy for partisan media diet (Fletcher & Nielsen 2017). Bonus is signed in `[−2, +2]` so a Brexit vote can subtract from the green score.
-  - Openness and self-transcendence at 1.5 — strongest values-level predictors of pro-environmental attitudes (Steg & de Groot 2010).
-  - SDO / RWA / conformity-tradition at 1.0 — broader authoritarianism markers, not climate-specific.
-  - Demographics at 0.75–1.0 — proxies rather than direct attitudinal indicators.
-- *Why hand-picked, not fitted:* no UK individual-level ground truth for who is in which echo chamber, so fitted coefficients would be circular. Hand-picked priors anchored to published correlations are honest about the uncertainty.
-
-### 6.10 Reproducibility / IO
-
-#### `random_seed` — int, default `42`
-
-- *Runtime:* threaded through every stochastic step — exposure assignment, audience cap (`seed+100`, `seed+101`), reach subsample (`seed`, `seed+1`), network builder, message pool selection.
-- *Use:* change it to vary the seed family; keep it fixed to reproduce a run bit-for-bit (subject to LLM determinism caveats — see below).
-
-#### `output_dir` — str, default `"data/output/experiments"`
-
-- *Runtime:* base directory under which `save_results()` writes the timestamped run folder. See [Run_Output_Guide.md](Run_Output_Guide.md).
-
-### 6.11 Local-LLM runtime (provider="local" only)
-
-All three optional; left at `None` they fall back to environment variables, then built-in defaults.
-
-#### `local_base_url` — str | None, default `None`
-
-- *Fallback chain:* arg → `CAG_LOCAL_BASE_URL` env → `http://localhost:8080/v1` ([llm.py L67–L74](../src/cag/io/llm.py#L67-L74)).
-- *Side effect:* the first call to `configure_local()` from `_resolve_runtime` sets the process-wide default for the run.
-
-#### `local_extra_body` — dict | None, default `None`
-
-- *Runtime:* extra request-body keys merged on top of the model-registry entry. Use to override sampling presets or pass server-specific knobs (e.g. `{"chat_template_kwargs": {"enable_thinking": False}}`).
-- *Gotcha:* this is the **only** way to override the per-call temperature on local Qwen3 — `llm_temperature` alone is shadowed by the model registry.
-
-#### `local_timeout_s` — float | None, default `None`
-
-- *Fallback chain:* arg → `CAG_LOCAL_TIMEOUT_S` env → 600 s ([llm.py L76–L88](../src/cag/io/llm.py#L76-L88)).
-- *Why so high:* local thinking calls can run for 90+ s; the default is much higher than the OpenAI-client default.
+| `llm_provider` | `local` | Keeps runs reproducible and free of API costs and rate limits. |
+| `llm_model` | `Qwen3-8B-4bit` | The local model that was checked against cloud models and behaved comparably. |
+| `communication_mode` | `package` | The research question is about how the six policies move *together*; doing them one at a time hides that. |
+| `day0_anchor` | `ground_truth_with_rationale` | Starts everyone from their real survey answer, removing the AI's pro-climate lean on Day 0. |
+| `debias` | `True` | The two-step survey removes most of the AI's residual pro-climate lean on later days. |
+| `political_message_source` | `offline` | Uses real political text from a curated file, which is the point of the study; AI-written political messages are only a fallback. |
+
+The wording of the prompts the citizens see (in `agent.py`, documented in
+[Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md)) is also part of this fixed
+core.
 
 ---
 
-## 7. Canonical profiles
+## 4. Every setting explained
 
-### 7.1 Research full run (local, package, debias, GT+rationale)
+This section covers all 33 settings, grouped by what they control. Each entry says what the setting
+does, its default, and whether it's something you'd normally change.
+
+### Who is in the simulation
+
+#### `n_citizens` — default `100`
+
+The maximum number of citizens to create from the YouGov survey. The actual number can be slightly
+lower if some survey rows can't be used. Smaller runs are faster and cheaper but noisier: below about
+30 citizens the four exposure groups get so small that results swing wildly from run to run, so very
+small sizes are best kept for quick tests. *Safe to change.*
+
+### The daily schedule
+
+#### `days` — default: two days, politicians alternating who goes first
+
+A list where each entry is one day. The default is:
 
 ```python
-config = {}  # take SIM_CONFIG defaults wholesale
+[{"phases": ["P-A", "P-B", "C"]},
+ {"phases": ["P-B", "P-A", "C"]}]
+```
+
+Each day is a list of **phases**, run in order:
+
+- **`P-A`** — the pro-climate politician broadcasts.
+- **`P-B`** — the anti-climate politician broadcasts.
+- **`C`** — peer chat: citizens message their neighbours.
+
+You can repeat phases (`["P-A", "P-A", "P-B", "C"]` makes the pro side broadcast twice that day) and
+you can reorder them. The default alternates which politician speaks first across days so neither side
+always gets the last word before the evening survey.
+
+There is also a **shorthand** for describing a day when you want lots of broadcasts and don't want to
+type them out. Instead of a `phases` list, you can write, for example:
+
+```python
+{"broadcasts_a": 3, "broadcasts_b": 1, "peer": True, "interleave": False, "a_first": True}
+```
+
+which means "three pro broadcasts, one anti broadcast, then peer chat." Use either the explicit
+`phases` list **or** the shorthand keys for a given day — mixing both in the same day is rejected.
+
+> **One-policy runs need a policy named per day.** If you switch off package mode (see
+> `communication_mode`), every day must also say which policy it covers, e.g.
+> `{"phases": ["P-A", "P-B", "C"], "policy": ClimatePolicyID.CARBON_TAX}`. In the default package
+> mode, any `policy` you add is simply ignored. *Safe to change.*
+
+#### `k_peers_per_day` — default `3`
+
+How many network neighbours each citizen sends a message to during a peer-chat (`C`) phase. Higher
+numbers mean more AI calls (and more cost) per peer phase. If a citizen has fewer neighbours than this
+number, they simply message all of them. *Safe to change.*
+
+### The peer (social) network
+
+#### `network_type` — default `"stochastic_block"`
+
+The shape of the citizen friendship network. There are five options:
+
+| `network_type` | What it is |
+|---|---|
+| `"stochastic_block"` | **Default.** Two communities (roughly, the pro-leaning and anti-leaning citizens), densely linked inside each community and sparsely between them. |
+| `"erdos_renyi"` | A plain random network — everyone equally likely to be linked to everyone. A neutral baseline. |
+| `"watts_strogatz"` | A "small-world" network: mostly local links plus a few long-range shortcuts. |
+| `"barabasi_albert"` | A network with a few highly-connected hubs (like real social media followings). |
+| `"homophily_weighted"` | Links are more likely between citizens who are similar on attributes you choose (vote, region, and so on). |
+
+*Safe to change.*
+
+#### `network_params` — default `None`
+
+A small dictionary of settings specific to the chosen `network_type`. Leaving it `None` uses sensible
+built-in values. Examples:
+
+```python
+# A small-world network
+{"network_type": "watts_strogatz", "network_params": {"k": 8, "beta": 0.2}}
+
+# A similarity-based network on chosen attributes
+{"network_type": "homophily_weighted",
+ "network_params": {"attributes": ["ukge2019_vote_id", "selftransc_id", "openness_id"],
+                    "weights": [2.0, 1.0, 1.0]}}
+```
+
+*Safe to change.*
+
+#### `p_intra` — default `0.15`, and `p_inter` — default `0.05`
+
+These two apply only to the default `stochastic_block` network. `p_intra` is how likely two citizens
+in the **same** community are to be linked; `p_inter` is how likely two citizens in **different**
+communities are. The defaults give roughly three within-community links for every cross-community
+link — about a quarter of links cross the political divide, which matches what social-media studies
+report (Bakshy et al. 2015; Halberstam & Knight 2016). (Earlier versions used a much lower
+cross-community rate, which left small networks broken into disconnected islands.) *Safe to change.*
+
+#### `block_sizes` — default `None`
+
+For the `stochastic_block` network, the sizes of the two communities. `None` splits the citizens
+evenly. *Safe to change.*
+
+#### `diagnostics_timeout_s` — default `30.0`
+
+After building the network the model measures some properties of it (clustering, path lengths). On a
+large network a few of these measurements can be slow, so this is a time limit in seconds for the slow
+ones; the quick measurements always run. Set it to `0` or `None` to skip the slow ones entirely. This
+only affects diagnostics, not the simulation itself. *Safe to change for performance reasons.*
+
+### The AI model
+
+#### `llm_model` — default `"mlx-community/Qwen3-8B-4bit"`
+
+Which AI model writes the citizens' reflections, messages, and survey answers. For the local model,
+the name is matched against a small built-in list to pick good sampling settings automatically. *Part
+of the fixed research core — see [Section 3](#3-the-settings-to-leave-as-is-unless-you-know-why).*
+
+#### `llm_provider` — default `"local"`
+
+Where the AI model runs. One of `"local"`, `"openai"`, `"anthropic"`, or `"google"`. With `"local"`,
+the model checks that your local AI server is running at the start and stops the run if it isn't.
+*Part of the fixed research core, but switching to a cloud provider is a documented, supported option
+(see the examples in [Section 5](#5-ready-to-copy-examples)).*
+
+#### `llm_temperature` — default `0.5`
+
+How much randomness the AI uses when generating text (higher = more varied wording). Note: for the
+local model this is usually overridden by the model's own recommended setting, so to change it for a
+local run you generally pass it through `local_extra_body` instead (see below). *Safe to change.*
+
+#### `survey_model` — default `None`
+
+Lets you use a **different** AI model for the end-of-day surveys than for everything else. `None`
+means "use the same model as `llm_model`." This is handy for messaging with a cheap, fast model but
+surveying with a stronger, more careful one. *Safe to change.*
+
+#### `survey_provider` — default `None`
+
+The provider that goes with `survey_model` (for example, message locally but survey with Anthropic).
+`None` means "use the same provider as `llm_provider`." *Safe to change.*
+
+#### `thinking` — default `False`
+
+Turns on the AI's extended "show your working" reasoning mode **for surveys only**. Reflections and
+messages never use it, because they are meant to be short. Survey answers tend to benefit most from
+the extra reasoning. *Safe to change.*
+
+#### `debias` — default `True`
+
+Turns on the two-step bias-correction process for end-of-day surveys: the AI first reasons about the
+range of views a real person might hold, then commits to an answer. This removes most of the AI's
+tendency to answer more pro-climate than real survey respondents. It does not apply on Day 0 (Day 0 is
+just the seeded starting point). *Part of the fixed research core.*
+
+### What gets talked about
+
+#### `communication_mode` — default `"package"`
+
+Either `"package"` (all six policies discussed and surveyed together each day) or `"single_policy"`
+(one policy at a time). Package mode is the default because the research is about how opinions on the
+policies move as a set. If you choose `single_policy`, remember every entry in `days` must name its
+policy. *Part of the fixed research core.*
+
+#### `package_policies` — default: all six climate policies
+
+The set of policies covered in package mode. You can narrow it to a subset, for example:
+
+```python
+{"package_policies": (ClimatePolicyID.CARBON_TAX, ClimatePolicyID.RENEWABLE_ENERGY)}
+```
+
+*Safe to change.*
+
+### The politicians' messages
+
+#### `political_message_source` — default `"offline"`
+
+Where the politicians' broadcast text comes from. `"offline"` uses a curated file of real-world
+political text; `"llm"` has the AI write the political messages live. With `"offline"`, the run checks
+that every needed message exists before it starts and stops immediately if any is missing — there is
+no silent fallback. *Part of the fixed research core.*
+
+#### `political_message_set` — default `"v1"`
+
+Which curated message file to use. This points at
+`data/political_messages/messages_v1.csv` (and its companion sources file). `v1` is the set that ships
+with the project. *Safe to change if you have other message sets.*
+
+### Where Day 0 opinions come from
+
+#### `day0_anchor` — default `"ground_truth_with_rationale"`
+
+How each citizen's starting opinion is set on Day 0. Three options:
+
+- **`"ground_truth_with_rationale"`** (default) — use the citizen's real survey answer as the
+  opinion, and ask the AI to write a short reason for it. Removes the AI's Day-0 pro-climate lean
+  while keeping a written rationale for review.
+- **`"ground_truth"`** — use the real survey answer with **no** AI call at all on Day 0. Cheapest;
+  loses the rationale text.
+- **`"llm_survey"`** — ask the AI to answer the survey cold on Day 0, with no real-world anchor. Use
+  this only when you specifically want to *measure* the AI's built-in lean.
+
+*Part of the fixed research core.*
+
+### Who hears the politicians
+
+#### `reach_a` — default `1.0`, and `reach_b` — default `1.0`
+
+The fraction of a politician's audience that actually receives each broadcast (`1.0` = everyone in the
+audience). `reach_a` is for the pro-climate side, `reach_b` for the anti-climate side. Lowering one
+side models a politician with weaker media presence. Values must be between 0 and 1. *Safe to change.*
+
+#### `audience_cap` — default `None`
+
+An optional hard limit on how many citizens each politician can reach, applied (at random) before
+`reach` is taken into account. `None` means no limit. This is useful at small population sizes, where
+the survey sample can give one side a structurally bigger audience than the other; capping both to the
+same size makes a fair "equal reach" comparison possible. *Safe to change.*
+
+#### `political_exposure_mode` — default `"rule_affinity_rank"`
+
+The rule used to sort citizens into the four exposure groups (pro-only, anti-only, both, neither).
+
+- **`"rule_affinity_rank"`** (default) — score each citizen's pull toward each side, then fill the
+  groups to hit the target proportions you set exactly.
+- **`"rule_priority_chain"`** — an older vote-based rule; the group sizes fall out of the data rather
+  than being targeted. Kept for reproducing older runs.
+- **`"rule_signal_count"`** — currently behaves the same as `rule_priority_chain` (reserved for
+  future use).
+
+*Safe to change.*
+
+#### `political_exposure_targets` — default `None`
+
+The proportions of citizens in each of the four groups. `None` uses the **committed-minority
+symmetric** preset. You can name a preset or pass your own four numbers (they must add up to 1).
+
+| Preset | Pro-only | Anti-only | Both | Neither | Notes |
+|---|---|---|---|---|---|
+| `committed_minority_symmetric` *(default)* | 0.11 | 0.11 | 0.33 | 0.45 | Equal small pro/anti minorities; 45% hear no politics. |
+| `committed_minority_uk_2024` | 0.08 | 0.14 | 0.33 | 0.45 | An anti-leaning version (more anti-only than pro-only). |
+| `legacy_v05` | 0.225 | 0.225 | 0.20 | 0.35 | The older default, before committed-minority. |
+| `split50` | 0.50 | 0.50 | 0.00 | 0.00 | Half hear only the pro side, half only the anti side. A clean polarisation test. |
+| `neither` | 0.00 | 0.00 | 0.00 | 1.00 | No one hears any politician — peer effects only. |
+
+A custom example: `{"A-only": 0.2, "B-only": 0.2, "both": 0.3, "neither": 0.3}`. *Safe to change.*
+
+#### `affinity_weights` — default `None`
+
+How strongly each piece of a citizen's profile counts when scoring their pull toward each side.
+`None` uses the **balanced** preset. Three presets:
+
+| Preset | Idea |
+|---|---|
+| `balanced` *(default)* | All three kinds of signal — values, demographics, and vote/politics — contribute, with values and vote choice weighted most. |
+| `vote_dominant` | "Is it really all just vote choice?" — boosts vote/Brexit/politics, shrinks the rest. |
+| `values_dominant` | "Can values alone reproduce the groups?" — boosts values, shrinks vote-related signals. |
+
+You can also pass your own weights as `{"A": {...}, "B": {...}}` using the same signal names as the
+presets. The weights are deliberately hand-chosen and anchored to published correlations rather than
+fitted to data, because there is no UK individual-level "truth" about who lives in which echo chamber
+to fit against. *Safe to change.*
+
+### Reproducibility
+
+#### `random_seed` — default `42`
+
+The seed for every random choice in the run — which survey rows are sampled, how the network is wired,
+how audiences are thinned, which messages are picked. Keep it fixed to reproduce a run; change it to
+get a different random draw. (AI models are not perfectly deterministic, so text may still vary
+slightly run to run.) *Safe to change.*
+
+> **Where results are saved** is not part of this configuration dictionary. The output location is
+> chosen when results are written (the command-line runner uses `--outdir`; see
+> [Run_Output_Guide.md](Run_Output_Guide.md)).
+
+### Running a local AI model
+
+These three apply only when `llm_provider="local"`. All are optional; left as `None` they fall back to
+environment variables and then to built-in defaults.
+
+#### `local_base_url` — default `None`
+
+The web address of your local AI server. `None` falls back to the `CAG_LOCAL_BASE_URL` environment
+variable, then to `http://localhost:8080/v1`. *Safe to change to match your setup.*
+
+#### `local_extra_body` — default `None`
+
+Extra options sent with every request to the local server — for example to override the sampling
+temperature (`{"temperature": 0.3}`) or to turn the model's thinking mode on or off. This is the
+reliable way to change the temperature on a local run. *Safe to change.*
+
+#### `local_timeout_s` — default `None`
+
+How long (in seconds) to wait for the local server to answer before giving up. `None` falls back to
+the `CAG_LOCAL_TIMEOUT_S` environment variable, then to 600 seconds. It is set high because local
+models in thinking mode can take a while. *Safe to change.*
+
+### The detailed audit trail
+
+#### `timeline_sample_size` — default `3`
+
+The model can write a minute-by-minute log for a few sampled citizens — every broadcast they heard,
+every reflection they wrote, every message sent and received, and the exact survey prompt they saw —
+in true order, to `agent_timeline.csv`. This setting is how many citizens get that detailed log. Set
+it to `0` to switch the log off. *Safe to change.*
+
+#### `timeline_sample_agent_ids` — default `None`
+
+Which specific citizens get the detailed log. `None` picks a spread automatically; otherwise pass a
+list of citizen IDs. *Safe to change.*
+
+---
+
+## 5. Ready-to-copy examples
+
+### 5.1 The standard research run
+
+```python
+config = {}  # use all the defaults from Section 1
 results = run_simulation(config, nation)
 ```
 
-Effective settings: §1 above, verbatim.
-
-### 7.2 Smoke profile (NB29)
+### 5.2 A quick test run
 
 ```python
 config = {
-    "n_citizens": 10,                                # SMOKE OVERRIDE (full=100)
+    "n_citizens": 10,
     "days": [
         {"phases": ["P-A", "P-B", "C"]},
         {"phases": ["P-B", "P-A", "C"]},
     ],
     "k_peers_per_day": 2,
-    # Everything else uses SIM_CONFIG defaults:
-    #   llm_provider='local', llm_model='mlx-community/Qwen3-8B-4bit',
-    #   communication_mode='package', package_policies=ALL_CLIMATE_POLICIES,
-    #   day0_anchor='ground_truth_with_rationale', debias=True,
-    #   political_message_source='offline', political_message_set='v1',
-    #   network_type='stochastic_block', p_intra=0.15, p_inter=0.02,
-    #   reach_a=1.0, reach_b=1.0, audience_cap=None,
-    #   political_exposure_mode='rule_affinity_rank',
-    #   political_exposure_targets=None  # → committed_minority_symmetric
-    #   affinity_weights=None            # → balanced
-    #   random_seed=42
+    # everything else stays on the defaults from Section 1
 }
 ```
 
-### 7.3 Outsider path (API provider)
+### 5.3 Using a cloud AI model
 
 ```python
 config = {
-    "llm_provider":          "openai",
-    "llm_model":             "gpt-4.1-mini",
-    "llm_temperature":       0.5,
-    # Optional: stronger model just for surveys (NB15 pattern)
-    "survey_provider":       "anthropic",
-    "survey_model":          "claude-sonnet-4-5",
-    "thinking":              True,           # survey-only thinking
+    "llm_provider": "openai",
+    "llm_model": "gpt-4.1-mini",
+    # optional: survey with a stronger model
+    "survey_provider": "anthropic",
+    "survey_model": "claude-sonnet-4-5",
+    "thinking": True,            # extended reasoning, surveys only
 }
 ```
 
-Requires API keys in `data/api_key.csv` (see [API_KEYS.md](../API_KEYS.md)).
+This needs API keys in `data/api_key.csv` (see [API_KEYS.md](../API_KEYS.md)).
 
-### 7.4 Asymmetric-reach experimental control
+### 5.4 An unequal-reach experiment
 
 ```python
 config = {
-    "audience_cap":   None,        # leave structural asymmetry
-    "reach_a":        1.0,         # A reaches all of its (smaller) audience
-    "reach_b":        0.5,         # B reaches half of its (larger) audience
-    "political_exposure_targets": "committed_minority_uk_2024",  # B > A asymmetry
+    "reach_a": 1.0,             # pro side reaches all of its audience
+    "reach_b": 0.5,             # anti side reaches only half of its audience
+    "political_exposure_targets": "committed_minority_uk_2024",
+}
+```
+
+### 5.5 A clean polarisation test (two echo chambers)
+
+```python
+config = {
+    "political_exposure_targets": "split50",   # half hear only pro, half only anti
 }
 ```
 
 ---
 
-## 8. Cross-cutting decisions
+## 6. What the model rejects at the start
 
-### 8.1 Day-0 anchoring — which mode to choose
+To fail fast rather than waste time, a run checks the configuration before doing anything and stops
+with a clear error if something is wrong:
 
-| Mode | Use when |
+| If… | …the run stops because |
 |---|---|
-| `ground_truth_with_rationale` *(canon)* | Default for research runs. Eliminates Day-0 bias by construction; keeps a rationale trace for qualitative review. |
-| `ground_truth` | Cost-sensitive runs (no Day-0 LLM call at all). Loses rationale text. |
-| `llm_survey` | Bias-measurement studies (NB11–14 line of work) on a new model. Required if you want to **measure** the LLM's pro-climate prior. |
-
-The three modes are not equivalent and have different theoretical interpretations. The ongoing **side-by-side comparison** is in deferred work (§3).
-
-### 8.2 Debias chain (Condition B)
-
-- *What it is:* a two-step prompt sequence in `administer_survey()` and `run_end_of_day_survey()` that asks the LLM to first reflect on the public's likely range of views, then commit to a position.
-- *Where it runs:* every end-of-day survey when `debias=True`. On Day 0 it runs only when `day0_anchor == "llm_survey"`.
-- *Validation:* NB13 (Carbon Tax + Ban Petrol Cars, ~97% bias reduction), NB14 (3/4 policies improved, statistically significant on Climate Compensation, overcorrected on Renewable Energy), NB15 (Sonnet + debias + thinking).
-- *Caveat:* the headline NB13 figure was measured on the pre-v0.5 mixed-perspective prompt chain. A partial re-measurement on the unified 1P chain is queued (§3).
-
-### 8.3 Package vs single-policy
-
-| Mode | When |
-|---|---|
-| `package` *(canon)* | Default. Cross-policy spillover (e.g. supporting Carbon Tax bleeds into supporting Renewable Energy) is the research target. |
-| `single_policy` | Legacy v0.3 mode. Use only when you need to isolate one policy's dynamics from spillover, or when reproducing pre-v0.5 results. Requires `"policy": ClimatePolicyID.X` in every `days` entry. |
-
-### 8.4 Offline vs LLM political messages
-
-| Source | When |
-|---|---|
-| `offline` *(canon)* | Default. Reproducible; uses curated real-world political text under `data/political_messages/`. Aborts at start if any required cell is missing. |
-| `llm` | Use when piloting a new policy not yet represented in the message set, or for a fully-LLM self-contained demonstration. Higher cost; no real-world grounding. |
-
-### 8.5 Local vs API provider
-
-| Provider | When |
-|---|---|
-| `local` *(canon)* | Research default. Reproducible, no API spend, no rate limits. Requires `mlx_lm.server` (or compatible) running — see [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md). |
-| `openai` / `anthropic` / `google` | Outsider path. Use for capability ceilings (e.g. NB15 Sonnet+thinking) or when you do not have a local GPU/MLX setup. Requires `data/api_key.csv`. |
-
-Mixing is supported: `llm_provider="local"` for reflections + `survey_provider="anthropic"` for end-of-day surveys is a valid split (NB15 pattern).
+| `day0_anchor` isn't one of the three valid options | the value is invalid |
+| `reach_a` or `reach_b` isn't a number between 0 and 1 | the value is out of range |
+| `audience_cap` is negative, a boolean, or not a whole number (and not `None`) | the value is invalid |
+| `political_message_source` isn't `"offline"` or `"llm"` | the value is invalid |
+| the message source is `"offline"` but a needed message is missing | the message file is incomplete |
+| `political_exposure_mode` isn't one of the valid rules | the value is invalid |
+| custom exposure proportions don't add up to 1 | the targets are invalid |
+| `network_type` isn't one of the five known types | the network type is unknown |
+| a network setting is invalid for its type | the network can't be built |
+| a day mixes the explicit `phases` list with the shorthand keys | the day is ambiguous |
+| `llm_provider="local"` but the local server isn't reachable | the model can't be contacted |
+| you ask to resume or checkpoint without giving a checkpoint folder | there's nowhere to read/write the checkpoint |
 
 ---
 
-## 9. Validation contract — what `run_simulation` rejects at start
+## 7. Pausing and resuming a run
 
-Source: [sim.py L538–L568](../src/cag/abm/sim.py#L538-L568) and downstream.
+A run can save its state after each day (when checkpointing is turned on) and pick up later from where
+it stopped. When you resume, the model compares your new configuration against the saved one:
 
-| Condition | Effect |
-|---|---|
-| `day0_anchor` not in `VALID_DAY0_ANCHORS` | `ValueError` |
-| `reach_a` or `reach_b` not a number in `[0.0, 1.0]` | `ValueError` |
-| `audience_cap` is bool, negative, or non-int (and not `None`) | `ValueError` |
-| `resume=True` or `checkpoint_every_day=True` without `checkpoint_dir` | `ValueError` |
-| `political_message_source` not in `("offline", "llm")` | `ValueError` ([sim.py L356–L360](../src/cag/abm/sim.py#L356-L360)) |
-| `political_message_source == "offline"` and any required side/policy cell missing in the pool | `ValueError` from `message_pool.validate_required` |
-| `political_exposure_mode` not in `VALID_EXPOSURE_MODES` | `ValueError` ([environment.py L649–L653](../src/cag/abm/environment.py#L649-L653)) |
-| `political_exposure_targets` dict cells do not sum to 1.0 | `ValueError` from `_resolve_targets` |
-| `network_type` not in `NETWORK_TYPES` | `ValueError` from `build_network` |
-| Network builder rejects its params (e.g. `watts_strogatz` `k` odd or ≥ n) | `ValueError` from the builder |
-| Day entry mixes `phases` with sugar keys | `ValueError` from `_resolve_day_phases` |
-| `llm_provider="local"` but server unreachable | `RuntimeError` from `ping_local()` |
+- **Settings that must not change** — changing any of these cancels the resume, because it would make
+  the second half incompatible with the first: `n_citizens`, `random_seed`, the network type and its
+  resolved settings, `communication_mode`, `package_policies`, `day0_anchor`, `reach_a`, `reach_b`,
+  `audience_cap`, the three exposure settings, and the two political-message settings. The set of
+  citizens and the days already completed must also match (you may *add* future days).
+
+- **Settings you may change** — these only produce a warning and the run continues: the AI model and
+  provider (including the survey ones), `debias`, `thinking`, `llm_temperature`, and the three local-
+  model settings.
 
 ---
 
-## 10. Resume / checkpoint contract
+## 8. For developers, and where to look next
 
-Source: [sim.py L963–L1100](../src/cag/abm/sim.py#L963-L1100).
+### Companion guides
 
-A checkpoint is written after each day's `manage_memory` step when `checkpoint_every_day=True`. Resume hydrates agent + nation state from `checkpoint_dir`, validates the new config against the saved one, and continues day numbering from `last_completed_day + 1`.
+- [Model_Design.md](Model_Design.md) — why the design is the way it is.
+- [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md) — every prompt, word for word.
+- [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md) — running a local AI server.
+- [Run_Output_Guide.md](Run_Output_Guide.md) — what each output file contains.
+- [Code_Tour.md](Code_Tour.md) — a guided walk through the source code.
+- [Literature_Political_Exposure.md](Literature_Political_Exposure.md) — the evidence behind the
+  exposure proportions and affinity weights.
+- [`notebooks/29_canonical_full_smoke.ipynb`](../notebooks/29_canonical_full_smoke.ipynb) — a working
+  end-to-end run you can copy as a starting template.
 
-**Hard keys** (`_RESUME_HARD_KEYS`, [sim.py L966–L973](../src/cag/abm/sim.py#L966-L973)) — any change **aborts** the resume:
+### Where things live in the code
 
-```
-n_citizens, random_seed, network_type,
-communication_mode, package_policies, day0_anchor,
-reach_a, reach_b, audience_cap,
-political_exposure_mode, political_exposure_targets, affinity_weights,
-political_message_source, political_message_set
-```
+The settings dictionary and the run loop are in [src/cag/abm/sim.py](../src/cag/abm/sim.py). Rather
+than line numbers (which drift as the file changes), here are names you can search for:
 
-Plus: **resolved** network params (so a legacy-flat → `network_params` dict upgrade is *not* rejected), the past prefix of `days` (future days may grow), and the active agent ID set.
+- `SIM_CONFIG` — the full default dictionary, with an explanatory comment beside each setting.
+- `run_simulation`, `_run_one_day` — the top-level run and the per-day loop.
+- `_resolve_runtime` — start-up checks: AI provider, message-file validation, model overrides.
+- `_resolve_day_phases`, `make_phases` — how a day entry (or its shorthand) becomes a phase list;
+  `_PHASE_SUGAR_KEYS` is the set of shorthand keys.
+- `VALID_DAY0_ANCHORS` — the three valid Day-0 options.
+- `_resolve_network_params` — how the network settings are assembled.
 
-**Soft keys** (`_RESUME_SOFT_KEYS`, [sim.py L975–L979](../src/cag/abm/sim.py#L975-L979)) — change is **warned** but proceeds:
+Exposure and affinity scoring are in
+[src/cag/abm/environment.py](../src/cag/abm/environment.py): `assign_political_exposure`,
+`_green_affinity_score`, `_reform_affinity_score`, `TARGET_PRESETS`, `AFFINITY_WEIGHT_PRESETS`, and
+`VALID_EXPOSURE_MODES`.
 
-```
-llm_model, llm_provider, survey_model, survey_provider,
-debias, thinking, llm_temperature,
-local_base_url, local_extra_body, local_timeout_s
-```
-
-> **NB29 did not exercise resume.** It ran straight through (no `resume_from=...`, no `checkpoint_every_day=True`). The resume machinery's last smoke test was NB18; treat resume as smoke-tested but not full-stack-validated under the new v0.6 defaults.
-
----
-
-## 11. Pointers
-
-- [Model_Design.md](Model_Design.md) — design rationale and the canonical change-log of §-level decisions.
-- [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md) — every LLM prompt used in the run, verbatim.
-- [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md) — how to run `mlx_lm.server` so `llm_provider="local"` works.
-- [Run_Output_Guide.md](Run_Output_Guide.md) — what each file in the run directory contains.
-- [Literature_Political_Exposure.md](Literature_Political_Exposure.md) — empirical sourcing for the exposure targets and affinity weights.
-- [`notebooks/29_canonical_full_smoke.ipynb`](../notebooks/29_canonical_full_smoke.ipynb) — the canonical full-stack smoke run; treat as the copy-paste template for a fresh experiment.
+Other key locations: network building in
+[src/cag/abm/networks.py](../src/cag/abm/networks.py) (`build_network`, `compute_diagnostics`); the
+political-message file loader in
+[src/cag/abm/political_messages.py](../src/cag/abm/political_messages.py) (`load_message_pool`,
+`MessagePool`); the single door to every AI model in [src/cag/io/llm.py](../src/cag/io/llm.py)
+(`send_chat`, `configure_local`, `ping_local`); and the per-citizen timeline in
+[src/cag/io/aggregators.py](../src/cag/io/aggregators.py) (`build_agent_timeline`).

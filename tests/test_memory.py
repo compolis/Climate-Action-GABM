@@ -139,13 +139,31 @@ class TestDay0AnchorSection:
         assert "Carbon-tax Day-0 rationale." in ctx
         assert "Renewables Day-0 rationale." not in ctx
 
-    def test_anchor_omitted_when_target_is_package_scope(self):
+    def test_package_anchor_lists_all_policies_when_no_single_target(self):
+        # Package-scoped context with no single target (e.g. package-mode peer
+        # messaging / reflection) carries every policy's Day-0 anchor so the
+        # agent keeps the same identity tether it sees at survey time.
         c = _make_citizen()
-        pid = ClimatePolicyID.CARBON_TAX
-        c.survey_reasoning[pid] = [(0, "Should not appear.")]
+        pid_a = ClimatePolicyID.CARBON_TAX
+        pid_b = ClimatePolicyID.RENEWABLE_ENERGY
+        c.survey_reasoning[pid_a] = [(0, "Carbon-tax Day-0 rationale.")]
+        c.survey_reasoning[pid_b] = [(0, "Renewables Day-0 rationale.")]
         ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=PACKAGE_SCOPE)
-        assert "Should not appear." not in ctx
-        assert "Original prior position on" not in ctx
+        assert "Original prior positions:" in ctx
+        assert "Carbon-tax Day-0 rationale." in ctx
+        assert "Renewables Day-0 rationale." in ctx
+
+    def test_package_anchor_present_on_peer_reflection_path(self):
+        # The peer/reflection call path passes target_policy_id=None.
+        c = _make_citizen()
+        pid_a = ClimatePolicyID.CARBON_TAX
+        pid_b = ClimatePolicyID.RENEWABLE_ENERGY
+        c.survey_reasoning[pid_a] = [(0, "Carbon-tax Day-0 rationale.")]
+        c.survey_reasoning[pid_b] = [(0, "Renewables Day-0 rationale.")]
+        ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=None)
+        assert "Original prior positions:" in ctx
+        assert "Carbon-tax Day-0 rationale." in ctx
+        assert "Renewables Day-0 rationale." in ctx
 
     def test_anchor_omitted_when_no_data(self):
         c = _make_citizen()

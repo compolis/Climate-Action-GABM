@@ -289,7 +289,18 @@ class SurveyedCitizen():
         sections = []
         sections.append(self.get_persona())
 
-        anchor = self._section_day0_anchor(target_policy_id)
+        # Day-0 identity anchor. With a single target policy (e.g. the
+        # end-of-day survey) the focused single-policy anchor is used. When
+        # there is no single target but the context is package-scoped (e.g.
+        # package-mode peer messaging / reflection) the all-policy anchor is
+        # used so the agent carries the same Day-0 identity tether across
+        # every step of the day, not just the survey.
+        if target_policy_id is not None and target_policy_id != PACKAGE_SCOPE:
+            anchor = self._section_day0_anchor(target_policy_id)
+        elif policy_id == PACKAGE_SCOPE:
+            anchor = self._section_day0_anchor_all()
+        else:
+            anchor = ""
         if anchor:
             sections.append(anchor)
 
@@ -340,6 +351,26 @@ class SurveyedCitizen():
             return ""
         label = SURVEY_SHORT_LABELS.get(target_policy_id, str(target_policy_id))
         return f'Original prior position on "{label}":\n{text.strip()}'
+
+    def _section_day0_anchor_all(self):
+        """Package-scoped Day-0 anchor block: the agent's verbatim Day-0
+        rationale for every policy that has one, bulleted by short label.
+
+        Used when the context is package-scoped and there is no single target
+        policy (e.g. package-mode peer messaging / reflection), so the agent
+        keeps the same Day-0 identity tether it sees at survey time. Policies
+        are emitted in canonical ``SURVEY_QUESTIONS`` order for determinism.
+        """
+        lines = []
+        for pid in SURVEY_QUESTIONS.keys():
+            for d, rationale in self.survey_reasoning.get(pid, []):
+                if d == 0:
+                    label = SURVEY_SHORT_LABELS.get(pid, str(pid))
+                    lines.append(f"- {label}: {rationale.strip()}")
+                    break
+        if not lines:
+            return ""
+        return "Original prior positions:\n" + "\n".join(lines)
 
     def _section_recent_own_reasoning(self, day, target_policy_id):
         """Verbatim own survey reasoning for days d-1, d. Target-scoped.

@@ -24,6 +24,82 @@ Notes:
 
 ---
 
+## v0.8 — Qwen3-**14B** split50 (20260628_025751) — model upgrade halves the bias and restores the bucket asymmetry
+
+**Date:** 2026-06-28
+**Run:** [`data/output/experiments/20260628_025751/`](../data/output/experiments/20260628_025751/)
+**Model:** `Qwen/Qwen3-14B` (`llm_provider=local`, vLLM-style endpoint `http://localhost:8000/v1`, `T=0.5`)
+**Config:** **bit-identical to [run_6267094](#v08--qwen3-8b-aire-split50-run_6267094--first-production-run-on-v2-memory--day-0-refactor) except `llm_model` (`Qwen/Qwen3-8B` → `Qwen/Qwen3-14B`).** `n_citizens=50`, `days=5` (alternating `P-A`/`P-B`/`C`), `k_peers_per_day=0`, `communication_mode=package` (all 6 policies), `political_exposure_mode=rule_affinity_rank`, `political_exposure_targets=split50` (→ 25 A-only / 25 B-only), `reach_a=reach_b=1.0`, `day0_anchor=ground_truth_with_rationale`, `debias=True`, `thinking=False`, `random_seed=42`
+
+**TL;DR.** Direct response to the run_6267094 finding that Qwen3-**8B** under v2 memory over-inflates the contestable policies by ~2 scale points and lets B-only (anti-climate audience) drift strongly pro-climate. Swapping **only the model** (8B → 14B, same seed, same 50 agents, same offline broadcasts, bit-identical Day-0 anchor) **roughly halves the pro-climate bias and brings the bucket-asymmetric persuasion signature back.** Day-5 mean signed bias drops from **+1.25 (8B) → +0.57 (14B)**, mean MAE from **1.45 → 0.91**, and mean Pearson r *rises* from **0.46 → 0.67** — now in (and on several policies better than) the gpt-5-mini `+0.7–0.9` band. Crucially, B-only no longer caves to the model's "somewhat support" attractor: its total package-index movement collapses from **+1.31 (8B) to +0.17 (14B)** — it stays pinned near its anti-leaning Day-0 anchor — while A-only still climbs to ceiling. The cross-bucket gap therefore **widens by +0.799**, *exceeding* even the pre-refactor [Run-14 v2](#run-14-v2-post-nb-31-fix-split50--first-end-to-end-validation) baseline (+0.667) — and this time via genuine memory-v2 (not the NB-31 static-context bug). **The model upgrade is the fix:** the +2-point bias was a small-model debias-compliance failure, not a structural flaw in the v2 memory / Day-0 refactor.
+
+### Clean model-only swap
+
+- **Day-0 package index bit-identical to 8B** (A-only +1.320, B-only −0.147) — the GT anchor bypasses the LLM, so cohort sampling, affinity-rank bucketing, and the anchor are unchanged.
+- **`message_flow.csv` byte-identical to 8B** (broadcasts are `political_message_source=offline`, `v1` — canned text, model-independent). The 25/25 A/B delivery and ~1430–1595 char lengths are the same; any difference is a pure citizen-side response effect.
+- **Network topology identical** (same seed): 50 nodes, 130 edges, `p_inter=0.06`, density 0.106, mean degree 5.2, 1 component, `auto_connected_edges=0`. With `k_peers=0` the graph is decorative either way.
+- No `run.log`/AIRE wrapper in this output dir, so wall-clock is not recorded here; only operational fact asserted is determinism + identical broadcast/network surfaces.
+
+### Headline — cross-bucket package index (14B vs 8B)
+
+| Day | A-only (14B) | B-only (14B) | gap (14B) | A-only (8B) | B-only (8B) | gap (8B) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 (GT anchor) | +1.320 | −0.147 | **+1.467** | +1.320 | −0.147 | +1.467 |
+| 1 | +2.280 | −0.033 | +2.313 | +2.373 | +0.767 | +1.607 |
+| 2 | +2.313 | +0.040 | +2.273 | +2.533 | +1.040 | +1.493 |
+| 3 | +2.287 | +0.053 | +2.234 | +2.480 | +1.073 | +1.407 |
+| 4 | +2.300 | +0.053 | +2.247 | +2.520 | +1.140 | +1.380 |
+| 5 | +2.293 | +0.027 | **+2.266** | +2.513 | +1.160 | +1.353 |
+
+- **Gap-widening (Δgap, Day-0 → Day-5): 14B = +0.799 vs 8B = −0.114.** The sign flips back to positive, and the magnitude *beats* Run-14 v2 (+0.667).
+- **B-only net movement: 14B +0.174 vs 8B +1.307.** The 14B B-only bucket stays essentially at its anti-leaning anchor across all 5 days (−0.147 → +0.027). A-only still rises to ceiling (+0.973). The asymmetry is real: A moves, B holds.
+
+### Per-policy D0 → D5 signed shift (14B vs 8B vs Run-14 v2)
+
+| policy | B (14B) | B (8B) | B (Run-14 v2) | A (14B) |
+|---|---:|---:|---:|---:|
+| ClimatePolicyID(1) Carbon Tax | **−0.32** | +0.16 | +0.04 | +0.32 |
+| ClimatePolicyID(2) Climate Compensation | +0.64 | +1.96 | +0.60 | +1.20 |
+| ClimatePolicyID(3) Green Housing | +0.56 | +2.16 | −0.08 | +1.32 |
+| ClimatePolicyID(4) Ban Petrol Cars | **−0.12** | +0.08 | −0.20 | +0.52 |
+| ClimatePolicyID(5) Renewable Energy | +0.04 | +1.28 | +0.36 | +1.12 |
+| ClimatePolicyID(6) Ban Fossil Fuels | +0.16 | +2.20 | +1.84¹ | +1.36 |
+
+¹ Run-14 v2 B-only for Ban Fossil Fuels was −0.60; the +1.84 in the 8B comparison column of the run_6267094 section is the *A-only* figure — see that section for the full v2 table. The point here: 14B B-only sits at +0.16, an order of magnitude below 8B's +2.20.
+
+Every B-only cell collapses toward zero relative to 8B. Two policies (**Carbon Tax −0.32, Ban Petrol Cars −0.12**) go *negative* under sustained anti-climate broadcasts — the persuasion-responsiveness direction. The two cost-/compensation-framed policies (2, 3) retain a mild positive residue (+0.64, +0.56), but roughly a third of the 8B magnitude. The contestable-vs-saturated partition is back, just softer than Run-14 v2's frozen-replay version.
+
+### Calibration vs YouGov ground truth (final day, per policy) — 14B vs 8B
+
+| Policy | r (14B) | MAE (14B) | bias (14B) | r (8B) | MAE (8B) | bias (8B) |
+|---|---:|---:|---:|---:|---:|---:|
+| ClimatePolicyID(1) Carbon Tax | 0.51 | 0.68 | **0.00** | 0.51 | 0.72 | +0.36 |
+| ClimatePolicyID(2) Climate Compensation | 0.76 | 0.94 | +0.94 | 0.32 | 1.80 | +1.68 |
+| ClimatePolicyID(3) Green Housing | 0.68 | 1.22 | +0.94 | 0.42 | 1.90 | +1.78 |
+| ClimatePolicyID(4) Ban Petrol Cars | 0.77 | 0.54 | +0.22 | 0.68 | 0.76 | +0.40 |
+| ClimatePolicyID(5) Renewable Energy | 0.61 | 1.06 | +0.58 | 0.47 | 1.38 | +1.26 |
+| ClimatePolicyID(6) Ban Fossil Fuels | 0.68 | 1.04 | +0.76 | 0.33 | 2.14 | +2.02 |
+| **mean** | **0.67** | **0.91** | **+0.57** | **0.46** | **1.45** | **+1.25** |
+
+- **Bias roughly halved** (+1.25 → +0.57). Every policy improved; Carbon Tax is now essentially unbiased (+0.00) and Ban Petrol Cars near-zero (+0.22).
+- **The two worst 8B offenders are fixed most:** Ban Fossil Fuels bias +2.02 → +0.76 (MAE 2.14 → 1.04, r 0.33 → 0.68); Green Housing +1.78 → +0.94; Climate Compensation +1.68 → +0.94 (r 0.32 → 0.76).
+- **Rank-correlation jumps** (mean r 0.46 → 0.67): 14B doesn't just shrink the average offset, it tracks the *ordering* of YouGov respondents far better.
+
+### Interpretation
+
+1. **The run_6267094 over-inflation was a small-model failure, not a memory-v2 / Day-0-refactor flaw.** The v2 stack is unchanged between the two runs; only the model differs. 14B follows the 2-step debias instruction reliably enough to hold the contestable policies near ground truth, where 8B reverted to a blanket "somewhat support." This matches the run_6267094 interpretation note ("the debias chain is not holding under v2 memory on Qwen3-8B") and the raw-response diagnosis (8B collapsed onto the F/G attractor; only the two most extreme personas resisted).
+2. **B-only now holds its anchor — genuine asymmetry under working memory.** Because 14B respects the persona + debias signal, agents hearing only anti-climate broadcasts no longer get pulled up to the prior; they sit at their Day-0 position and two policies even move anti. The +0.799 gap-widening is therefore a *real* persuasion-direction signal produced by the full v2 pipeline, not the NB-31 static-context artefact and not (as in 8B) a floor-effect of everything rushing to ceiling.
+3. **Residual pro-bias remains on the cost-framed policies (2, 3, 6) at ~+0.8–0.9.** This is the same family-specific inflation documented since Run 5 and is now at gpt-5-mini-grade magnitude. The debias chain shrinks it but does not eliminate it; targeted debias work on Compensation / Green Housing / Ban Fossil Fuels is still warranted.
+4. **Single seed, n=25 per bucket.** Same caveat as run_6267094. The clean part is the paired model-only swap: same agents, same broadcasts, bit-identical Day-0, only 8B→14B differs — and bias halves while the gap-widening sign flips back to positive.
+
+### What this means for the next run
+
+- **Adopt Qwen3-14B as the canonical local research model for split50-class runs.** It recovers the asymmetry the project needs to demonstrate while keeping calibration in the frontier-model band. Update the `r14_canonical` / smoke presets' model note accordingly if 14B becomes the default served weight.
+- **The planned ablation is now partly answered.** run_6267094 proposed toggling (a) model and (b) verbatim-vs-compressed Day-0 anchor. This run is the model toggle, and it accounts for essentially all of the +2-point excess. The Day-0-anchor toggle is now lower priority but still the clean way to attribute the *residual* +0.8 cost-framed bias.
+- **Re-confirm at scale.** The next step is n=100 / longer horizon on 14B to check the asymmetry persists and the B-only anchor-hold doesn't erode over more days.
+
+---
+
 ## v0.8 — Qwen3-8B AIRE split50 (run_6267094) — first production run on v2 memory + Day-0 refactor
 
 **Date:** 2026-06-24
