@@ -4,7 +4,7 @@ A repo-specific, copy-pasteable walkthrough for running Climate-Action-GABM on L
 
 1. A working clone of the repo on AIRE with the conda env and vLLM container in place.
 2. A completed **smoke** job (~5–15 min) verifying the full pipeline.
-3. A submitted **split50 Run-14** job (~30–60 min on Qwen3-8B) producing the canonical CSVs and PNGs.
+3. A submitted **split50 Run-14** job (~40–90 min on Qwen3-14B) producing the canonical CSVs and PNGs.
 4. The mental model — and the flag reference — to compose a third experiment without editing any code.
 
 This document is the repo-specific walkthrough. For generic AIRE / Slurm fundamentals (account setup, storage rules, `#SBATCH` reference, partitions), see the companion primer: [AIRE_HPC_repo_primer.md](AIRE_HPC_repo_primer.md). This quickstart links to it rather than duplicating it.
@@ -150,7 +150,7 @@ This creates a conda env named `cag` with every Python dependency. First-time bu
 
 `scripts/aire/run.sh` reads `HF_TOKEN` from either an environment variable **or** the file `~/.cache/huggingface/token`. The persistent file is recommended — it survives across all future logins and never lands in shell history or environment-variable dumps.
 
-Grab a **read** token at <https://huggingface.co/settings/tokens> first. Fine-grained `Read` is sufficient. While you're signed in, also accept the model licence at <https://huggingface.co/Qwen/Qwen3-8B> — otherwise the first sbatch will 401 on download even with a valid token.
+Grab a **read** token at <https://huggingface.co/settings/tokens> first. Fine-grained `Read` is sufficient. While you're signed in, also accept the model licence at <https://huggingface.co/Qwen/Qwen3-14B> — otherwise the first sbatch will 401 on download even with a valid token.
 
 **Recommended — write the token file directly** (no extra dependency, no shell-history leak):
 
@@ -217,7 +217,6 @@ smoke
     days = 2
     k_peers_per_day = 0
     thinking = False
-    debias = True
 
 r14_canonical
   Run-14 baseline run shape: 50 agents, 5 days, ...
@@ -254,7 +253,7 @@ Submitted batch job 12345
 
 Wall-clock estimate: **~5–15 minutes**. The first time you run any sbatch, vLLM also has to download the model weights (a few GB), which can extend the first job by 10–20 min.
 
-**Which model does the smoke run use?** The `smoke` preset does **not** pin a model — it's a pure run-shape bundle. On AIRE, `scripts/aire/run.sh` hardcodes `--model "$HF_MODEL"`, and `HF_MODEL` defaults to `Qwen/Qwen3-8B` (served by vLLM inside the SIF). To test a different model, prefix the sbatch line: `HF_MODEL=other/model sbatch scripts/aire/run.sh --preset smoke`.
+**Which model does the smoke run use?** The `smoke` preset does **not** pin a model — it's a pure run-shape bundle. On AIRE, `scripts/aire/run.sh` hardcodes `--model "$HF_MODEL"`, and `HF_MODEL` defaults to `Qwen/Qwen3-14B` (served by vLLM inside the SIF). To test a different model, prefix the sbatch line: `HF_MODEL=other/model sbatch scripts/aire/run.sh --preset smoke`.
 
 What the command does:
 
@@ -281,10 +280,10 @@ Translation of every part of that command:
 | Token | What it does |
 | --- | --- |
 | `sbatch scripts/aire/run.sh` | Queue the AIRE launcher script (vLLM bring-up + `python -m cag` + cleanup) |
-| `--preset r14_canonical` | Apply the Run-14 baseline bundle (50 agents, 5 days, `k_peers_per_day=0`, `day0_anchor=ground_truth_with_rationale`, `thinking=False`, `debias=True`) |
+| `--preset r14_canonical` | Apply the Run-14 baseline bundle (50 agents, 5 days, `k_peers_per_day=0`, `day0_anchor=ground_truth_with_rationale`, `thinking=False`, and the default `memory` preset; the Condition-B two-step survey is always on) |
 | `--exposure-targets split50` | Pin the political-exposure mix to a `{A-only: 0.5, B-only: 0.5}` split (everyone gets exactly one side's broadcasts). This is the canonical persuasion test condition |
 
-Wall-clock estimate: **~30–60 minutes** depending on prompt yield with Qwen3-8B.
+Wall-clock estimate: **~40–90 minutes** depending on prompt yield with Qwen3-14B.
 
 > **Important — first-time model download.** The first time you submit with a model that isn't already in the Hugging Face cache, the model download can exceed the **1500 s** vLLM-readiness wait baked into `run.sh`, and the job will fail before any LLM call. Use **`--time=06:00:00`** on that first submission (next code block). Once cached, subsequent runs warm up in < 2 min and the standard wall-clock is fine.
 
@@ -334,7 +333,7 @@ What to check first when a run finishes:
 
 1. **`run.log` final TIMING block.** Confirms simulation time, per-agent-day cost, no late crashes.
 2. **`config.json`.** The exact resolved configuration. If two runs disagree, diff their `config.json`s — that's the ground truth, not your sbatch line.
-3. **`vllm_server.log` first 50 lines.** Confirms `Loading model 'Qwen/Qwen3-8B'` (or whatever you intended) — catches the "I thought I asked for X but got Y" class of bugs.
+3. **`vllm_server.log` first 50 lines.** Confirms `Loading model 'Qwen/Qwen3-14B'` (or whatever you intended) — catches the "I thought I asked for X but got Y" class of bugs.
 4. **`opinion_trajectories.csv`.** A non-empty file with `5 days × 50 agents × 6 policies = 1500` rows for a default r14 run. Sanity: agents.unique() should be 50, days.max() should be 4 (zero-indexed).
 
 **Next:** transfer results to your laptop for analysis (§8) and/or move to your second experiment via §10.
@@ -454,7 +453,6 @@ Which model serves the prompts and how.
 | `--base-url URL` | str | SIM_CONFIG (Mac `:8080/v1`) | Point at a non-default local endpoint. On AIRE `run.sh` injects `http://localhost:8000/v1` |
 | `--temperature T` | float | SIM_CONFIG (`0.5`) | Tune sampling stochasticity. Higher = more diverse, more failure modes |
 | `--thinking` / `--no-thinking` | bool | SIM_CONFIG (`False`) | Enable / disable model "thinking" reasoning. Slows runs; rarely a research win |
-| `--debias` / `--no-debias` | bool | SIM_CONFIG (`True`) | Toggle the Condition B 2-step survey (research canon: on) |
 | `--survey-model M` | str | None | Use a different model just for end-of-day surveys (dual-model runs) |
 | `--survey-provider P` | str | None | Same, but for the provider |
 | `--local-timeout S` | float | SIM_CONFIG | Bump the per-request HTTP timeout for slow models |
@@ -497,6 +495,7 @@ Higher-level shape of the experiment.
 | `--communication-mode M` | enum | SIM_CONFIG (`package`) | `package` = broadcast all policies together; `single_policy` = one policy per phase |
 | `--package-policies P` | `all` or `1,3,5` | SIM_CONFIG (`all`) | Restrict the package to a subset of policy IDs |
 | `--day0-anchor A` | enum | SIM_CONFIG (`ground_truth_with_rationale`) | Pick Day-0 seeding (`llm_survey`, `ground_truth`, `ground_truth_with_rationale`) |
+| `--memory X` | preset OR JSON | SIM_CONFIG (`default`) | Set the agent memory / prompt-assembly config. Preset names: `default`, `short_memory`, `wide_memory`, `no_compression`, `no_anchor`, `anchor_ttl2`, `no_own_reasoning`, `reflections_only`, `persona_only`. OR a JSON dict of section toggles / `verbatim_window_days` / per-stage overrides |
 | `--network-type T` | str | SIM_CONFIG (`stochastic_block`) | Peer network factory (`stochastic_block`, `watts_strogatz`, `barabasi_albert`, `erdos_renyi`) |
 | `--network-params '{...}'` | JSON | None | Per-factory parameter dict |
 | `--p-intra X` | float | SIM_CONFIG (`0.15`) | Legacy stochastic-block intra-block edge probability |
@@ -538,7 +537,23 @@ sbatch scripts/aire/run.sh \
 sbatch scripts/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets '{"A-only":0.4,"B-only":0.4,"both":0.1,"neither":0.1}'
+
+# Memory ablation — drop the Day-0 anchor to test how much it pins opinions
+# (compare against the same run with --memory default):
+sbatch scripts/aire/run.sh \
+    --preset r14_canonical \
+    --exposure-targets split50 \
+    --memory no_anchor
+
+# Hand-tuned memory — widen the verbatim window and hide the anchor at survey
+# time only (inline JSON):
+sbatch scripts/aire/run.sh \
+    --preset r14_canonical \
+    --exposure-targets split50 \
+    --memory '{"verbatim_window_days":3,"stages":{"survey":{"day0_anchor":{"enabled":false}}}}'
 ```
+
+The exact memory config each job used is printed on the startup `[memory]` line in `run.log` and stored in `config.json → memory_resolved`, so ablation variants are always auditable after the fact.
 
 **Next:** the new experiment is just a new `sbatch` line. No script edit, no commit.
 
@@ -562,8 +577,8 @@ The new job:
 
 Resume contract — checked at startup, fails loudly on mismatch:
 
-- **Hard keys (must match exactly):** `n_citizens`, `random_seed`, `network_type`, `communication_mode`, `package_policies`, `day0_anchor`, `reach_a`, `reach_b`, `audience_cap`, `political_exposure_mode`, `political_exposure_targets`, `affinity_weights`, `political_message_source`, `political_message_set`. Structural — changing these would invalidate prior agent state.
-- **Soft keys (changeable; warning emitted):** `llm_model`, `llm_provider`, `survey_model`, `survey_provider`, `debias`, `thinking`, `llm_temperature`, `local_base_url`, `local_extra_body`, `local_timeout_s`. You can swap models mid-run if you really want to.
+- **Hard keys (must match exactly):** `n_citizens`, `random_seed`, `network_type`, `communication_mode`, `package_policies`, `day0_anchor`, `reach_a`, `reach_b`, `audience_cap`, `political_exposure_mode`, `political_exposure_targets`, `affinity_weights`, `political_message_source`, `political_message_set`, `memory`. Structural — changing these would invalidate prior agent state. (`memory` is hard because the verbatim window drives which days get compressed into `daily_summaries`, so a mid-run change would make the stored summaries inconsistent.)
+- **Soft keys (changeable; warning emitted):** `llm_model`, `llm_provider`, `survey_model`, `survey_provider`, `thinking`, `llm_temperature`, `local_base_url`, `local_extra_body`, `local_timeout_s`. You can swap models mid-run if you really want to.
 
 If you need to change a hard key, start a fresh run instead of resuming.
 

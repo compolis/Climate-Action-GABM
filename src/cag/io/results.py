@@ -493,7 +493,16 @@ def save_results(results, output_dir="data/output/experiments"):
 
 
 def _serialise_config(config):
-    """Make config JSON-safe by converting enums to strings."""
+    """Make config JSON-safe by converting enums to strings.
+
+    Also injects ``memory_resolved`` — the fully-expanded, validated memory
+    / prompt-assembly config derived from the raw ``memory`` spec — so the
+    saved ``config.json`` records the exact section toggles, verbatim
+    window, and per-stage overrides the run used (the raw ``memory`` value
+    may be just a preset name or a partial override dict).
+    """
+    from cag.abm.config.memory import resolve_memory_config
+
     out = {}
     for k, v in config.items():
         if isinstance(v, ClimatePolicyID):
@@ -509,4 +518,5 @@ def _serialise_config(config):
             ]
         else:
             out[k] = v
+    out["memory_resolved"] = resolve_memory_config(config.get("memory"))
     return out

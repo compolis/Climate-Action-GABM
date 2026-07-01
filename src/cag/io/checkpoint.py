@@ -42,6 +42,10 @@ _RESUME_HARD_KEYS = (
     "political_exposure_mode", "political_exposure_targets",
     "affinity_weights",
     "political_message_source", "political_message_set",
+    # Memory config is hard: the verbatim window drives which days get
+    # compressed into daily_summaries, so a mid-run change would make the
+    # stored summaries inconsistent with the resumed config.
+    "memory",
 )
 # Config keys we tolerate changing on resume but log a warning for.
 _RESUME_SOFT_KEYS = (

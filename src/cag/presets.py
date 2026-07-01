@@ -41,7 +41,7 @@ RUN_BUNDLE_PRESETS = {
             "Run-14 baseline run shape: 50 agents, 5 days, no peer "
             "messaging, Day-0 anchor = ground-truth + rationale. Does NOT "
             "pin a model: on AIRE scripts/aire/run.sh forces "
-            "--model $HF_MODEL (default Qwen/Qwen3-8B via vLLM); on Mac "
+            "--model $HF_MODEL (default Qwen/Qwen3-14B via vLLM); on Mac "
             "the SIM_CONFIG default (mlx-community/Qwen3-8B-4bit via "
             "mlx-lm) applies. Exposure target must be set explicitly via "
             "--exposure-targets (e.g. split50)."

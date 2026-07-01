@@ -192,6 +192,31 @@ class TestCLIMainEntryPoints(TestCase):
             {"A-only": 0.5, "B-only": 0.5, "both": 0, "neither": 0},
         )
 
+    def test_memory_flag_preset_name(self):
+        args = cli.parse_args([
+            "--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2",
+            "--memory", "short_memory",
+        ])
+        cfg = cli._args_to_sim_dict(args)
+        self.assertEqual(cfg["memory"], "short_memory")
+
+    def test_memory_flag_json_dict(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main([
+                "--n-citizens", "10",
+                "--days", "2",
+                "--memory", '{"verbatim_window_days": 3}',
+                "--dry-run",
+            ])
+        cfg = json.loads(buf.getvalue())
+        self.assertEqual(cfg["memory"], {"verbatim_window_days": 3})
+
+    def test_memory_flag_absent_when_unset(self):
+        args = cli.parse_args(["--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2"])
+        cfg = cli._args_to_sim_dict(args)
+        self.assertNotIn("memory", cfg)
+
     def test_missing_n_citizens_without_preset(self):
         with self.assertRaises(SystemExit) as cm:
             cli.main(["--outdir", "/tmp/x", "--days", "2"])

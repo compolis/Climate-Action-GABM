@@ -424,6 +424,55 @@ it to `0` to switch the log off. *Safe to change.*
 Which specific citizens get the detailed log. `None` picks a spread automatically; otherwise pass a
 list of citizen IDs. *Safe to change.*
 
+### What each citizen remembers
+
+#### `memory` — default `"default"`
+
+Controls the citizen's **memory and prompt assembly** — what each citizen is reminded of before it
+writes a message, reflects, or answers a survey. Every prompt is built from the same set of building
+blocks; this setting decides which blocks are switched on and how far back the citizen remembers
+things word-for-word.
+
+You can give it three kinds of value:
+
+- **a preset name** (a string), e.g. `"short_memory"`;
+- **your own partial settings** (a dictionary) that override just the pieces you name; or
+- **`None`**, which is the same as `"default"`.
+
+The building blocks are: the citizen's **persona**, its **Day-0 anchor** (a reminder of where it
+started), the **daily summaries** of earlier days, its **recent reflections**, its **own past survey
+reasoning**, **what has happened so far today**, and an optional **opinion trajectory**. A shared
+**verbatim window** (`verbatim_window_days`, default `2`) decides how many recent days are replayed
+word-for-word before older days are compressed into short summaries.
+
+The default reproduces the model's long-standing behaviour exactly, so leaving it alone changes
+nothing. The named presets are for **ablation experiments** — turning one piece off to see whether it
+mattered:
+
+| Preset | What it changes |
+|---|---|
+| `default` | The standard memory (all the usual blocks on, 2-day verbatim window). |
+| `short_memory` | Verbatim window shrinks to 1 day (older days compressed sooner). |
+| `wide_memory` | Verbatim window grows to 4 days. |
+| `no_compression` | Never compress — every day is remembered word-for-word. |
+| `no_anchor` | Drop the Day-0 anchor (test how much the starting point pins opinions). |
+| `anchor_ttl2` | Keep the Day-0 anchor for only the first 2 days, then drop it. |
+| `no_own_reasoning` | Stop reminding the citizen of its own earlier survey reasoning. |
+| `reflections_only` | Keep persona + reflections; drop anchor, own-reasoning, and today-so-far. |
+| `persona_only` | Strip everything back to just the persona. |
+
+To hand-tune, pass a dictionary with only the parts you want to change — for example
+`{"verbatim_window_days": 3, "day0_anchor": {"enabled": False}}`. You can also override a single
+**stage** (`survey`, `reflection`, or `peer_message`) so, say, the anchor is hidden at survey time
+but shown when writing peer messages. The full schema and every preset live in
+`src/cag/abm/config/memory.py`; the demo notebook
+[`notebooks/35_memory_ablation_demo.ipynb`](../notebooks/35_memory_ablation_demo.ipynb) shows each
+preset changing the assembled prompt.
+
+The run records exactly what it used: the startup log prints a `[memory]` line, and `config.json`
+stores both the raw `memory` value and a fully-expanded `memory_resolved` block (see
+[Run_Output_Guide.md](Run_Output_Guide.md)). *Safe to change.*
+
 ---
 
 ## 5. Ready-to-copy examples
@@ -481,6 +530,24 @@ config = {
     "political_exposure_targets": "split50",   # half hear only pro, half only anti
 }
 ```
+
+### 5.6 A memory-ablation experiment
+
+```python
+# Preset: does the Day-0 anchor pin opinions? Turn it off and compare.
+config = {"memory": "no_anchor"}
+
+# Hand-tuned: widen the verbatim window and drop the anchor at survey time only.
+config = {
+    "memory": {
+        "verbatim_window_days": 3,
+        "stages": {"survey": {"day0_anchor": {"enabled": False}}},
+    },
+}
+```
+
+Run each variant against `{"memory": "default"}` and compare the trajectories. The exact memory
+config used is recorded in `config.json → memory_resolved` and printed on the startup `[memory]` line.
 
 ---
 

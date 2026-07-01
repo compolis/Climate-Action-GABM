@@ -14,7 +14,7 @@
 # DESIGN NOTE
 # -----------
 # This script is intentionally THIN. Every research knob (n_citizens, days,
-# k_peers, reach_a/b, exposure_targets, day0_anchor, debias, thinking,
+# k_peers, reach_a/b, exposure_targets, day0_anchor, memory, thinking,
 # audience_cap, package_policies, ...) is set on the sbatch command line
 # and passed through as "$@". Slurm headers (--time, --mem, --gpus-per-task,
 # --job-name) are also overridable at sbatch time. To add a new experiment
@@ -75,7 +75,7 @@
 set -euo pipefail
 
 # ---- Server plumbing (rarely changes) ---------------------------------------
-HF_MODEL="${HF_MODEL:-Qwen/Qwen3-8B}"                     # change via:  HF_MODEL=swiss-ai/Apertus-8B-2509 sbatch ...
+HF_MODEL="${HF_MODEL:-Qwen/Qwen3-14B}"                    # change via:  HF_MODEL=swiss-ai/Apertus-8B-2509 sbatch ...
 SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai-v0.8.5.sif}"
 PORT="${PORT:-8000}"
 BASE_URL="http://localhost:${PORT}/v1"
