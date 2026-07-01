@@ -514,27 +514,7 @@ class SurveyedCitizen():
             if (compress_day, policy_id) not in self.daily_summaries:
                 self.compress_daily_memory(compress_day, policy_id, api_key=api_key, model=model, provider=provider, temperature=temperature)
 
-    def get_user_prompt(self, policy_id, day=0) -> str:
-        if day == 0:
-            policy_question = SURVEY_QUESTIONS.get(policy_id)
-            response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
-            return policy_question + "\n\n" + response_options + "\n\n" + "Respond with a single letter A-G."
-        else:   
-            framing = (
-                "Please answer the following survey question. Consider your "
-                "earlier reasoning, the daily summaries, and your recent "
-                "reflections above before answering."
-            )
-
-            policy_question = SURVEY_QUESTIONS.get(policy_id)
-
-            response_options = "\n".join([f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()])
-
-            question = "Respond with only a single letter (A-G)."
-            user_prompt = "\n\n".join([framing, policy_question, response_options, question])
-            return user_prompt
-
-    def administer_survey(self, policy_id, day=0, model="gpt-5-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, debias=False, context_policy_id=None) -> tuple[str, int]:
+    def administer_survey(self, policy_id, day=0, model="gpt-5-mini", provider="openai", api_key=None, temperature=0.5, thinking=False, context_policy_id=None) -> tuple[str, int]:
         # context_policy_id selects which slice of memory the system prompt sees;
         # policy_id still selects the question, storage keys, history bucket,
         # AND is the target_policy_id for the v2 anchor / own-reasoning /
@@ -552,46 +532,42 @@ class SurveyedCitizen():
         self.survey_assembled_context[policy_id].append((day, system_prompt))
         self._survey_assembled_context_steps[policy_id].append(self._sim_step())
 
-        if debias:
-            # Step 1: Elicit reasoning with anti-sycophancy preamble
-            policy_question = SURVEY_QUESTIONS.get(policy_id)
-            step1_prompt = _DEBIAS_STEP1_TEMPLATE.format(
-                anti_sycophancy=_ANTI_SYCOPHANCY,
-                policy_question=policy_question,
-            )
-            reasoning = send_chat(
-                system_prompt, step1_prompt, api_key=api_key, model=model,
-                provider=provider, temperature=temperature, thinking=thinking,
-            )
+        # Two-step Condition B survey (research canon since v0.3). Step 1
+        # elicits anti-sycophancy reasoning; Step 2 answers with that
+        # reasoning appended to the system prompt.
+        # Step 1: Elicit reasoning with anti-sycophancy preamble
+        policy_question = SURVEY_QUESTIONS.get(policy_id)
+        step1_prompt = _DEBIAS_STEP1_TEMPLATE.format(
+            anti_sycophancy=_ANTI_SYCOPHANCY,
+            policy_question=policy_question,
+        )
+        reasoning = send_chat(
+            system_prompt, step1_prompt, api_key=api_key, model=model,
+            provider=provider, temperature=temperature, thinking=thinking,
+        )
 
-            # Store reasoning for post-hoc analysis (not fed back into agent context)
-            if policy_id not in self.survey_reasoning:
-                self.survey_reasoning[policy_id] = []
-                self._survey_reasoning_steps[policy_id] = []
-            self.survey_reasoning[policy_id].append((day, reasoning))
-            self._survey_reasoning_steps[policy_id].append(self._sim_step())
+        # Store reasoning for post-hoc analysis (not fed back into agent context)
+        if policy_id not in self.survey_reasoning:
+            self.survey_reasoning[policy_id] = []
+            self._survey_reasoning_steps[policy_id] = []
+        self.survey_reasoning[policy_id].append((day, reasoning))
+        self._survey_reasoning_steps[policy_id].append(self._sim_step())
 
-            # Step 2: Get answer with reasoning appended to system prompt
-            response_options = "\n".join(
-                f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()
-            )
-            step2_system = system_prompt + "\n\nYour reasoning about this policy:\n" + reasoning
-            step2_prompt = _DEBIAS_STEP2_TEMPLATE.format(
-                policy_question=policy_question,
-                response_options=response_options,
-            )
-            llm_response = send_chat(
-                step2_system, step2_prompt, api_key=api_key, model=model,
-                provider=provider, temperature=temperature, thinking=thinking,
-            )
-        else:
-            user_prompt = self.get_user_prompt(policy_id, day=day)
-            llm_response = send_chat(
-                system_prompt, user_prompt, api_key=api_key, model=model,
-                provider=provider, temperature=temperature, thinking=thinking,
-            )
+        # Step 2: Get answer with reasoning appended to system prompt
+        response_options = "\n".join(
+            f"{letter}. {label}" for letter, label in RESPONSE_LABELS.items()
+        )
+        step2_system = system_prompt + "\n\nYour reasoning about this policy:\n" + reasoning
+        step2_prompt = _DEBIAS_STEP2_TEMPLATE.format(
+            policy_question=policy_question,
+            response_options=response_options,
+        )
+        llm_response = send_chat(
+            step2_system, step2_prompt, api_key=api_key, model=model,
+            provider=provider, temperature=temperature, thinking=thinking,
+        )
 
-        # Store raw Step-2 (or single-call) text for post-hoc parser audit.
+        # Store raw Step-2 text for post-hoc parser audit.
         if policy_id not in self.survey_raw_response:
             self.survey_raw_response[policy_id] = []
             self._survey_raw_response_steps[policy_id] = []
@@ -608,11 +584,11 @@ class SurveyedCitizen():
 
         return letter_response, opinion_value
 
-    def run_baseline(self, api_key=None, model="gpt-5-mini", provider="openai", thinking=False, debias=False) -> dict:
+    def run_baseline(self, api_key=None, model="gpt-5-mini", provider="openai", thinking=False) -> dict:
 
         results = {}
         for policy_id in SURVEY_QUESTIONS.keys():
-            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key, thinking=thinking, debias=debias)
+            letter_response, opinion_value = self.administer_survey(policy_id, day=0, model=model, provider=provider, api_key=api_key, thinking=thinking)
             results[policy_id] = (letter_response, opinion_value)
         return results
     

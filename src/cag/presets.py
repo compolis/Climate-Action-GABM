@@ -34,7 +34,6 @@ RUN_BUNDLE_PRESETS = {
             "days": 2,
             "k_peers_per_day": 0,
             "thinking": False,
-            "debias": True,
         },
     },
     "r14_canonical": {
@@ -52,7 +51,6 @@ RUN_BUNDLE_PRESETS = {
             "days": 5,
             "k_peers_per_day": 0,
             "thinking": False,
-            "debias": True,
             "day0_anchor": "ground_truth_with_rationale",
         },
     },

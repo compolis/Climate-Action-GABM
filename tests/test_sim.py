@@ -60,9 +60,9 @@ def _make_mock_agent(agent_id, exposure="A-only"):
         history.append((day, 1))  # always returns opinion=1
         raw = agent.survey_raw_response.setdefault(policy_id, [])
         raw.append((day, f"raw response for day {day}"))
-        if kwargs.get("debias"):
-            reasoning = agent.survey_reasoning.setdefault(policy_id, [])
-            reasoning.append((day, f"Reasoning for day {day}"))
+        # Two-step Condition B survey always records reasoning.
+        reasoning = agent.survey_reasoning.setdefault(policy_id, [])
+        reasoning.append((day, f"Reasoning for day {day}"))
 
     def fake_seed_gt(policy_id, day=0):
         history = agent.opinion_history.setdefault(policy_id, [])
@@ -965,7 +965,6 @@ class TestRunSimulation(unittest.TestCase):
         nation = _make_mock_nation(2)
         config = {
             "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": ["P-A", "C"]}],
-            "debias": True,
         }
         results = run_simulation(config, nation)
         self.assertIn("messages", results)
@@ -1049,11 +1048,6 @@ class TestSimConfig(unittest.TestCase):
             for phase in entry["phases"]:
                 self.assertIn(phase, ("P-A", "P-B", "C"),
                               f"Unexpected phase in SIM_CONFIG: {phase}")
-
-    def test_debias_default_true(self):
-        # Research canon since v0.3 (NB15 / Run 4).
-        self.assertIn("debias", SIM_CONFIG)
-        self.assertIs(SIM_CONFIG["debias"], True)
 
     def test_thinking_default_false(self):
         self.assertIn("thinking", SIM_CONFIG)
@@ -1302,22 +1296,6 @@ class TestDay0Anchor(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             run_simulation(config, nation)
         self.assertIn("day0_anchor", str(ctx.exception))
-
-    @patch("cag.abm.sim.load_api_key", return_value="fake-key")
-    @patch("cag.abm.sim.PoliticalAgent")
-    def test_debias_with_anchored_mode_logs_override(self, mock_pa_cls, mock_api):
-        nation = _make_mock_nation(1)
-        config = {
-            "day0_anchor": "ground_truth",
-            "debias": True,
-            "days": [{"policy": ClimatePolicyID.CARBON_TAX, "phases": []}],
-        }
-        with self.assertLogs(level="INFO") as captured:
-            run_simulation(config, nation)
-        self.assertTrue(
-            any("debias flag is ignored on Day 0" in msg for msg in captured.output),
-            f"Expected debias-ignored INFO log, got: {captured.output}",
-        )
 
     @patch("cag.abm.sim.load_api_key", return_value="fake-key")
     @patch("cag.abm.sim.PoliticalAgent")

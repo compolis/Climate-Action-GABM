@@ -46,7 +46,7 @@ _RESUME_HARD_KEYS = (
 # Config keys we tolerate changing on resume but log a warning for.
 _RESUME_SOFT_KEYS = (
     "llm_model", "llm_provider", "survey_model", "survey_provider",
-    "debias", "thinking", "llm_temperature",
+    "thinking", "llm_temperature",
     "local_base_url", "local_extra_body", "local_timeout_s",
 )
 

@@ -300,8 +300,10 @@ class TestDispatcher(unittest.TestCase):
         counts = {k: 0 for k in ("A-only", "B-only", "both", "neither")}
         for c in sn.agents_active.values():
             counts[c.political_exposure] += 1
-        # ~45% neither under symmetric default
-        self.assertAlmostEqual(counts["neither"] / 100, 0.45, delta=0.02)
+        # "neither" share must match the symmetric default preset (count-based,
+        # derived from the preset so it stays correct if the fractions change).
+        expected_neither = TARGETS_COMMITTED_MINORITY_SYMMETRIC["neither"]
+        self.assertAlmostEqual(counts["neither"] / 100, expected_neither, delta=0.02)
 
 
 class TestPresetResolution(unittest.TestCase):

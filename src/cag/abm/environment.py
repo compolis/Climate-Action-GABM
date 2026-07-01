@@ -73,7 +73,7 @@ from cag.abm.attributes.opinion import PACKAGE_SCOPE, ordinal_score
 
 # Target marginal presets. Each dict's four cells must sum to 1.0.
 TARGETS_COMMITTED_MINORITY_SYMMETRIC = {
-    "A-only": 0.11, "B-only": 0.11, "both": 0.33, "neither": 0.45,
+    "A-only": 0.05, "B-only": 0.05, "both": 0.60, "neither": 0.30,
 }
 TARGETS_COMMITTED_MINORITY_UK_2024 = {
     "A-only": 0.08, "B-only": 0.14, "both": 0.33, "neither": 0.45,
@@ -604,7 +604,7 @@ class SurveyedNation(Nation):
 
         return df
     
-    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5, thinking=False, debias=False, context_policy_id=None):
+    def run_end_of_day_survey(self, policy_id, day, api_key=None, model="gpt-5-mini", provider="openai", temperature=0.5, thinking=False, context_policy_id=None):
 
         endofday_rows = []
         agents = list(self.agents_active.values())
@@ -618,7 +618,7 @@ class SurveyedNation(Nation):
             letter, numeric = agent.administer_survey(
                 policy_id=policy_id, day=day, api_key=api_key,
                 model=model, provider=provider, temperature=temperature,
-                thinking=thinking, debias=debias,
+                thinking=thinking,
                 context_policy_id=context_policy_id)
 
             shift = numeric - previous_numeric if previous_numeric is not None else 0
