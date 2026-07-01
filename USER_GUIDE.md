@@ -4,6 +4,7 @@
 ## Table of Contents
 - [Overview](#overview)
 - [Getting Started](#getting-started)
+- [v0.8 Configuration Path](#v08-configuration-path)
 - [v0.7 Configuration Path](#v07-configuration-path)
 - [Running on HPC / AIRE](#running-on-hpc--aire)
 - [v0.6 Configuration Path](#v06-configuration-path)
@@ -100,6 +101,57 @@ the main program for Climate-Action-GABM is executed. This will:
 - Save logs and data for further analysis or reproducibility.
 
 The specific output and behavior may depend on your configuration, model parameters, and any customizations you have made. For more details, check the logs and output files generated in the `data/output/` directory after running the command.
+
+
+## v0.8 Configuration Path
+
+v0.8 makes the agent's **memory / prompt-assembly** configurable so ablation experiments no longer require editing `agent.py`. It also relocates the exposure target/weight vocabularies out of `environment.py` into a dedicated `src/cag/abm/config/` subpackage (all public names are re-exported, so existing imports keep working). Full design rationale is in [docs/Model_Design.md](docs/Model_Design.md) §30.
+
+### The `memory` SIM_CONFIG key
+
+One new key controls the entire context-assembly pipeline:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `memory` | `"default"` | A memory-config **preset name**, or a literal dict of overrides. Resolved + validated at runtime and attached to every agent. `"default"` reproduces the v0.8 §28 tiered-memory behaviour bit-for-bit. |
+
+The agent context has six sections (persona, Day-0 anchor, daily summaries, recent reflections, own reasoning, today-so-far) plus an optional off-by-default numeric `opinion_trajectory` block. Each can be toggled, and a single `verbatim_window_days` knob (default `2`) controls how many recent days are kept verbatim before older days are compressed into summaries.
+
+**Built-in presets** (`cag.abm.config.memory.MEMORY_PRESETS`):
+
+| Preset | Effect |
+|---|---|
+| `default` | current behaviour — all sections on, 2-day verbatim window |
+| `short_memory` | 1-day verbatim window |
+| `wide_memory` | 4-day verbatim window |
+| `no_compression` | unbounded verbatim window (never compresses to summaries) |
+| `no_anchor` | Day-0 anchor removed (tests whether the anchor causes opinion lock-in) |
+| `anchor_ttl2` | Day-0 anchor retires after day 2 |
+| `no_own_reasoning` | agent's own prior survey reasoning removed |
+| `reflections_only` | anchor + own-reasoning + today-so-far removed |
+| `persona_only` | everything except persona removed |
+
+### CLI
+
+`--memory` accepts either a preset name or a JSON dict:
+
+```bash
+python -m cag --memory no_anchor
+python -m cag --memory short_memory
+python -m cag --memory '{"verbatim_window_days": 3, "day0_anchor": {"ttl_days": 2}}'
+```
+
+Because the verbatim window determines which days are compressed into stored summaries, `memory` is a **hard resume key** — a checkpoint can only be resumed with the same memory config it was created with.
+
+### Per-stage overrides (advanced)
+
+A dict config may include a `stages` block to vary sections by prompt stage (`peer_message`, `reflection`, `survey`), e.g. drop the anchor only at survey time:
+
+```json
+{"stages": {"survey": {"day0_anchor": {"enabled": false}}}}
+```
+
+See [notebooks/35_memory_ablation_demo.ipynb](notebooks/35_memory_ablation_demo.ipynb) for an offline (no-LLM) walkthrough showing how one agent's assembled context changes across presets.
 
 
 ## v0.7 Configuration Path

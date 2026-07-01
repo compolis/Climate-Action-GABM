@@ -132,8 +132,15 @@ The exact config dict that produced the run (enums serialised to strings). Group
 | Key | Meaning |
 |---|---|
 | `llm_model` / `llm_provider` / `llm_temperature` | LLM used for **messaging** (broadcasts, peer messages, reflections). `llm_provider` is one of `"openai"`, `"genai"`, `"anthropic"`, `"local"`. |
-| `survey_model` / `survey_provider` / `thinking` / `debias` | LLM used for **end-of-day surveys**, plus whether extended-thinking and the Condition-B anti-sycophancy two-step survey are on. `null` survey_model/provider means "reuse the messaging LLM". |
+| `survey_model` / `survey_provider` / `thinking` | LLM used for **end-of-day surveys**, plus whether extended-thinking is on. `null` survey_model/provider means "reuse the messaging LLM". (The Condition-B anti-sycophancy two-step survey is now always on and is no longer a config key.) |
 | `local_base_url` / `local_extra_body` / `local_timeout_s` | Only used when a provider is `"local"`. See [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md). All optional with env-var / built-in defaults. |
+
+**Agent memory / prompt assembly**
+
+| Key | Meaning |
+|---|---|
+| `memory` | What the agent "remembers" and sees in each prompt. A preset name (e.g. `"default"`, `"short_memory"`, `"no_anchor"`), a partial-override dict, or `null` (= `"default"`). Presets and the full schema are documented in [Simulation_Configuration_Guide.md](Simulation_Configuration_Guide.md). |
+| `memory_resolved` | The fully-expanded, validated memory config the run actually used — every section toggle, the `verbatim_window_days` window, and any per-stage overrides. This is *derived* from `memory` and always written, so you can audit the exact prompt-assembly behaviour even when `memory` is just a preset name. |
 
 **Audit-trail sampling** — `timeline_sample_size` (default 3) and `timeline_sample_agent_ids` (explicit list, or `null` to auto-pick) control which agents get a detailed `agent_timeline.csv`. See §10.
 
@@ -474,7 +481,7 @@ Each `*.png` is generated from the matching `*.csv` by `save_result_plots(result
 
 ## 13. A suggested qualitative-review workflow
 
-1. Open `config.json` and skim it — note `n_citizens`, `days`, `communication_mode`, `day0_anchor`, `political_exposure_mode`, the messaging vs. survey LLM, and whether `debias` / `thinking` are on.
+1. Open `config.json` and skim it — note `n_citizens`, `days`, `communication_mode`, `day0_anchor`, `political_exposure_mode`, the messaging vs. survey LLM, whether `thinking` is on, and the `memory` preset (with `memory_resolved` for the exact section toggles).
 2. Open `messages.csv`. Filter `message_type == "political_broadcast"` and `sender_side == "pro_climate"` — read those, then the `anti_climate` ones. Are they on-message, distinct, and persuasive in the way you'd expect?
 3. Filter `message_type == "peer_message"` and read a handful per day. Do they sound like a real person passing a thought to a friend, or do they read like another political broadcast?
 4. Pick a sampled agent and open `agent_timeline.csv` for them — it replays every message, reflection, and survey in `sim_step` order in one place. (For agents outside the sample, join `reflections.csv` and `survey_reasoning.csv` on `agent_id`.)

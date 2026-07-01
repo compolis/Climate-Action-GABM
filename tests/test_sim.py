@@ -32,6 +32,7 @@ from cag.abm.sim import (
     _collect_results,
     _resolve_day_phases,
     _serialise_config,
+    _format_memory_config_lines,
     make_phases,
     SIM_CONFIG,
 )
@@ -240,7 +241,27 @@ class TestSerialiseConfig(unittest.TestCase):
     def test_plain_values_unchanged(self):
         config = {"k_peers_per_day": 3, "p_intra": 0.15, "random_seed": 42}
         result = _serialise_config(config)
-        self.assertEqual(result, config)
+        # memory_resolved is always injected; the original keys are untouched.
+        for key, value in config.items():
+            self.assertEqual(result[key], value)
+
+    def test_memory_resolved_injected(self):
+        # Preset name in raw config expands to a full resolved config on disk.
+        config = {"memory": "short_memory", "random_seed": 42}
+        result = _serialise_config(config)
+        self.assertEqual(result["memory"], "short_memory")
+        self.assertIn("memory_resolved", result)
+        self.assertEqual(result["memory_resolved"]["verbatim_window_days"], 1)
+        # Fully-populated schema, not just the override.
+        self.assertIn("day0_anchor", result["memory_resolved"])
+        self.assertIn("stages", result["memory_resolved"])
+
+    def test_memory_resolved_defaults_when_absent(self):
+        # No memory key at all -> resolved default is still recorded.
+        config = {"random_seed": 42}
+        result = _serialise_config(config)
+        self.assertEqual(result["memory_resolved"]["verbatim_window_days"], 2)
+        self.assertTrue(result["memory_resolved"]["day0_anchor"]["enabled"])
 
     def test_package_policies_list_enums_converted(self):
         config = {"package_policies": list(ALL_CLIMATE_POLICIES)}
@@ -259,6 +280,46 @@ class TestSerialiseConfig(unittest.TestCase):
         result = _serialise_config(config)
         # Should not raise
         json.dumps(result)
+
+
+# ── _format_memory_config_lines ─────────────────────────────────
+
+class TestFormatMemoryConfigLines(unittest.TestCase):
+
+    def test_default_spec_reports_preset_default(self):
+        lines = _format_memory_config_lines(None)
+        self.assertEqual(len(lines), 2)
+        self.assertIn("[memory]", lines[0])
+        self.assertIn("preset=default", lines[0])
+        self.assertIn("verbatim_window_days=2", lines[0])
+        self.assertIn("anchor=on(ttl=none)", lines[0])
+        self.assertIn("stage_overrides: none", lines[1])
+
+    def test_preset_name_is_shown(self):
+        lines = _format_memory_config_lines("short_memory")
+        self.assertIn("preset=short_memory", lines[0])
+        self.assertIn("verbatim_window_days=1", lines[0])
+
+    def test_no_anchor_preset_flips_anchor_off(self):
+        lines = _format_memory_config_lines("no_anchor")
+        self.assertIn("preset=no_anchor", lines[0])
+        self.assertIn("anchor=off", lines[0])
+
+    def test_anchor_ttl_is_rendered(self):
+        lines = _format_memory_config_lines("anchor_ttl2")
+        self.assertIn("anchor=on(ttl=2)", lines[0])
+
+    def test_dict_spec_reports_custom(self):
+        lines = _format_memory_config_lines({"verbatim_window_days": 3})
+        self.assertIn("preset=custom", lines[0])
+        self.assertIn("verbatim_window_days=3", lines[0])
+
+    def test_stage_overrides_are_surfaced(self):
+        spec = {"stages": {"survey": {"day0_anchor": {"enabled": False}}}}
+        lines = _format_memory_config_lines(spec)
+        self.assertIn("stage_overrides:", lines[1])
+        self.assertIn("survey", lines[1])
+        self.assertNotIn("stage_overrides: none", lines[1])
 
 
 # ── _collect_results ────────────────────────────────────────────
@@ -1504,6 +1565,47 @@ class TestPoliticalMessageSourceWiring(unittest.TestCase):
         from cag.abm.sim import _RESUME_HARD_KEYS
         self.assertIn("political_message_source", _RESUME_HARD_KEYS)
         self.assertIn("political_message_set", _RESUME_HARD_KEYS)
+
+    def test_resume_hard_keys_include_memory(self):
+        from cag.abm.sim import _RESUME_HARD_KEYS
+        self.assertIn("memory", _RESUME_HARD_KEYS)
+
+    def test_sim_config_memory_default(self):
+        self.assertEqual(SIM_CONFIG["memory"], "default")
+
+    def test_resolve_runtime_resolves_memory_default(self):
+        from cag.abm.sim import _resolve_runtime
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["political_message_source"] = "llm"
+        cfg["days"] = [{"phases": ["P-A"]}]
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            rt = _resolve_runtime(cfg)
+        # Default resolves to the full behaviour-preserving config.
+        self.assertEqual(rt["memory_cfg"]["verbatim_window_days"], 2)
+        self.assertTrue(rt["memory_cfg"]["day0_anchor"]["enabled"])
+
+    def test_resolve_runtime_resolves_memory_preset(self):
+        from cag.abm.sim import _resolve_runtime
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["political_message_source"] = "llm"
+        cfg["days"] = [{"phases": ["P-A"]}]
+        cfg["memory"] = "short_memory"
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            rt = _resolve_runtime(cfg)
+        self.assertEqual(rt["memory_cfg"]["verbatim_window_days"], 1)
+
+    def test_resolve_runtime_invalid_memory_preset_raises(self):
+        from cag.abm.sim import _resolve_runtime
+        cfg = dict(SIM_CONFIG)
+        cfg["llm_provider"] = "openai"
+        cfg["political_message_source"] = "llm"
+        cfg["days"] = [{"phases": ["P-A"]}]
+        cfg["memory"] = "does_not_exist"
+        with patch("cag.abm.sim.load_api_key", return_value="k"):
+            with self.assertRaises(ValueError):
+                _resolve_runtime(cfg)
 
     def test_resolve_runtime_offline_loads_pool(self):
         from cag.abm.sim import _resolve_runtime

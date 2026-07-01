@@ -2363,3 +2363,109 @@ The doc is model-agnostic; it does not assume the reader will use any particular
 [notebooks/34_memory_v2_smoke.ipynb](../notebooks/34_memory_v2_smoke.ipynb) is a paired smoke for v0.8 §28: end-to-end run with the v2 6-section context order, asserting that §2 reads verbatim from `survey_reasoning`, §3 + §4 respect the `policy_id` filter, and §5 + §6 are target-scoped. The notebook is configured for local Qwen3-8B-4bit (`provider="local"`). Local Apple-Silicon throughput proved too low on this laptop for a Day-0 survey on n=10 agents in a reasonable time; AIRE re-run is the planned path. The notebook's diagnostic cells are valid regardless of LLM backend.
 
 ---
+
+## 30. v0.8 configurable memory / prompt assembly (2026-07-01)
+
+### 30.1 Motivation
+
+§28 hard-wired the six-section context order and a fixed 2-day verbatim window. Runs plateau after Day 1: agents lock in and stop moving (see [result_report.md](result_report.md) — a Day-0→Day-1 jump then a flat trajectory). The suspected drivers are all *memory* mechanisms — the Day-0 anchor never leaves (§2 is re-stated at every step as a persistent identity tether), and §5 re-injects the agent's own prior survey reasoning (a self-consistency cue). To test which mechanism causes the lock-in, a researcher needs to ablate the sections **one at a time** — remove the anchor, retire it after N days, shrink or widen the verbatim window — without editing `agent.py`. This section lifts the hard-wired pipeline into a single declarative config so social scientists can run these ablations from `SIM_CONFIG` or the CLI. **The default config reproduces the §28 behaviour bit-for-bit** (guarded by the existing [tests/test_memory.py](../tests/test_memory.py), which becomes the golden suite).
+
+### 30.2 A dedicated `config/` subpackage (org decision)
+
+The repo has two distinct kinds of configuration. **Run bundles** ([src/cag/presets.py](../src/cag/presets.py) `RUN_BUNDLE_PRESETS`, applied via `--preset`) are coarse `SIM_CONFIG` override bundles that compose a whole named experiment. **Subsystem vocabularies** — the exposure target marginals / affinity weights, and now the memory config — are the *named building blocks* that a single `SIM_CONFIG` key points at. These do not belong in `presets.py` (wrong layer) or buried inside the large consumer modules. They now live in [src/cag/abm/config/](../src/cag/abm/config/), one module per subsystem, each with the shared shape:
+
+```
+DEFAULT_*        # the default config
+*_PRESETS        # {name: partial-override dict}
+resolve_*(spec)  # None | preset-name | literal dict -> validated dict
+validate_*(cfg)  # raise ValueError on an incoherent config
+```
+
+- [config/exposure.py](../src/cag/abm/config/exposure.py) — the exposure target/weight vocabularies **relocated out of** `environment.py` (which keeps the affinity *scoring/assignment* logic and re-exports every public name for backward compatibility, so `from cag.abm.environment import TARGET_PRESETS` keeps working). This resolved the long-standing complaint that the exposure targets were buried in `environment.py`.
+- [config/memory.py](../src/cag/abm/config/memory.py) — the new memory schema described below.
+
+### 30.3 The memory config schema
+
+`DEFAULT_MEMORY_CONFIG` in [config/memory.py](../src/cag/abm/config/memory.py):
+
+```python
+{
+  "persona":            {"enabled": True},
+  "day0_anchor":        {"enabled": True, "ttl_days": None},  # None = never retire
+  "daily_summaries":    {"enabled": True},
+  "recent_reflections": {"enabled": True},
+  "own_reasoning":      {"enabled": True},
+  "today_so_far":       {"enabled": True},
+  "opinion_trajectory": {"enabled": False},   # optional revived numeric block
+  "verbatim_window_days": 2,                   # shared coupled knob (None = unbounded)
+  "stages": {"peer_message": {}, "reflection": {}, "survey": {}},
+}
+```
+
+Each section maps to the §28 context section; `enabled` toggles it. `day0_anchor.ttl_days=N` retires the anchor once `day > N` (the "anchor disappears after two days" ablation is `ttl_days=2`). `opinion_trajectory` is a new, off-by-default numeric block (`§5b`) that lists the agent's recorded stance over time for the target policy — a revival of the pre-v0.4 trajectory cue, available for experiments that want it back.
+
+`resolve_memory_config(spec)` accepts `None` (→ default), a preset name, or a literal dict deep-merged onto the default; it always returns a fresh validated dict. `validate_memory_config` rejects unknown keys, non-bool `enabled`, `verbatim_window_days` that is not `None`-or-int≥1, `ttl_days` that is not `None`-or-int≥0, and unknown stage / section names.
+
+### 30.4 The shared verbatim window (the central coupling)
+
+The "last 2 days" constant previously appeared in **four** places that must agree, or the verbatim and summarised memory tiers silently gap or overlap:
+
+1. §4 recent reflections keep days `{d-W+1 … d}`;
+2. §5 own reasoning keeps the same window;
+3. §3 daily summaries cover the *compressed* remainder `d < d-W+1`;
+4. `manage_memory` compresses day `d-W` once `day > W`.
+
+Exposing four independent per-section windows would be a footgun. Instead there is **one** knob, `verbatim_window_days` (W), and all four call sites derive from three helpers in [config/memory.py](../src/cag/abm/config/memory.py) — the single source of truth:
+
+| Helper | Meaning |
+| --- | --- |
+| `verbatim_days(W, day)` | day-numbers shown verbatim = `{max(0,day-W+1) … day}` (`None` → `0…day`) |
+| `summary_upper_exclusive(W, day)` | summaries cover `d <` this bound = `day-W+1` (`None` → 1, i.e. nothing) |
+| `compression_target_day(W, day)` | day to compress = `day-W` when `day > W`, else `None` |
+
+`verbatim_days` deliberately **includes day 0**: recent reflections keep a Day-0 reflection if it falls in the window, while own reasoning drops Day-0 via its own `d > 0` filter (Day-0 reasoning lives in the §2 anchor). `W=None` means *unbounded verbatim / never compress* — the `no_compression` preset. A property test asserts that for every `(W, day)` the verbatim and summarised day-sets partition days `1…day` with no gap or overlap.
+
+### 30.5 Preset catalog
+
+`MEMORY_PRESETS` (each a partial override deep-merged onto the default):
+
+| Preset | Effect |
+| --- | --- |
+| `default` | current behaviour (all sections on, W=2) |
+| `short_memory` | `verbatim_window_days=1` |
+| `wide_memory` | `verbatim_window_days=4` |
+| `no_compression` | `verbatim_window_days=None` (everything verbatim, `manage_memory` never fires) |
+| `no_anchor` | Day-0 anchor off |
+| `anchor_ttl2` | Day-0 anchor retires after day 2 |
+| `no_own_reasoning` | §5 off |
+| `reflections_only` | anchor + own-reasoning + today-so-far off |
+| `persona_only` | every section except persona off |
+
+### 30.6 Per-stage overrides
+
+`assemble_context(day, policy_id, target_policy_id, stage="survey")` and `get_system_prompt(..., stage=...)` gained a `stage` parameter. `resolve_stage_memory(cfg, stage)` deep-merges `cfg["stages"][stage]` over the global sections, so a section can differ per prompt stage (e.g. drop the anchor at survey time while keeping it during peer messaging). The three stages and their call sites in [src/cag/abm/agent.py](../src/cag/abm/agent.py):
+
+- `"reflection"` — `receive_political_message`, `receive_peer_messages`, and their package variants;
+- `"peer_message"` — `generate_peer_message`, `generate_package_peer_message`;
+- `"survey"` — `administer_survey` and the Day-0 seed rationale (default stage).
+
+### 30.7 Wiring, resume, and CLI
+
+- `SIM_CONFIG["memory"] = "default"` in [src/cag/abm/sim.py](../src/cag/abm/sim.py). `_resolve_runtime` resolves + validates it into `rt["memory_cfg"]`; `run()` deep-copies it onto every `nation.agents_active` agent's `agent.memory_cfg` before the day loop (per-agent copy so agents never share/mutate one object).
+- `"memory"` is added to `_RESUME_HARD_KEYS` in [src/cag/io/checkpoint.py](../src/cag/io/checkpoint.py): the verbatim window determines which days get compressed into `daily_summaries`, so changing it mid-run would make the stored summaries inconsistent with the resumed config.
+- New `--memory` CLI flag in [src/cag/__main__.py](../src/cag/__main__.py) (via `_maybe_json`): accepts either a preset name (`--memory short_memory`) or a literal JSON dict (`--memory '{"verbatim_window_days": 3}'`), mapping directly to `SIM_CONFIG["memory"]`.
+
+### 30.8 Test coverage
+
+- [tests/test_memory_config.py](../tests/test_memory_config.py) (new) — schema/preset resolution, deep-merge, validation rejections, per-stage resolution, and the window helpers incl. the partition property test.
+- [tests/test_memory.py](../tests/test_memory.py) `TestMemoryConfigToggles` (new) — every non-default toggle: persona/anchor/own-reasoning disabled, `anchor_ttl2` retirement, `short_memory`/`wide_memory` windows, `manage_memory` respecting W, `no_compression`, `opinion_trajectory` on/off, and a per-stage override. The rest of `test_memory.py` (unchanged) is the golden suite proving the default reproduces §28.
+- [tests/test_sim.py](../tests/test_sim.py) / [tests/test_cli.py](../tests/test_cli.py) — `memory` resolution in `_resolve_runtime`, invalid-preset failure, `"memory"` in `_RESUME_HARD_KEYS`, and the `--memory` flag (preset name + JSON dict + absent-when-unset).
+
+Test suite: **610 passed, 1 skipped** (was 552 at the start of this cycle).
+
+### 30.9 NB 35 memory-ablation demo
+
+[notebooks/35_memory_ablation_demo.ipynb](../notebooks/35_memory_ablation_demo.ipynb) demonstrates the config surface offline (no LLM calls): it resolves several presets, prints the resulting configs, and shows how one agent's `assemble_context()` output changes across `default` / `no_anchor` / `short_memory` / `anchor_ttl2`, making the ablation knobs concrete for researchers.
+
+---
+

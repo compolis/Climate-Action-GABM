@@ -24,6 +24,54 @@ Notes:
 
 ---
 
+## v0.8 — configurable-memory + debias-removal smoke (20260701_221142) — new build runs end-to-end, default memory reproduces the v2 dynamics
+
+**Date:** 2026-07-01
+**Run:** [`data/output/experiments/20260701_221142/`](../data/output/experiments/20260701_221142/)
+**Notebook:** [`notebooks/32_v06_outputs_smoke.ipynb`](../notebooks/32_v06_outputs_smoke.ipynb) (companion offline demo: [`notebooks/35_memory_ablation_demo.ipynb`](../notebooks/35_memory_ablation_demo.ipynb))
+**Model:** `gpt-5-mini` (`llm_provider=openai`, both messaging + surveys, `T=0.5` — auto-dropped, model rejects `temperature`)
+**Config:** `n_citizens=10`, `days=2` (alternating `P-A`/`P-B`/`C`), `k_peers_per_day=2`, `communication_mode=package` (all 6 policies), `political_exposure_mode=rule_affinity_rank` (committed-minority symmetric targets, balanced weights), `reach_a=reach_b=1.0`, `day0_anchor=ground_truth_with_rationale`, **`memory="default"`** (the new v0.8 configurable-memory key — the default preset reproduces the v2 hard-wired six-section assembly bit-for-bit), `thinking=False`, `random_seed=42`. **`debias` is gone as a config key** — the two-step Condition-B survey is now unconditional. Wall-clock **14.1 min (848 s)**.
+
+**TL;DR.** First end-to-end run after two structural changes landed: the **configurable memory / prompt-assembly** refactor (`SIM_CONFIG["memory"]`) and the **removal of the `debias` toggle** (two-step survey now always on). Purpose was to confirm the new build runs clean and that `memory="default"` behaves exactly like the old hard-wired v2 path — **it does**. This is a **10-agent × 2-day smoke, not a production result**; all numbers below carry a heavy small-n caveat and should not be read as science. The familiar qualitative signature is intact: a **Day-0 → Day-1 jump then a Day-2 plateau**, and per-agent ordering that tracks ground truth reasonably (Day-2 Spearman ρ ≈ 0.6–0.9 across the six policies).
+
+### Opinion dynamics (package index)
+
+| Day | package index (all) | both (n=6) | neither (n=4) |
+|---:|---:|---:|---:|
+| 0 (GT anchor) | **+0.75** | +0.81 | +0.67 |
+| 1 | **+1.12** | +0.94 | +1.38 |
+| 2 | **+1.10** | +0.94 | +1.33 |
+
+- **Day-0 index = +0.75 = the ground-truth mean**, because `ground_truth_with_rationale` seeds the Day-0 numeric directly from YouGov (the LLM writes only the rationale). Consequently Day-0 calibration is **ρ = 1.0, MAE = 0 by construction** for every policy — the informative calibration is Day-1 onward.
+- **Movement is concentrated on Day 1 and freezes on Day 2.** Per-policy mean end-of-day shifts on Day 1 ranged +0.2 to +0.6; on Day 2 five of six policies moved a mean of exactly **0.00** (the sixth, −0.10). Same plateau shape seen in every prior run.
+- Only **two buckets materialise** (`both`=6, `neither`=4): the committed-minority-symmetric targets produce no committed A-only/B-only minorities at n=10, so `gap_widening` is not computable here (plot skipped by design). No cross-bucket-asymmetry claim is available from this run.
+
+### Day-0 → Day-2 shifts
+
+- Overall mean signed shift **+0.35**, mean absolute shift **0.48** (60 agent-policy pairs).
+- By bucket: `both` **+0.14** (std 0.59), `neither` **+0.67** (std 1.17). The unexposed `neither` cohort moved *more* on average than the doubly-exposed `both` cohort — the opposite of a persuasion story, but with n=4 vs n=6 this is noise, not signal.
+
+### Calibration vs ground truth (Spearman ρ, Day 2)
+
+| policy | ρ (Day 2) | MAE (Day 2) |
+|---|---:|---:|
+| ClimatePolicyID(1) | 0.813 | 0.2 |
+| ClimatePolicyID(2) | 0.602 | 1.0 |
+| ClimatePolicyID(3) | 0.866 | 0.4 |
+| ClimatePolicyID(4) | 0.870 | 0.4 |
+| ClimatePolicyID(5) | 0.672 | 0.6 |
+| ClimatePolicyID(6) | 0.867 | 0.3 |
+
+Mean signed bias stays small (+0.1 to +0.6 across policies) — as expected under the GT anchor + two-step survey, and consistent with the gpt-5-mini calibration band from earlier runs. Rank recovery (ρ ≈ 0.6–0.9) is intact after the memory/debias refactor.
+
+### Build-integrity notes (not scientific findings)
+
+- The output bundle is complete: **30 files** (19 CSV, 3 JSON, 8 PNG — one fewer PNG than the canonical 9 only because `gap_widening` is skipped absent A-only/B-only buckets).
+- `daily_summaries.csv` is **empty by design** on a 2-day run: with `memory="default"` (`verbatim_window_days=2`) the compression target is `day−2`, which never fires for `day ≤ 2`, so nothing is compressed. This is the expected default-memory behaviour, not a regression.
+- The companion offline demo NB 35 (no LLM) confirms `memory="default"` assembles an identical context to the pre-refactor path and shows the ablation presets (`no_anchor`, `short_memory`, `anchor_ttl2`) diffing the assembled prompt as intended.
+
+---
+
 ## v0.8 — Qwen3-**14B** split50 (20260628_025751) — model upgrade halves the bias and restores the bucket asymmetry
 
 **Date:** 2026-06-28

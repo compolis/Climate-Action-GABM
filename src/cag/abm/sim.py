@@ -3,6 +3,7 @@ Simulation runner for Climate-Action-GABM.
 """
 import json
 import logging
+from copy import deepcopy
 from pathlib import Path
 
 from cag.abm.agent import PoliticalAgent
@@ -16,6 +17,7 @@ from cag.abm.attributes.opinion import (
     compute_package_index,
 )
 from cag.abm.political_messages import load_message_pool
+from cag.abm.config.memory import resolve_memory_config
 from cag.io.llm import configure_local, load_api_key, ping_local
 
 
@@ -81,6 +83,12 @@ SIM_CONFIG = {
     "political_exposure_mode": "rule_affinity_rank",
     "political_exposure_targets": None,       # None → committed_minority_symmetric. Accepts preset name or literal dict.
     "affinity_weights": None,                 # None → balanced. Accepts preset name or literal {"A":..., "B":...}.
+    # Agent memory / prompt-assembly configuration. See
+    # cag.abm.config.memory for the schema, presets, and resolver. None or
+    # "default" reproduces the historical hard-wired behaviour (all sections
+    # on, 2-day verbatim window). Accepts a preset name or a literal dict of
+    # section toggles / verbatim_window_days / per-stage overrides.
+    "memory": "default",
     "random_seed": 42,
     # Local-LLM provider (provider="local"). All optional.
     "local_base_url": None,     # None → CAG_LOCAL_BASE_URL env or http://localhost:8080/v1
@@ -344,6 +352,8 @@ def _resolve_runtime(cfg):
         "package_policies": _get_package_policies(cfg),
         "message_pool": message_pool,
         "random_seed": cfg["random_seed"],
+        # Resolved + validated agent memory config (see cag.abm.config.memory).
+        "memory_cfg": resolve_memory_config(cfg.get("memory")),
     }
 
 
@@ -452,13 +462,56 @@ def _run_one_day(nation, day, day_config, n_days, rt):
 
 # ── Main simulation loop ────────────────────────────────────────
 
+def _format_memory_config_lines(spec):
+    """Return the ``[memory]`` banner line(s) for a memory ``spec``.
+
+    ``spec`` is the raw value of ``cfg["memory"]`` (``None``, a preset
+    name, or a partial-override dict). The spec is resolved to a full
+    config and summarised so the log records exactly which prompt-assembly
+    sections, verbatim window, and per-stage overrides were active.
+    """
+    resolved = resolve_memory_config(spec)
+    if spec is None:
+        preset = "default"
+    elif isinstance(spec, str):
+        preset = spec
+    else:
+        preset = "custom"
+
+    anchor = resolved.get("day0_anchor", {})
+    anchor_state = "on" if anchor.get("enabled") else "off"
+    ttl = anchor.get("ttl_days")
+    anchor_str = f"anchor={anchor_state}(ttl={ttl if ttl is not None else 'none'})"
+
+    def _flag(section):
+        return "on" if resolved.get(section, {}).get("enabled") else "off"
+
+    window = resolved.get("verbatim_window_days")
+    lines = [
+        "[memory]     preset=%s  verbatim_window_days=%s  %s  "
+        "own_reasoning=%s  daily_summaries=%s  reflections=%s  traj=%s"
+        % (
+            preset, window, anchor_str,
+            _flag("own_reasoning"), _flag("daily_summaries"),
+            _flag("recent_reflections"), _flag("opinion_trajectory"),
+        )
+    ]
+    stages = resolved.get("stages", {}) or {}
+    overrides = {name: ov for name, ov in stages.items() if ov}
+    if overrides:
+        lines.append("[memory]     stage_overrides: %s" % overrides)
+    else:
+        lines.append("[memory]     stage_overrides: none")
+    return lines
+
+
 def _log_experiment_config(cfg, resume, checkpoint_dir):
     """Print the fully-resolved experiment configuration at startup.
 
     Pulls from the merged ``{SIM_CONFIG | preset | CLI}`` dict, so every
     knob shown is the value the simulation will actually use — including
     silent defaults (e.g. ``reach_a=1.0`` when the user didn't pass it).
-    Grouped into seven categories so a researcher can spot a misconfigured
+    Grouped into categories so a researcher can spot a misconfigured
     experiment without opening ``config.json``.
     """
     pkg_policies = cfg.get("package_policies") or []
@@ -509,6 +562,8 @@ def _log_experiment_config(cfg, resume, checkpoint_dir):
         "[day0]       anchor=%s",
         cfg.get("day0_anchor"),
     )
+    for line in _format_memory_config_lines(cfg.get("memory")):
+        logging.info(line)
     logging.info(
         "[llm]        provider=%s  model=%s  temp=%s  thinking=%s",
         cfg.get("llm_provider"), cfg.get("llm_model"),
@@ -636,6 +691,13 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
     _log_network_summary(nation)
 
     n_agents = len(nation.agents_active)
+
+    # Attach the resolved memory / prompt-assembly config to every active
+    # agent so assemble_context() honours the run's section toggles, verbatim
+    # window, and per-stage overrides. A deepcopy per agent keeps agents from
+    # sharing (and mutating) one config object.
+    for agent in nation.agents_active.values():
+        agent.memory_cfg = deepcopy(rt["memory_cfg"])
 
     # Resume vs fresh start
     if resume:
@@ -815,6 +877,7 @@ __all__ = [
     "_collect_results",
     "_config_hash",
     "_enum_value",
+    "_format_memory_config_lines",
     "_get_package_policies",
     "_is_package_mode",
     "_load_checkpoint",

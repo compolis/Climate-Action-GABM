@@ -15,6 +15,7 @@ from cag.abm.attributes.opinion import (
     PACKAGE_SCOPE,
     SURVEY_SHORT_LABELS,
 )
+from cag.abm.config.memory import resolve_memory_config
 
 
 # ===================================================================
@@ -511,3 +512,140 @@ class TestNumericToLetter:
         from cag.abm.attributes.opinion import RESPONSE_SCALE
         for letter, num in RESPONSE_SCALE.items():
             assert NUMERIC_TO_LETTER[num] == letter
+
+
+# ===================================================================
+# Configurable memory: section toggles, verbatim window, per-stage
+# ===================================================================
+
+class TestMemoryConfigToggles:
+    """Non-default memory configs. The default is exercised by every other
+    test in this file (that IS the golden regression)."""
+
+    def test_persona_disabled(self):
+        c = _make_citizen()
+        c.memory_cfg = resolve_memory_config("persona_only")
+        c.memory_cfg = resolve_memory_config({"persona": {"enabled": False}})
+        ctx = c.assemble_context(day=0)
+        assert "36 year old teacher" not in ctx
+
+    def test_day0_anchor_disabled(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(0, "Polluters should pay.")]
+        c.memory_cfg = resolve_memory_config("no_anchor")
+        ctx = c.assemble_context(day=2, policy_id=pid, target_policy_id=pid)
+        assert "Original prior position on" not in ctx
+        assert "Polluters should pay." not in ctx
+
+    def test_anchor_ttl_retires_after_ttl_days(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(0, "Polluters should pay.")]
+        c.memory_cfg = resolve_memory_config("anchor_ttl2")  # ttl_days=2
+        # Present up to and including day 2.
+        assert "Polluters should pay." in c.assemble_context(
+            day=2, policy_id=pid, target_policy_id=pid)
+        # Retired from day 3 onward.
+        assert "Polluters should pay." not in c.assemble_context(
+            day=3, policy_id=pid, target_policy_id=pid)
+
+    def test_own_reasoning_disabled(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(1, "Day-1 reasoning."), (2, "Day-2 reasoning.")]
+        c.memory_cfg = resolve_memory_config("no_own_reasoning")
+        ctx = c.assemble_context(day=2, policy_id=PACKAGE_SCOPE, target_policy_id=pid)
+        assert "Your considered position in recent days:" not in ctx
+
+    def test_window_one_keeps_only_today(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        _add_reflections(c, day=3, n=1, policy_id=pid)
+        _add_reflections(c, day=4, n=1, policy_id=pid)
+        _add_reflections(c, day=5, n=1, policy_id=pid)
+        c.memory_cfg = resolve_memory_config("short_memory")  # window=1
+        ctx = c.assemble_context(day=5, policy_id=pid)
+        assert "from day 5" in ctx
+        assert "from day 4" not in ctx
+        assert "from day 3" not in ctx
+
+    def test_window_three_keeps_three_days(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        _add_reflections(c, day=2, n=1, policy_id=pid)
+        _add_reflections(c, day=3, n=1, policy_id=pid)
+        _add_reflections(c, day=4, n=1, policy_id=pid)
+        _add_reflections(c, day=5, n=1, policy_id=pid)
+        c.memory_cfg = resolve_memory_config("wide_memory")  # window=4
+        ctx = c.assemble_context(day=5, policy_id=pid)
+        for d in (2, 3, 4, 5):
+            assert f"from day {d}" in ctx
+
+    def test_window_shifts_summary_boundary(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.daily_summaries[(3, pid)] = "Day-3 summary text."
+        _add_reflections(c, day=5, n=1, policy_id=pid)
+        # Default window=2 → day 3 is older than {4,5}, so summarised & shown.
+        c.memory_cfg = resolve_memory_config(None)
+        assert "Day-3 summary text." in c.assemble_context(day=5, policy_id=pid)
+        # Window=3 → verbatim window {3,4,5} covers day 3, so its summary is
+        # NOT shown (it would be a verbatim day instead).
+        c.memory_cfg = resolve_memory_config({"verbatim_window_days": 3})
+        assert "Day-3 summary text." not in c.assemble_context(day=5, policy_id=pid)
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="Compressed.")
+    def test_manage_memory_respects_window_three(self, mock_send):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        for d in range(1, 6):
+            _add_reflections(c, day=d, n=1, policy_id=pid)
+        c.memory_cfg = resolve_memory_config({"verbatim_window_days": 3})
+        c.manage_memory(day=5, policy_id=pid)
+        # Compresses day 5-3 = 2; leaves 3,4,5 verbatim.
+        assert (2, pid) in c.daily_summaries
+        assert (3, pid) not in c.daily_summaries
+
+    @mock.patch("cag.abm.agent.send_chat", return_value="Compressed.")
+    def test_no_compression_window_never_compresses(self, mock_send):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        for d in range(1, 8):
+            _add_reflections(c, day=d, n=1, policy_id=pid)
+        c.memory_cfg = resolve_memory_config("no_compression")  # window=None
+        c.manage_memory(day=7, policy_id=pid)
+        assert c.daily_summaries == {}
+        mock_send.assert_not_called()
+
+    def test_opinion_trajectory_off_by_default(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.opinion_history[pid] = [(0, 1), (1, 2), (2, 3)]
+        ctx = c.assemble_context(day=2, policy_id=pid, target_policy_id=pid)
+        assert "Your recorded stance over time" not in ctx
+
+    def test_opinion_trajectory_when_enabled(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.opinion_history[pid] = [(0, 1), (1, 2), (2, 3)]
+        c.memory_cfg = resolve_memory_config({"opinion_trajectory": {"enabled": True}})
+        ctx = c.assemble_context(day=2, policy_id=pid, target_policy_id=pid)
+        assert "Your recorded stance over time" in ctx
+        assert "Day 0" in ctx and "Day 1" in ctx and "Day 2" in ctx
+
+    def test_per_stage_override_survey_only(self):
+        c = _make_citizen()
+        pid = ClimatePolicyID.CARBON_TAX
+        c.survey_reasoning[pid] = [(1, "Day-1 reasoning."), (2, "Day-2 reasoning.")]
+        # Disable own_reasoning only in the survey stage.
+        c.memory_cfg = resolve_memory_config(
+            {"stages": {"survey": {"own_reasoning": {"enabled": False}}}}
+        )
+        survey_ctx = c.assemble_context(
+            day=2, policy_id=PACKAGE_SCOPE, target_policy_id=pid, stage="survey")
+        reflect_ctx = c.assemble_context(
+            day=2, policy_id=PACKAGE_SCOPE, target_policy_id=pid, stage="reflection")
+        assert "Your considered position in recent days:" not in survey_ctx
+        assert "Your considered position in recent days:" in reflect_ctx
+

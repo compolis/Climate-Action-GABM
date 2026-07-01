@@ -398,6 +398,16 @@ def parse_args(argv=None):
                         "('balanced' / 'vote_dominant' / 'values_dominant') "
                         "or a literal JSON dict.")
 
+    # Agent memory / prompt assembly.
+    p.add_argument("--memory", type=_maybe_json,
+                   default=argparse.SUPPRESS, dest="memory",
+                   help="Agent memory config. Either a MEMORY_PRESETS name "
+                        "('default' / 'short_memory' / 'wide_memory' / "
+                        "'no_compression' / 'no_anchor' / 'anchor_ttl2' / "
+                        "'no_own_reasoning' / 'reflections_only' / "
+                        "'persona_only') or a literal JSON dict of section "
+                        "toggles / verbatim_window_days / per-stage overrides.")
+
     # Broadcast reach + audience.
     p.add_argument("--reach-a", type=float, default=argparse.SUPPRESS,
                    dest="reach_a",
