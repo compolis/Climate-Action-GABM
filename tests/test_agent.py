@@ -126,7 +126,7 @@ class TestSurveyedCitizen(unittest.TestCase):
 
 
 class TestDebiasedSurvey(unittest.TestCase):
-    """Tests for the debias=True path in administer_survey()."""
+    """Tests for the two-step Condition B survey in administer_survey()."""
 
     def _make_citizen(self):
         env = mock.MagicMock()
@@ -138,25 +138,18 @@ class TestDebiasedSurvey(unittest.TestCase):
         citizen.get_narrative = mock.MagicMock(return_value="I value independence.")
         return citizen
 
-    @mock.patch("cag.abm.agent.send_chat", return_value="D")
-    def test_debias_false_single_call(self, mock_send):
-        citizen = self._make_citizen()
-        from cag.abm.attributes.opinion import ClimatePolicyID
-        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=False)
-        self.assertEqual(mock_send.call_count, 1)
-
     @mock.patch("cag.abm.agent.send_chat", side_effect=["Some reasoning about factors.", "D"])
     def test_debias_true_two_calls(self, mock_send):
         citizen = self._make_citizen()
         from cag.abm.attributes.opinion import ClimatePolicyID
-        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0)
         self.assertEqual(mock_send.call_count, 2)
 
     @mock.patch("cag.abm.agent.send_chat", side_effect=["Reasoning text.", "E"])
     def test_debias_step1_has_anti_sycophancy(self, mock_send):
         citizen = self._make_citizen()
         from cag.abm.attributes.opinion import ClimatePolicyID
-        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0)
         step1_user_prompt = mock_send.call_args_list[0][1].get("user_prompt",
                             mock_send.call_args_list[0][0][1] if len(mock_send.call_args_list[0][0]) > 1 else "")
         self.assertIn("faithfully simulate", step1_user_prompt)
@@ -166,7 +159,7 @@ class TestDebiasedSurvey(unittest.TestCase):
     def test_debias_step2_has_reasoning(self, mock_send):
         citizen = self._make_citizen()
         from cag.abm.attributes.opinion import ClimatePolicyID
-        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0)
         step2_system_prompt = mock_send.call_args_list[1][0][0]
         self.assertIn("Agent reasoning about policy.", step2_system_prompt)
         self.assertIn("Your reasoning about this policy:", step2_system_prompt)
@@ -175,7 +168,7 @@ class TestDebiasedSurvey(unittest.TestCase):
     def test_debias_returns_same_type(self, mock_send):
         citizen = self._make_citizen()
         from cag.abm.attributes.opinion import ClimatePolicyID
-        result = citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0, debias=True)
+        result = citizen.administer_survey(ClimatePolicyID.BAN_PETROL_CARS, day=0)
         self.assertIsInstance(result, tuple)
         self.assertEqual(len(result), 2)
         self.assertIsInstance(result[0], str)
@@ -188,7 +181,7 @@ class TestDebiasedSurvey(unittest.TestCase):
         citizen = self._make_citizen()
         from cag.abm.attributes.opinion import ClimatePolicyID
         policy = ClimatePolicyID.BAN_PETROL_CARS
-        citizen.administer_survey(policy, day=0, debias=True)
+        citizen.administer_survey(policy, day=0)
         self.assertIn(policy, citizen.opinion_history)
         self.assertEqual(citizen.opinion_history[policy], [(0, -2)])
 
@@ -197,7 +190,7 @@ class TestDebiasedSurvey(unittest.TestCase):
         citizen = self._make_citizen()
         from cag.abm.attributes.opinion import ClimatePolicyID
         policy = ClimatePolicyID.BAN_PETROL_CARS
-        citizen.administer_survey(policy, day=0, debias=True)
+        citizen.administer_survey(policy, day=0)
         self.assertIn(policy, citizen.survey_reasoning)
         self.assertEqual(len(citizen.survey_reasoning[policy]), 1)
         self.assertEqual(citizen.survey_reasoning[policy][0], (0, "My reasoning text."))
@@ -207,29 +200,9 @@ class TestDebiasedSurvey(unittest.TestCase):
         citizen = self._make_citizen()
         from cag.abm.attributes.opinion import ClimatePolicyID
         policy = ClimatePolicyID.BAN_PETROL_CARS
-        citizen.administer_survey(policy, day=2, debias=True)
+        citizen.administer_survey(policy, day=2)
         self.assertIn(policy, citizen.survey_raw_response)
         self.assertEqual(citizen.survey_raw_response[policy], [(2, "G. Strongly support")])
-
-    @mock.patch("cag.abm.agent.send_chat", return_value="D")
-    def test_debias_false_no_reasoning_stored(self, mock_send):
-        citizen = self._make_citizen()
-        from cag.abm.attributes.opinion import ClimatePolicyID
-        policy = ClimatePolicyID.BAN_PETROL_CARS
-        citizen.administer_survey(policy, day=0, debias=False)
-        self.assertEqual(citizen.survey_reasoning, {})
-
-    @mock.patch("cag.abm.agent.send_chat", return_value="A nuanced view; the answer is B.")
-    def test_no_debias_stores_raw_response(self, mock_send):
-        citizen = self._make_citizen()
-        from cag.abm.attributes.opinion import ClimatePolicyID
-        policy = ClimatePolicyID.BAN_PETROL_CARS
-        citizen.administer_survey(policy, day=1, debias=False)
-        self.assertIn(policy, citizen.survey_raw_response)
-        self.assertEqual(
-            citizen.survey_raw_response[policy],
-            [(1, "A nuanced view; the answer is B.")],
-        )
 
 
 class TestDay0Seeding(unittest.TestCase):

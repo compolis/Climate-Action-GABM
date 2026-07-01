@@ -25,7 +25,6 @@ class TestArgsToSimDict(TestCase):
             "--base-url", "http://localhost:9999/v1",
             "--temperature", "0.3",
             "--no-thinking",
-            "--debias",
         ])
         cfg = cli._args_to_sim_dict(args)
         self.assertEqual(cfg["n_citizens"], 5)
@@ -37,7 +36,6 @@ class TestArgsToSimDict(TestCase):
         self.assertEqual(cfg["local_base_url"], "http://localhost:9999/v1")
         self.assertEqual(cfg["llm_temperature"], 0.3)
         self.assertFalse(cfg["thinking"])
-        self.assertTrue(cfg["debias"])
         # Control-flow dests stripped.
         for forbidden in ("outdir", "data", "preset", "list_presets",
                           "dry_run", "checkpoint_every_day", "resume"):
@@ -49,7 +47,6 @@ class TestArgsToSimDict(TestCase):
         # User did not pass --seed; SUPPRESS means it should not appear.
         self.assertNotIn("random_seed", cfg)
         self.assertNotIn("llm_model", cfg)
-        self.assertNotIn("debias", cfg)
 
     def test_checkpoint_default_on(self):
         """Per-day checkpointing must default to ON (resume-safe by default)."""
@@ -80,17 +77,15 @@ class TestBuildConfig(TestCase):
 
     def test_cli_overrides_preset(self):
         preset = dict(RUN_BUNDLE_PRESETS["smoke"]["config"])
-        # CLI supplies model+provider and flips debias + grows the run.
+        # CLI supplies model+provider and grows the run.
         cli_dict = {
             "llm_provider": "openai",
             "llm_model": "gpt-5.4-mini",
-            "debias": False,
             "n_citizens": 30,
         }
         cfg = cli.build_config(preset, cli_dict)
         self.assertEqual(cfg["llm_provider"], "openai")
         self.assertEqual(cfg["llm_model"], "gpt-5.4-mini")
-        self.assertFalse(cfg["debias"])
         self.assertEqual(cfg["n_citizens"], 30)
         # Preset values untouched where CLI silent:
         self.assertEqual(cfg["k_peers_per_day"], 0)
@@ -171,12 +166,12 @@ class TestCLIMainEntryPoints(TestCase):
             cli.main([
                 "--preset", "r14_canonical",
                 "--exposure-targets", "split50",
-                "--no-debias",
+                "--k-peers", "2",
                 "--dry-run",
             ])
         cfg = json.loads(buf.getvalue())
         self.assertEqual(cfg["political_exposure_targets"], "split50")
-        self.assertFalse(cfg["debias"])
+        self.assertEqual(cfg["k_peers_per_day"], 2)
         # Preset values that the CLI did NOT override survive.
         self.assertEqual(cfg["day0_anchor"], "ground_truth_with_rationale")
         self.assertEqual(cfg["n_citizens"], 50)

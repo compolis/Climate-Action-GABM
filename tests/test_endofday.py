@@ -113,8 +113,9 @@ class TestEndOfDayPrompts:
         citizen = _make_citizen()
         citizen.opinion_history[ClimatePolicyID.CARBON_TAX] = [(0, 1)]
         citizen.administer_survey(ClimatePolicyID.CARBON_TAX, day=1)
-        user_prompt = mock_send.call_args[0][1]
-        assert "reflections above" in user_prompt.lower()
+        # The two-step survey's Step-1 reasoning prompt bridges to reflections.
+        step1_user_prompt = mock_send.call_args_list[0][0][1]
+        assert "reflections" in step1_user_prompt.lower()
 
     @mock.patch("cag.abm.agent.send_chat", return_value="D")
     def test_day0_prompt_does_not_include_reflections(self, mock_send):

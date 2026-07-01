@@ -28,7 +28,7 @@ SIM_CONFIG = {
         {"phases": ["P-A", "P-B", "C"]},
         {"phases": ["P-B", "P-A", "C"]},
     ],
-    "k_peers_per_day": 3,
+    "k_peers_per_day": 2,
     "network_type": "stochastic_block",
     # Per-type parameters for the pluggable network factory
     # (see cag.abm.networks). When None, builder defaults are used.
@@ -57,9 +57,6 @@ SIM_CONFIG = {
     "survey_model": None,       # override model for surveys (None → use llm_model)
     "survey_provider": None,    # override provider for surveys (None → use llm_provider)
     "thinking": False,
-    # Research-canon since v0.3 (NB15 / Run 4): Condition B 2-step survey
-    # to reduce LLM pro-climate bias on Day 0.
-    "debias": True,
     # Research direction: all policies broadcast together each phase.
     "communication_mode": "package",
     "package_policies": ALL_CLIMATE_POLICIES,
@@ -219,7 +216,7 @@ from cag.abm.network_repair import (  # noqa: E402,F401
 
 
 def _run_baseline_surveys(nation, policies, api_key, model, provider,
-                          temperature, thinking, debias):
+                          temperature, thinking):
     for agent in nation.agents_active.values():
         for policy_id in policies:
             agent.administer_survey(
@@ -230,12 +227,11 @@ def _run_baseline_surveys(nation, policies, api_key, model, provider,
                 provider=provider,
                 temperature=temperature,
                 thinking=thinking,
-                debias=debias,
             )
 
 
 def _run_day0(nation, policies, anchor_mode, api_key, model, provider,
-              temperature, thinking, debias):
+              temperature, thinking):
     """Initialise Day 0 opinions according to the configured anchor mode.
 
     - ``llm_survey``: existing behaviour (administer the survey via LLM).
@@ -247,16 +243,9 @@ def _run_day0(nation, policies, anchor_mode, api_key, model, provider,
     if anchor_mode == "llm_survey":
         _run_baseline_surveys(
             nation, policies, api_key, model, provider,
-            temperature, thinking, debias,
+            temperature, thinking,
         )
         return
-
-    if debias:
-        logging.info(
-            "day0_anchor=%s: debias flag is ignored on Day 0 "
-            "(still applies to end-of-day surveys).",
-            anchor_mode,
-        )
 
     for agent in nation.agents_active.values():
         for policy_id in policies:
@@ -347,7 +336,6 @@ def _resolve_runtime(cfg):
         "provider": provider,
         "temperature": cfg["llm_temperature"],
         "thinking": cfg["thinking"],
-        "debias": cfg["debias"],
         "k_peers": cfg["k_peers_per_day"],
         "survey_api_key": survey_api_key,
         "survey_model": cfg.get("survey_model") or cfg["llm_model"],
@@ -438,7 +426,7 @@ def _run_one_day(nation, day, day_config, n_days, rt):
                 policy_id, day,
                 api_key=rt["survey_api_key"], model=rt["survey_model"],
                 provider=rt["survey_provider"], temperature=rt["temperature"],
-                thinking=rt["thinking"], debias=rt["debias"],
+                thinking=rt["thinking"],
                 context_policy_id=PACKAGE_SCOPE,
             )
     else:
@@ -446,7 +434,7 @@ def _run_one_day(nation, day, day_config, n_days, rt):
             policy, day,
             api_key=rt["survey_api_key"], model=rt["survey_model"],
             provider=rt["survey_provider"], temperature=rt["temperature"],
-            thinking=rt["thinking"], debias=rt["debias"],
+            thinking=rt["thinking"],
         )
 
     if package_mode:
@@ -522,9 +510,9 @@ def _log_experiment_config(cfg, resume, checkpoint_dir):
         cfg.get("day0_anchor"),
     )
     logging.info(
-        "[llm]        provider=%s  model=%s  temp=%s  thinking=%s  debias=%s",
+        "[llm]        provider=%s  model=%s  temp=%s  thinking=%s",
         cfg.get("llm_provider"), cfg.get("llm_model"),
-        cfg.get("llm_temperature"), cfg.get("thinking"), cfg.get("debias"),
+        cfg.get("llm_temperature"), cfg.get("thinking"),
     )
     if cfg.get("llm_provider") == "local":
         logging.info(
@@ -683,7 +671,7 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
             _run_day0(
                 nation, rt["package_policies"], anchor_mode,
                 rt["survey_api_key"], rt["survey_model"], rt["survey_provider"],
-                rt["temperature"], rt["thinking"], rt["debias"],
+                rt["temperature"], rt["thinking"],
             )
             _log_package_index(nation, rt["package_policies"], day=0)
         else:
@@ -694,7 +682,7 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
             _run_day0(
                 nation, [baseline_policy], anchor_mode,
                 rt["survey_api_key"], rt["survey_model"], rt["survey_provider"],
-                rt["temperature"], rt["thinking"], rt["debias"],
+                rt["temperature"], rt["thinking"],
             )
 
         if checkpoint_every_day:

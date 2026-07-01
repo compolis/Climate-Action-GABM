@@ -372,11 +372,6 @@ def parse_args(argv=None):
                    default=argparse.SUPPRESS,
                    help="Enable / disable model thinking. "
                         "Default = SIM_CONFIG (False).")
-    p.add_argument("--debias", dest="debias",
-                   action=argparse.BooleanOptionalAction,
-                   default=argparse.SUPPRESS,
-                   help="Enable / disable the Condition B 2-step survey. "
-                        "Default = SIM_CONFIG (True).")
     p.add_argument("--local-timeout", type=float, default=argparse.SUPPRESS,
                    dest="local_timeout",
                    help="Per-request timeout (s) for provider=local.")

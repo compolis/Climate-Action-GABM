@@ -110,7 +110,6 @@ purpose, and note it when you report results.
 | `llm_model` | `Qwen3-8B-4bit` | The local model that was checked against cloud models and behaved comparably. |
 | `communication_mode` | `package` | The research question is about how the six policies move *together*; doing them one at a time hides that. |
 | `day0_anchor` | `ground_truth_with_rationale` | Starts everyone from their real survey answer, removing the AI's pro-climate lean on Day 0. |
-| `debias` | `True` | The two-step survey removes most of the AI's residual pro-climate lean on later days. |
 | `political_message_source` | `offline` | Uses real political text from a curated file, which is the point of the study; AI-written political messages are only a fallback. |
 
 The wording of the prompts the citizens see (in `agent.py`, documented in
@@ -266,13 +265,6 @@ The provider that goes with `survey_model` (for example, message locally but sur
 Turns on the AI's extended "show your working" reasoning mode **for surveys only**. Reflections and
 messages never use it, because they are meant to be short. Survey answers tend to benefit most from
 the extra reasoning. *Safe to change.*
-
-#### `debias` — default `True`
-
-Turns on the two-step bias-correction process for end-of-day surveys: the AI first reasons about the
-range of views a real person might hold, then commits to an answer. This removes most of the AI's
-tendency to answer more pro-climate than real survey respondents. It does not apply on Day 0 (Day 0 is
-just the seeded starting point). *Part of the fixed research core.*
 
 ### What gets talked about
 
@@ -526,7 +518,7 @@ it stopped. When you resume, the model compares your new configuration against t
   citizens and the days already completed must also match (you may *add* future days).
 
 - **Settings you may change** — these only produce a warning and the run continues: the AI model and
-  provider (including the survey ones), `debias`, `thinking`, `llm_temperature`, and the three local-
+  provider (including the survey ones), `thinking`, `llm_temperature`, and the three local-
   model settings.
 
 ---
