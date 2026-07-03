@@ -54,6 +54,28 @@ RUN_BUNDLE_PRESETS = {
             "day0_anchor": "ground_truth_with_rationale",
         },
     },
+    "tierP": {
+        "description": (
+            "Tier-P persona-null run shape: 100 agents, Day-0-only "
+            "(single empty-phase day so no broadcasts or peer messaging), "
+            "package mode, Day-0 anchor = llm_survey so each Day-0 opinion "
+            "is a pure function of (persona + policy question), memory = "
+            "persona_only to remove cross-policy leakage. Does NOT pin a "
+            "model (AIRE run.sh forces --model $HF_MODEL, default "
+            "Qwen/Qwen3-14B; Mac uses the SIM_CONFIG default). Set the "
+            "arm with --persona-mode {real,shuffled,neutral} and vary "
+            "--seed for the permutation."
+        ),
+        "config": {
+            "n_citizens": 100,
+            "days": [{"phases": []}],
+            "k_peers_per_day": 0,
+            "communication_mode": "package",
+            "day0_anchor": "llm_survey",
+            "memory": "persona_only",
+            "thinking": False,
+        },
+    },
 }
 
 

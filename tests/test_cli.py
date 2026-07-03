@@ -232,3 +232,74 @@ class TestCLIMainEntryPoints(TestCase):
         # argparse exits with code 2 on choice violation.
         with self.assertRaises(SystemExit):
             cli.main(["--preset", "not_a_real_preset", "--dry-run"])
+
+
+class TestBroadcastFrequency(TestCase):
+    """Frequency-asymmetry CLI: --broadcasts-a/-b + --interleave threading."""
+
+    def test_build_days_symmetric_default_unchanged(self):
+        # Golden: 1v1 (the default) is byte-identical to the old canon,
+        # regardless of interleave, with a_first alternating by day.
+        plan = cli.build_days(2)
+        self.assertEqual(plan[0]["phases"], ["P-A", "P-B", "C"])
+        self.assertEqual(plan[1]["phases"], ["P-B", "P-A", "C"])
+
+    def test_build_days_symmetric_interleave_flag_irrelevant(self):
+        self.assertEqual(
+            cli.build_days(1, broadcasts_a=1, broadcasts_b=1, interleave=True),
+            cli.build_days(1, broadcasts_a=1, broadcasts_b=1, interleave=False),
+        )
+
+    def test_build_days_asymmetric_block(self):
+        plan = cli.build_days(1, broadcasts_a=3, broadcasts_b=1, interleave=False)
+        self.assertEqual(plan[0]["phases"], ["P-A", "P-A", "P-A", "P-B", "C"])
+
+    def test_build_days_asymmetric_interleave(self):
+        plan = cli.build_days(1, broadcasts_a=3, broadcasts_b=1, interleave=True)
+        self.assertEqual(plan[0]["phases"], ["P-A", "P-B", "P-A", "P-A", "C"])
+
+    def test_build_config_pops_frequency_knobs(self):
+        cfg = cli.build_config({}, {
+            "days": 1,
+            "broadcasts_a": 3,
+            "broadcasts_b": 1,
+            "interleave": False,
+        })
+        # Knobs consumed, never leak into SIM_CONFIG space.
+        self.assertNotIn("broadcasts_a", cfg)
+        self.assertNotIn("broadcasts_b", cfg)
+        self.assertNotIn("interleave", cfg)
+        self.assertEqual(cfg["days"][0]["phases"], ["P-A", "P-A", "P-A", "P-B", "C"])
+
+    def test_build_config_default_symmetric(self):
+        cfg = cli.build_config({}, {"days": 2})
+        self.assertEqual(cfg["days"][0]["phases"], ["P-A", "P-B", "C"])
+        self.assertNotIn("broadcasts_a", cfg)
+
+    def test_parse_broadcasts_flags(self):
+        args = cli.parse_args([
+            "--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2",
+            "--broadcasts-a", "3", "--broadcasts-b", "1", "--no-interleave",
+        ])
+        self.assertEqual(args.broadcasts_a, 3)
+        self.assertEqual(args.broadcasts_b, 1)
+        self.assertFalse(args.interleave)
+
+    def test_broadcasts_flags_absent_when_unset(self):
+        args = cli.parse_args([
+            "--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2",
+        ])
+        self.assertFalse(hasattr(args, "broadcasts_a"))
+        self.assertFalse(hasattr(args, "interleave"))
+
+    def test_dry_run_frequency_asymmetry(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main([
+                "--n-citizens", "10", "--days", "2",
+                "--broadcasts-a", "3", "--broadcasts-b", "1", "--no-interleave",
+                "--dry-run",
+            ])
+        cfg = json.loads(buf.getvalue())
+        self.assertEqual(cfg["days"][0]["phases"], ["P-A", "P-A", "P-A", "P-B", "C"])
+        self.assertNotIn("broadcasts_a", cfg)

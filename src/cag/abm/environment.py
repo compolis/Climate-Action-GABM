@@ -18,7 +18,7 @@ from gabm.abm.attributes.gender import GenderMap
 from gabm.abm.attributes.politics import PoliticsID
 # Local imports
 from gabm.abm.attributes.opinion import OpinionTopicID, Opinion
-from cag.abm.agent import PoliticalAgent
+from cag.abm.agent import PoliticalAgent, NEUTRAL_PERSONA_TEXT
 from cag.abm.democracy.elections.brexit import BrexitVoteID
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID
 from cag.abm.attributes.region import RegionID, UKRegionMap
@@ -51,6 +51,13 @@ from cag.abm.config.exposure import (  # noqa: F401  (re-exported for back-compa
     _resolve_targets,
     _resolve_weights,
 )
+
+
+# Tier-P persona-ablation conditions. ``real`` = each agent keeps its own
+# persona; ``shuffled`` = each agent is given another agent's whole persona
+# (a coherent real person, GT unchanged); ``neutral`` = every agent gets the
+# generic NEUTRAL_PERSONA_TEXT. See SurveyedNation.apply_persona_mode().
+VALID_PERSONA_MODES = ("real", "shuffled", "neutral")
 
 
 # -----------------------------------------------------------------------------
@@ -828,6 +835,83 @@ class SurveyedNation(Nation):
                 f"{len(self.political_agent_b.connected_citizens)}/{len(full_b)} "
                 f"(reach_b={reach_b})"
             )
+
+    def apply_persona_mode(self, mode="real", seed=42):
+        """
+        Apply a Tier-P persona-ablation condition to every active citizen and
+        return the resulting persona map for the audit trail.
+
+        This is a *manipulation check* on algorithmic fidelity: it lets us
+        test whether the model actually conditions on the assigned persona.
+        Ground truth is never touched (it is read from
+        ``original_survey_data``), so the scoring target is identical across
+        all three modes.
+
+        Modes:
+            ``"real"``     - no change; each agent keeps its own persona.
+            ``"shuffled"`` - each agent is given *another* agent's whole
+                persona verbatim (a coherent real person), via
+                ``persona_override``. The permutation is a derangement (no
+                agent keeps its own persona) when ``n > 1``.
+            ``"neutral"``  - every agent's persona is replaced by the generic
+                :data:`cag.abm.agent.NEUTRAL_PERSONA_TEXT`.
+
+        The personas are snapshotted *before* any override is written, so the
+        shuffle copies each agent's original (real) persona rather than an
+        already-overridden one.
+
+        Args:
+            mode: one of :data:`VALID_PERSONA_MODES`.
+            seed: base random seed for the ``shuffled`` permutation
+                (deterministic given the seed and agent set).
+
+        Returns:
+            dict mapping each ``agent_id`` to the ``source_agent_id`` whose
+            persona it now carries (itself for ``real``; another agent for
+            ``shuffled``; the sentinel ``"NEUTRAL"`` for ``neutral``).
+        """
+        mode = mode or "real"
+        if mode not in VALID_PERSONA_MODES:
+            raise ValueError(
+                f"persona_mode must be one of {VALID_PERSONA_MODES}, "
+                f"got {mode!r}"
+            )
+
+        agents = [self.agents_active[k] for k in sorted(self.agents_active)]
+        # Snapshot original personas BEFORE writing any override.
+        personas = {a.id: a.get_persona() for a in agents}
+        mapping = {}
+
+        if mode == "real":
+            for a in agents:
+                mapping[a.id] = a.id
+        elif mode == "neutral":
+            for a in agents:
+                a.persona_override = NEUTRAL_PERSONA_TEXT
+                mapping[a.id] = "NEUTRAL"
+        else:  # shuffled
+            n = len(agents)
+            perm = list(range(n))
+            if n > 1:
+                rng = random.Random(int(seed))
+                # Derangement: reshuffle until no agent keeps its own slot.
+                for _ in range(1000):
+                    rng.shuffle(perm)
+                    if all(perm[i] != i for i in range(n)):
+                        break
+                else:
+                    # Deterministic fallback with no fixed point.
+                    perm = list(range(1, n)) + [0]
+            for i, a in enumerate(agents):
+                src = agents[perm[i]]
+                a.persona_override = personas[src.id]
+                mapping[a.id] = src.id
+
+        logging.info(
+            f"Persona mode: '{mode}' applied to {len(agents)} agents "
+            f"(seed={seed})"
+        )
+        return mapping
 
     def create_network(
         self,

@@ -72,6 +72,10 @@ _RESULT_CSV_SCHEMAS = {
         "year_of_birth", "gender_id", "region_id", "education_id",
         "ukge2019_vote_id", "brexit_vote_id", "persona_text",
     ],
+    # Tier-P persona-ablation audit trail: which agent's persona each agent
+    # actually carried this run (itself for "real", another agent for
+    # "shuffled", the sentinel "NEUTRAL" for "neutral").
+    "persona_map": ["agent_id", "source_agent_id", "persona_mode"],
     "agent_timeline": [
         "agent_id", "political_exposure", "sim_step", "day", "phase",
         "event_type", "policy_id", "counterparty_id", "counterparty_role",
@@ -82,7 +86,7 @@ _RESULT_CSV_SCHEMAS = {
 # Keys that are written only on the final save_results() call, never by
 # per-day checkpoints. Diagnostic artefacts the simulation does NOT need
 # to resume from (and which can be expensive to recompute every day).
-_CHECKPOINT_SKIP_KEYS = frozenset({"agent_timeline"})
+_CHECKPOINT_SKIP_KEYS = frozenset({"agent_timeline", "persona_map"})
 
 
 def _collect_results(nation, config):
@@ -229,6 +233,16 @@ def _collect_results(nation, config):
     ground_truth_df = collect_ground_truth(agents)
     package_ground_truth_df = collect_package_ground_truth(agents)
     agent_attributes_df = collect_agent_attributes(nation)
+    persona_map_raw = getattr(nation, "persona_map", None) or {}
+    persona_mode = config.get("persona_mode", "real")
+    persona_map_rows = [
+        {
+            "agent_id": agent_id,
+            "source_agent_id": source_agent_id,
+            "persona_mode": persona_mode,
+        }
+        for agent_id, source_agent_id in persona_map_raw.items()
+    ]
     sample_ids = _resolve_timeline_sample_ids(
         agent_attributes_df,
         sample_size=config.get("timeline_sample_size", 3),
@@ -271,6 +285,10 @@ def _collect_results(nation, config):
         "ground_truth": ground_truth_df,
         "package_ground_truth": package_ground_truth_df,
         "agent_attributes": agent_attributes_df,
+        "persona_map": pd.DataFrame(
+            persona_map_rows,
+            columns=_RESULT_CSV_SCHEMAS["persona_map"],
+        ),
         "config": config,
         "network_diagnostics": _safe_network_diagnostics(nation, config),
         "network_snapshot": _safe_network_snapshot(nation),

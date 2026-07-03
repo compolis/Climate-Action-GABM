@@ -2469,3 +2469,105 @@ Test suite: **610 passed, 1 skipped** (was 552 at the start of this cycle).
 
 ---
 
+## 31. Tier-P persona-null ablation (v0.9, 2026-07-03)
+
+### 31.1 Motivation
+
+Every result the model produces rests on one unstated assumption: that each agent's answer is a *function of its assigned persona*. If the LLM instead answers every climate question from a generic pro-climate prior — ignoring the age, region, voting history, and psychometric values we hand it — then the whole demographic story is an artefact of the ground-truth distribution, not of the model conditioning on individuals. Tier-P is a **manipulation check on algorithmic fidelity**: it deliberately corrupts the persona input and measures whether accuracy degrades. If persona genuinely drives opinions, accuracy should be highest when agents keep their own persona, collapse when personas are stripped, and land in between when personas are coherent but mismatched.
+
+### 31.2 The three arms
+
+`SurveyedNation.apply_persona_mode(mode, seed)` in [src/cag/abm/environment.py](../src/cag/abm/environment.py) rewrites every active citizen's persona under one of `VALID_PERSONA_MODES = ("real", "shuffled", "neutral")`:
+
+- **`real`** — no change; each agent keeps its own persona. Bit-for-bit identical to prior canon (the method returns an identity map and writes no override), so the golden test suites are preserved.
+- **`shuffled`** — each agent is given *another* agent's whole persona verbatim, via `persona_override`. The permutation is a **derangement** (no agent keeps its own slot) when `n > 1`, drawn with `random.Random(seed)` and re-rolled up to 1000 times, with a deterministic no-fixed-point fallback (`[1, 2, …, n-1, 0]`). Each agent therefore still reasons as a coherent real UK person — just the wrong one — which isolates *mismatch* from *absence*.
+- **`neutral`** — every agent's persona is replaced by the generic `NEUTRAL_PERSONA_TEXT = "I am an adult living in the United Kingdom."` (no age, region, politics, or values). This is the true null.
+
+**Ground truth is never touched.** Real opinions are always read from `original_survey_data`, so the scoring target is identical across all three arms; only the *input* changes. Personas are snapshotted (`{a.id: a.get_persona() for a in agents}`) **before** any override is written, so the shuffle copies each agent's original persona rather than an already-overridden string.
+
+### 31.3 Mechanism
+
+The override lives on the agent. [src/cag/abm/agent.py](../src/cag/abm/agent.py) adds `SurveyedCitizen.persona_override` (default `None`) and a hook in `get_persona()` that returns the override string when set, otherwise builds the persona as before. Because every context-assembly path funnels through `get_persona()`, a single override propagates to persona reminders, survey prompts, peer messages, and reflections without touching any call site.
+
+### 31.4 Wiring, audit trail, and resume
+
+- [src/cag/abm/sim.py](../src/cag/abm/sim.py): new `SIM_CONFIG["persona_mode"] = "real"` (34 keys total) and a module-level `VALID_PERSONA_MODES` mirroring the environment. `_resolve_runtime` validates the value; `run_simulation` calls `nation.apply_persona_mode(persona_mode, seed=cfg["random_seed"])` alongside the other audience manipulations (reach subsample, audience cap) so it runs on **both** the fresh and resume paths and is captured in the audit trail. The returned map is stored as `nation.persona_map`.
+- [src/cag/io/results.py](../src/cag/io/results.py): new `_RESULT_CSV_SCHEMAS["persona_map"] = ["agent_id", "source_agent_id", "persona_mode"]` → `persona_map.csv`. It is a final-output-only artefact (listed in `_CHECKPOINT_SKIP_KEYS`) recording, for every agent, whose persona it carried (`itself` for `real`, another agent for `shuffled`, the sentinel `"NEUTRAL"` for `neutral`).
+- [src/cag/io/checkpoint.py](../src/cag/io/checkpoint.py): `persona_mode` is added to `_RESUME_HARD_KEYS` — changing the arm mid-run would make the resumed half incomparable with the first.
+
+### 31.5 CLI, preset, and sweep
+
+- [src/cag/__main__.py](../src/cag/__main__.py): new `--persona-mode {real,shuffled,neutral}` flag.
+- [src/cag/presets.py](../src/cag/presets.py): new `tierP` bundle — 100 agents, a single empty-phase Day-0-only day (`days=[{"phases": []}]`, no broadcasts or peer messaging), package mode, `day0_anchor="llm_survey"` so each Day-0 opinion is a pure function of *(persona + policy question)*, and `memory="persona_only"` to remove cross-policy leakage. It deliberately does **not** pin a model (AIRE's `run.sh` forces `--model $HF_MODEL`; Mac uses the `SIM_CONFIG` default). The arm is chosen with `--persona-mode` and the shuffle permutation is varied with `--seed`.
+- [scripts/aire/sweeps/tierP.txt](../scripts/aire/sweeps/tierP.txt): 9 lines — the three arms × seeds 42/43/44.
+
+### 31.6 Test coverage
+
+New [tests/test_persona_mode.py](../tests/test_persona_mode.py) (20 tests): the `persona_override` hook (set / clear / precedence over `get_persona`), all three modes, the derangement property (no fixed point for `n > 1`), the ground-truth-untouched invariant, the persona-map shape and sentinel values, and the CLI + resume plumbing. Suite: **638 passed, 1 skipped** after this stage (was 610 at the end of v0.8). The persona-null demo notebook is deferred until AIRE `tierP` run directories return.
+
+---
+
+## 32. Broadcast-frequency-asymmetry CLI (v0.9, 2026-07-03)
+
+### 32.1 Motivation
+
+§19 added the per-day `make_phases` sugar so a single day could carry an asymmetric number of broadcasts (`{"broadcasts_a": 3, "broadcasts_b": 1, ...}`). But to run a *whole simulation* where one side consistently out-broadcasts the other, a researcher had to hand-write the full `days` list. This section adds the command-line lever that applies a chosen frequency asymmetry to every day of a run specified as a plain integer number of days.
+
+### 32.2 `build_days` and the three flags
+
+[src/cag/__main__.py](../src/cag/__main__.py) adds `build_days(n_days, broadcasts_a=1, broadcasts_b=1, interleave=True)`, which builds each day via `make_phases(broadcasts_a, broadcasts_b, peer=True, interleave=interleave, a_first=(i % 2 == 0))`. The `a_first` alternation preserves the long-standing convention that neither side always speaks first before the evening survey. Three argparse flags feed it:
+
+- `--broadcasts-a N` / `--broadcasts-b M` (`type=int`, default 1/1) — each politician's daily broadcast count.
+- `--interleave` / `--no-interleave` (`BooleanOptionalAction`, default on) — alternating (`A,B,A,…`) vs block (`A,A,…,B`) ordering. Only matters when the two counts differ.
+
+`build_config` pops the three knobs from the merged config dict and, **if `days` is an integer**, expands it with `build_days`; if `days` is already an explicit list it leaves it alone and warns that the frequency knobs were ignored. The flags are deliberately kept out of `_ARG_TO_SIM` / `_NON_SIM_DESTS` because they are day-plan inputs, not `SIM_CONFIG` keys — they are consumed at config-build time and never reach `SIM_CONFIG`.
+
+### 32.3 Examples and invariants
+
+```
+--days 5                                   # 5 × ['P-A', 'P-B', 'C']  (classic; a_first alternates)
+--days 5 --broadcasts-a 3 --no-interleave  # 5 × ['P-A', 'P-A', 'P-A', 'P-B', 'C']
+--days 5 --broadcasts-a 3 --interleave      # 5 × ['P-A', 'P-B', 'P-A', 'P-A', 'C']
+```
+
+Peer chat (`C`) is always appended by `make_phases(peer=True)`; disable it with `--k-peers 0` (the v0.7 short-circuit). The default 1-vs-1 reproduces the classic schedule exactly, so leaving the flags off changes nothing. This is a **frequency** lever — how *often* each side speaks — and is orthogonal to `reach_a` / `reach_b` (§17), which control what *fraction of the audience* a single broadcast reaches; the two combine.
+
+### 32.4 Test coverage
+
+New `TestBroadcastFrequency` in [tests/test_cli.py](../tests/test_cli.py) (9 tests): symmetric-default unchanged, interleave-irrelevant-when-symmetric, asymmetric block vs interleave expansion, `build_config` popping the knobs, default symmetric, flag parsing, absent-when-unset, and a live dry-run over an asymmetric schedule.
+
+---
+
+## 33. Affinity-weight three-tier ladder and AIRE run labels (v0.9, 2026-07-03)
+
+### 33.1 Motivation
+
+The affinity-weight presets in [src/cag/abm/config/exposure.py](../src/cag/abm/config/exposure.py) had accumulated ad-hoc per-signal values that were hard to explain to a reader. §18 established that the weights only ever *order* citizens before the rank assignment slices them into the target audience cells, so the exact magnitudes matter only through their ratios. v0.9 rationalises them into an explainable factor-2 three-tier ladder.
+
+### 33.2 The ladder
+
+`DEFAULT_AFFINITY_WEIGHTS` (the `balanced` preset, and what `_resolve_weights(None)` returns):
+
+| Tier | Signals | Weight |
+|------|---------|--------|
+| Political | `brexit`, `politics`, `vote_bonus` | **2.0** |
+| Values | `openness`, `selftransc`, `conformtrad`, `sdo`, `rwa` | **1.0** |
+| Demographics | `age`, `education`, `region` | **0.5** |
+
+Anchors: Fletcher & Nielsen (2017) on the primacy of partisan/political identity in selective exposure, and Steg & de Groot (2010) on value-based environmental attitudes sitting a tier below explicit politics. Both the side-A and side-B sub-dictionaries use the same ladder. The two sweep presets keep the ladder and push a single tier:
+
+- `AFFINITY_WEIGHTS_VOTE_DOMINANT` — political tier 2.0 → **4.0** (values 1.0, demographics 0.5 unchanged).
+- `AFFINITY_WEIGHTS_VALUES_DOMINANT` — top two tiers swapped: values **4.0**, political 1.0, demographics 0.5.
+
+`AFFINITY_WEIGHT_PRESETS = {"balanced", "vote_dominant", "values_dominant"}`. The target-share presets (`committed_minority_symmetric` default, `committed_minority_uk_2024`, `legacy_v05`, `split50`, `neither`) are unchanged: because affinity scores only rank citizens, the weight preset changes *who* lands in each audience cell but never the cell sizes.
+
+### 33.3 NB 27 drift caveat
+
+NB 27 ([notebooks/27_affinity_exposure_demo.ipynb](../notebooks/27_affinity_exposure_demo.ipynb)) reported preset-agreement percentages (balanced↔vote_dominant 84.2%, ↔values_dominant 78.2%, vote↔values 65.8%) measured against the *old* weights. Those figures no longer match the shipped three-tier presets. NB 27 is left untouched as a historical v0.5 pilot and is **not** re-run this cycle; re-measuring the agreement percentages against the new ladder is on the v0.9 carry-forward backlog.
+
+### 33.4 AIRE run labels
+
+[scripts/aire/run.sh](../scripts/aire/run.sh) now honours an optional `RUN_LABEL` environment variable on fresh runs: `SUFFIX="${RUN_LABEL:+_${RUN_LABEL}}"` is appended to the scratch output directory (`OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}${SUFFIX}"`), with a banner echo. Sweep jobs therefore land in self-describing folders, e.g. `RUN_LABEL=split50_freq3v1 sbatch scripts/aire/run.sh …` → `run_1234567_split50_freq3v1`. Resume runs (which read an existing `OUTDIR`) are unaffected.
+
+---
+

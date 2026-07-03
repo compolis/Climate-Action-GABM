@@ -84,60 +84,71 @@ TARGET_PRESETS = {
 # published correlations are honest about the uncertainty and remain
 # overridable via ``SIM_CONFIG["affinity_weights"]``.
 #
-# WHY vote signals get the highest single weight (2.0 on the additive
-# bonus). Vote choice is the strongest empirical proxy for partisan
-# media diet (Fletcher & Nielsen 2017). But the bonus is bounded
-# (|bonus| ≤ 2.0 per side) so values + demographics alone can still
-# rank a citizen into a cell — addressing the user's "more than just
-# voting history" requirement.
+# WHY a three-tier, factor-2 scheme (political 2.0 / values 1.0 /
+# demographics 0.5). Only the *relative ordering* of the weights matters
+# for the rank-based assignment (absolute magnitude is a nuisance
+# parameter), so the default uses a clean, easily-defended tier ladder
+# rather than a table of finely-tuned decimals:
 #
-# WHY openness and self-transcendence weighted equally at 1.5. Schwartz
-# values lit (Steg & de Groot 2010 line of work) treats these as the
-# two strongest values-level predictors of pro-environmental attitudes.
+#   Tier 1 — political self-report (brexit, politics, vote_bonus) = 2.0
+#     Vote choice and left-right / Leave-Remain self-placement are the
+#     strongest empirical proxies for partisan media diet
+#     (Fletcher & Nielsen 2017), so they carry the heaviest tier. The
+#     tier is still bounded, so values + demographics together can
+#     out-vote a single political signal — satisfying the "more than
+#     just voting history" requirement.
 #
-# WHY SDO / RWA / conformity-tradition at 1.0. They are broader
-# authoritarianism / conservation markers, not climate-specific, so
-# weighted below the values-level signals. The "values_dominant" preset
-# (Q2 sweep) boosts these to test sensitivity.
+#   Tier 2 — psychological values (openness, selftransc, conformtrad,
+#     sdo, rwa) = 1.0. Schwartz-values and authoritarianism scales are
+#     robust attitudinal predictors of pro-/anti-environmental stance
+#     (Steg & de Groot 2010 line of work) but are one step removed from
+#     the media-consumption behaviour we are ranking on.
 #
-# WHY demographics at 0.75-1.0. Age, education and region are proxies
-# rather than direct attitudinal indicators; weighted at or below the
-# values-level signals.
+#   Tier 3 — demographics (age, education, region) = 0.5. Proxies rather
+#     than direct attitudinal indicators, so weighted at half the values
+#     tier.
+#
+# The "vote_dominant" / "values_dominant" presets below deliberately
+# break this ladder to probe robustness (NB 27); the factor-2 spacing
+# here keeps the default's narrative simple.
 DEFAULT_AFFINITY_WEIGHTS = {
     "A": {
-        "openness": 1.5, "selftransc": 1.5, "conformtrad": 1.0,
+        "openness": 1.0, "selftransc": 1.0, "conformtrad": 1.0,
         "sdo": 1.0, "rwa": 1.0,
-        "age": 1.0, "education": 1.0, "region": 0.75,
-        "brexit": 1.5, "politics": 1.5, "vote_bonus": 2.0,
+        "age": 0.5, "education": 0.5, "region": 0.5,
+        "brexit": 2.0, "politics": 2.0, "vote_bonus": 2.0,
     },
     "B": {
-        "openness": 1.5, "selftransc": 1.5, "conformtrad": 1.0,
+        "openness": 1.0, "selftransc": 1.0, "conformtrad": 1.0,
         "sdo": 1.0, "rwa": 1.0,
-        "age": 1.0, "education": 1.0, "region": 0.75,
-        "brexit": 1.5, "politics": 1.5, "vote_bonus": 2.0,
+        "age": 0.5, "education": 0.5, "region": 0.5,
+        "brexit": 2.0, "politics": 2.0, "vote_bonus": 2.0,
     },
 }
-# Vote-dominant preset: doubles vote / brexit / politics, halves
-# values / demographics. Tests the "is everything just vote choice?"
-# hypothesis.
+# Vote-dominant preset. Same three-tier ladder as ``balanced`` but with
+# the political tier pushed from 2.0 to 4.0 (4× the values tier instead
+# of 2×). Demographics stay pinned at the weakest rung (0.5). Tests the
+# "is everything just vote choice?" hypothesis.
 AFFINITY_WEIGHTS_VOTE_DOMINANT = {
     side: {
-        "openness": 0.75, "selftransc": 0.75, "conformtrad": 0.5,
-        "sdo": 0.5, "rwa": 0.5,
-        "age": 0.5, "education": 0.5, "region": 0.375,
-        "brexit": 3.0, "politics": 3.0, "vote_bonus": 4.0,
+        "openness": 1.0, "selftransc": 1.0, "conformtrad": 1.0,
+        "sdo": 1.0, "rwa": 1.0,
+        "age": 0.5, "education": 0.5, "region": 0.5,
+        "brexit": 4.0, "politics": 4.0, "vote_bonus": 4.0,
     }
     for side in ("A", "B")
 }
-# Values-dominant preset: doubles values / SDO / RWA / conformity,
-# halves vote-related signals. Tests whether a values-only signature
-# reproduces the cells the vote-anchored signature finds.
+# Values-dominant preset. The same ladder with the top two tiers
+# *swapped*: values become the dominant tier (4.0), the political tier
+# drops to the non-dominant rung (1.0), demographics stay weakest (0.5).
+# Tests whether a values-only signature reproduces the cells the
+# vote-anchored signature finds.
 AFFINITY_WEIGHTS_VALUES_DOMINANT = {
     side: {
-        "openness": 3.0, "selftransc": 3.0, "conformtrad": 2.0,
-        "sdo": 2.0, "rwa": 2.0,
-        "age": 1.0, "education": 1.0, "region": 0.75,
-        "brexit": 0.75, "politics": 0.75, "vote_bonus": 1.0,
+        "openness": 4.0, "selftransc": 4.0, "conformtrad": 4.0,
+        "sdo": 4.0, "rwa": 4.0,
+        "age": 0.5, "education": 0.5, "region": 0.5,
+        "brexit": 1.0, "politics": 1.0, "vote_bonus": 1.0,
     }
     for side in ("A", "B")
 }

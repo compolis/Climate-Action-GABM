@@ -86,7 +86,7 @@ from cag.abm.attributes.narratives import (
     SelftranscMap, SelfenhMap, OpennessMap, ConformTradMap,
     SDOMap, EDOMap, RWAMap, rescale_1_6, rescale_1_7,
 )
-from cag.abm.sim import run_simulation, save_results, save_result_plots
+from cag.abm.sim import run_simulation, save_results, save_result_plots, make_phases
 from cag.presets import RUN_BUNDLE_PRESETS, list_presets
 
 
@@ -174,19 +174,36 @@ def _package_policies_arg(value):
 
 
 # ── Day plan + nation builders ───────────────────────────────────
-def build_days(n_days):
+def build_days(n_days, broadcasts_a=1, broadcasts_b=1, interleave=True):
     """Build an alternating package-mode day plan.
 
-    Day 0 broadcasts P-A first, day 1 P-B first, alternating, always
-    closing with a peer-messaging ("C") phase. No per-day ``policy`` key:
+    Each day carries ``broadcasts_a`` P-A broadcasts and ``broadcasts_b``
+    P-B broadcasts (default 1 each = the symmetric canon), always closing
+    with a peer-messaging ("C") phase. The ``a_first`` hint alternates by
+    day so recency is balanced across the run. No per-day ``policy`` key:
     package mode broadcasts every ``package_policies`` entry each phase.
+
+    ``broadcasts_a != broadcasts_b`` is the frequency-asymmetry lever
+    (distinct from ``--reach-a/-b``, which resends the same message to a
+    wider audience). ``interleave`` mixes the two sides (A,B,A,...) when
+    True, else blocks them (A,A,B). For the symmetric 1v1 case both modes
+    collapse to ``['P-A','P-B','C']`` so the canonical schedule is
+    unchanged.
+
+    The "C" phase is always present; peer messaging is disabled at run
+    time by ``--k-peers 0`` (the peer step is a no-op when ``k_peers==0``).
     """
     plan = []
     for i in range(n_days):
-        if i % 2 == 0:
-            plan.append({"phases": ["P-A", "P-B", "C"]})
-        else:
-            plan.append({"phases": ["P-B", "P-A", "C"]})
+        plan.append({
+            "phases": make_phases(
+                broadcasts_a=broadcasts_a,
+                broadcasts_b=broadcasts_b,
+                peer=True,
+                interleave=interleave,
+                a_first=(i % 2 == 0),
+            )
+        })
     return plan
 
 
@@ -266,15 +283,36 @@ def build_config(preset_dict, cli_dict):
 
     CLI flags win over preset values. ``days`` is normalised: an integer
     (from either source) is expanded via :func:`build_days` into the
-    canonical alternating-phases list.
+    canonical alternating-phases list, threading in the frequency-asymmetry
+    knobs (``broadcasts_a`` / ``broadcasts_b`` / ``interleave``).
+
+    Those three knobs are day-plan construction parameters, not
+    ``SIM_CONFIG`` keys, so they are consumed (popped) here and never leak
+    into the resolved config.
     """
     merged = {}
     if preset_dict:
         merged.update(preset_dict)
     merged.update(cli_dict)
 
+    broadcasts_a = merged.pop("broadcasts_a", 1)
+    broadcasts_b = merged.pop("broadcasts_b", 1)
+    interleave = merged.pop("interleave", True)
+
     if "days" in merged and isinstance(merged["days"], int):
-        merged["days"] = build_days(merged["days"])
+        merged["days"] = build_days(
+            merged["days"],
+            broadcasts_a=broadcasts_a,
+            broadcasts_b=broadcasts_b,
+            interleave=interleave,
+        )
+    elif (broadcasts_a, broadcasts_b, interleave) != (1, 1, True):
+        logging.warning(
+            "--broadcasts-a/--broadcasts-b/--interleave were set but 'days' "
+            "is not an integer day-count (got %r); the frequency knobs are "
+            "ignored. Pass --days N to use them.",
+            merged.get("days"),
+        )
 
     return merged
 
@@ -421,6 +459,34 @@ def parse_args(argv=None):
                    default=argparse.SUPPRESS, dest="audience_cap",
                    help="Hard cap on each political agent's audience size "
                         "(applied before reach subsample). 'none' = no cap.")
+
+    # Broadcast frequency (frequency-asymmetry lever; distinct from --reach).
+    p.add_argument("--broadcasts-a", type=int, default=argparse.SUPPRESS,
+                   dest="broadcasts_a",
+                   help="Number of agent_a (pro-climate) broadcasts per day "
+                        "(default 1). Repeated broadcasts pull distinct "
+                        "offline messages until the pool wraps. Requires "
+                        "--days N (ignored when 'days' is a literal plan).")
+    p.add_argument("--broadcasts-b", type=int, default=argparse.SUPPRESS,
+                   dest="broadcasts_b",
+                   help="Number of agent_b (anti-climate) broadcasts per day "
+                        "(default 1). See --broadcasts-a.")
+    p.add_argument("--interleave", dest="interleave",
+                   action=argparse.BooleanOptionalAction,
+                   default=argparse.SUPPRESS,
+                   help="Interleave A/B broadcasts (A,B,A,...) vs block them "
+                        "(A,A,B). Default = interleave on. Only matters when "
+                        "--broadcasts-a != --broadcasts-b.")
+
+    # Persona ablation (Tier-P manipulation check).
+    p.add_argument("--persona-mode", default=argparse.SUPPRESS,
+                   dest="persona_mode",
+                   choices=("real", "shuffled", "neutral"),
+                   help="Persona ablation. 'real' (default) = each agent "
+                        "keeps its own persona; 'shuffled' = each agent is "
+                        "given another agent's whole persona; 'neutral' = "
+                        "every agent gets a generic persona. Ground truth "
+                        "is never altered.")
 
     # Political message pool.
     p.add_argument("--message-source", default=argparse.SUPPRESS,
