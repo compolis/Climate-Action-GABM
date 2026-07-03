@@ -24,6 +24,242 @@ Notes:
 
 ---
 
+## v0.8 — bias-invariance / difference-in-differences validation of the reach-asymmetry runs (run_6436142 / 6436192 / 6436203 / 6436638) — the pro-climate level bias cancels in between-condition contrasts
+
+**Date:** 2026-07-03
+**Analysed runs:** the four reach-asymmetry runs in the section below (baseline, reform-dominant, green-dominant, reform-dominant BA). All use `seed=42, n=50`, so the **same 50 agents with identical ground-truth (GT) values** appear in every condition — a within-subjects design (verified: agent set and per-agent GT identical across all four). This section is the quantitative backing for the "difference-engine" framing argued in [research_notes.md](research_notes.md) (2026-07-03 note); see there for the plain-language interpretation.
+
+**What the test asks.** Day-0 is anchored to each agent's real YouGov value by construction, so any end-of-run gap above GT is pure upward drift (the pro-climate bias). The question: is that bias a *common additive offset* that subtracts out when we compare two conditions on the same agents, or does it *interact with the treatment* and thus contaminate the reach-asymmetry contrasts?
+
+**Scale:** observed package index across all runs [−2.67, +3.00]; GT [−2.17, +3.00]; GT mean **+0.587** (already high, several agents pinned at the +3.00 ceiling).
+
+### Per-condition calibration vs ground truth (end of run, n=50)
+
+| Condition | MBE (end−GT) | MAE | OLS slope | intercept | Pearson r | R² | Spearman ρ | corr(GT, drift) |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Baseline | +0.54 | 0.72 | 0.87 | +0.61 | 0.83 | 0.69 | **0.81** | −0.22 (p=0.13) |
+| Reform-dominant | +0.24 | 0.57 | 0.93 | +0.28 | 0.86 | 0.74 | **0.85** | −0.13 (p=0.36) |
+| Green-dominant | +0.76 | 0.82 | 0.81 | +0.87 | 0.82 | 0.68 | **0.80** | −0.32 (p=0.024) |
+| Reform-dominant (BA) | +0.21 | 0.55 | 0.95 | +0.25 | 0.88 | 0.77 | **0.87** | −0.11 (p=0.45) |
+
+Rank-order fidelity (Spearman ρ) is 0.80–0.87 in every condition — the model preserves *who is more/less pro-climate* even though the *level* is inflated (MBE +0.21 to +0.76).
+
+### Is the bias structure the same across conditions? (homogeneity-of-slopes ANCOVA)
+
+Across the three stochastic-block conditions: **F(2, 144) = 0.50, p = 0.61** — no evidence the GT→end slope differs by condition. The inflation is a common offset, not something the reach manipulation reshapes.
+
+### Do the treatment effects survive, and are they GT-independent? (paired DiD, same 50 agents)
+
+| Contrast | Mean DiD | SD | Paired p | Cohen dz | DiD vs GT (slope, r, p) |
+|---|:--:|:--:|:--:|:--:|:--:|
+| Green − Reform (SBM) | **+0.53** | 0.83 | 4.6×10⁻⁵ | +0.63 | −0.115, r=−0.18, p=0.20 (n.s.) |
+| Green − Baseline | +0.23 | 0.76 | 0.040 | +0.30 | −0.060, r=−0.10, p=0.47 (n.s.) |
+| Reform − Baseline | −0.30 | 0.74 | 0.006 | −0.41 | +0.055, r=+0.10, p=0.50 (n.s.) |
+| Reform_BA − Reform (network placebo) | −0.02 | 0.66 | 0.80 | −0.04 | +0.019, r=+0.04, p=0.79 (n.s.) |
+
+Every treatment contrast is real (the network-swap placebo is correctly ≈0), and **none depends on the agent's GT** — the direct proof the bias cancels in the difference.
+
+### Affinity / exposure enrichment
+
+Per-agent `agent_attributes.csv` fields (`political_exposure` bucket, `affinity_score_a/_b`) are identical across all four runs. Buckets: both=30, neither=16, A-only=2, B-only=2. Net affinity (`score_a − score_b`) ranges [−12.7, +10.6], correlates r=+0.46 with GT.
+
+- **Treatment effect (Green − Reform) by exposure bucket:** both (n=30) **+0.76, p<0.001**; neither (n=16) **+0.16, p=0.30 (n.s.)**; A-only/B-only n=2 each (noise). The effect is localised to the agents who actually receive both broadcasts.
+- **DiD orthogonal to agent traits:** DiD ~ GT (r=−0.18, p=0.20), DiD ~ net-affinity (r=−0.17, p=0.23); joint `DiD ~ GT + net_affinity` **R² = 0.044** (agent traits explain <5% of the treatment effect).
+- **Within-condition drift** is weakly predicted by everything (R²/η² ≤ 0.11): bucket/affinity edge out GT in baseline/reform (drift is exposure-driven, not start-position-driven), GT edges ahead in green (ceiling). All low → individual movement is largely idiosyncratic.
+
+### Caveat — scale-ceiling / regression-to-mean
+
+corr(GT, drift) is negative everywhere and significant in green-dominant (**−0.32, p=0.024**): low-GT agents inflate more than high-GT agents, because GT already sits high and the upward push compresses against the +3 ceiling (this is why the green OLS slope is 0.81 vs 0.93–0.95 for reform). Implication: the green treatment effect is **conservative**, and part of the "green amplifies easily / reform can't go net-negative" asymmetry is a **bounded-scale artefact**. A scale-aware robustness arm (distance-from-anchor or rank/logit transform) is the recommended Tier-2 follow-up; it does not threaten the DiD validity.
+
+---
+
+## v0.8 — reach-asymmetry experiment (run_6436142 / 6436192 / 6436203 / 6436638) — subsampling one side's audience steers the population, but the pro-climate tilt resists reversal
+
+**Date:** 2026-07-03
+**Runs (AIRE, Qwen3-14B via vLLM):**
+
+| Job dir | Condition | reach_a (green/A) | reach_b (reform/B) | network |
+|---|---|:--:|:--:|---|
+| [`run_6436142_canon_exposure_baseline`](../data/output/experiments/run_6436142_canon_exposure_baseline/) | Baseline (symmetric reach) | 1.0 | 1.0 | stochastic_block |
+| [`run_6436192_canon_exposure_reform_dominant`](../data/output/experiments/run_6436192_canon_exposure_reform_dominant/) | Reform-dominant | **0.25** | 1.0 | stochastic_block |
+| [`run_6436203_canon_exposure_green_dominant`](../data/output/experiments/run_6436203_canon_exposure_green_dominant/) | Green-dominant | 1.0 | **0.25** | stochastic_block |
+| [`run_6436638_canon_exposure_reform_dominant_barabasi_albert`](../data/output/experiments/run_6436638_canon_exposure_reform_dominant_barabasi_albert/) | Reform-dominant (BA network) | **0.25** | 1.0 | barabasi_albert |
+
+**Shared config (identical across all four, only reach + network differ):** `n_citizens=50`, `days=5`, **`k_peers_per_day=2` (peer messaging ON — unlike the memory sweep above)**, `communication_mode=package`, `political_exposure_mode=rule_affinity_rank` with **canonical symmetric targets `{A-only: 0.05, B-only: 0.05, both: 0.60, neither: 0.30}`**, `day0_anchor=ground_truth_with_rationale`, `Qwen/Qwen3-14B`, `thinking=False`, `random_seed=42`. Every run shares the same **GT package mean +0.587** and **Day-0 anchor +0.587**. `reach_a`/`reach_b` subsample the respective political agent's matched audience *each broadcast* (reach, not frequency): reform-dominant throttles the green agent to 25% of its audience, green-dominant throttles the reform agent. **A = green / pro-climate political agent; B = reform / climate-sceptic political agent.**
+
+> **New memory setting used from here on — `day0_anchor.ttl_days = 1` (the configuration we are standardising on).** The three memory tiers play *different* roles and are deliberately configured differently:
+> - **Day-0 anchor (`ttl_days = 1`) — an *artificial* seed, not a cognitive model.** The ground-truth YouGov value is injected into the agent's context on Day 0 and Day 1 *only*, then dropped. Its sole job is to pin the agent's starting position to real survey data so Day-1 opinions are grounded in the empirical distribution rather than the LLM's prior; after that the agent is on its own. Keeping it forever (the earlier `ttl = ∞` baseline) turns it into a permanent tether that re-pins opinions every day and manufactures the runaway pro-climate climb (see the memory-ablation sweep below) — that is an artefact, not behaviour we want. `ttl_days = 1` is the value we are happy with: **anchor the start, then forget.**
+> - **Verbatim window (`verbatim_window_days = 2`) and daily summaries — these *do* model human cognition** and are left on. They give the agent a rolling short-term verbatim memory of the last two days plus a compressed gist of older days, which is the intended cognitive mechanism (recent events remembered in detail, older ones as summaries). These are conceptually separate from the anchor: they carry the agent's *own* evolving experience forward, whereas the anchor injects an *external* ground-truth number.
+>
+> So the setting here is: **artificial GT anchor for exactly one day of influence, real cognitive memory (2-day verbatim + summaries + own-reasoning) running normally on top.**
+
+**TL;DR.** This is the reach-asymmetry probe. The result is a **clean monotone population-level signal in the dominant side's direction** — throttling the green agent (reform-dominant) flattens the pro-climate climb, throttling the reform agent (green-dominant) amplifies it — and the effect is **robust to network topology** (stochastic-block vs Barabási–Albert reform-dominant are within 0.02). The **`both` bucket (60% of agents, doubly exposed) is the mechanism**: it swings with whichever side keeps its reach. Peer messaging (`k=2`) carries the shift to the **unexposed `neither` bucket**, which still climbs +0.5 to +0.8 with no direct broadcast. **But the asymmetry is not symmetric in strength:** even a 4:1 reach advantage for the reform side only *flattens* the population to +0.82 — still **above** the +0.587 anchor — and never drives it net-negative, whereas the same advantage for the green side amplifies easily to +1.35. That is the systematic pro-climate bias showing through, and it is the thing to tackle next.
+
+### Population-level effect (package index, D0 → D5)
+
+| Condition | reach A/B | D0 | D5 (end) | Net drift | Mean \|Δ\| | % moved | end − GT (bias) | MAE | ρ vs GT |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Green-dominant | 1.0 / 0.25 | 0.59 | **+1.35** | +0.76 | 0.82 | 88% | **+0.76** | 0.82 | 0.80 |
+| **Baseline** | 1.0 / 1.0 | 0.59 | **+1.12** | +0.54 | 0.72 | 94% | +0.54 | 0.72 | 0.81 |
+| Reform-dominant | 0.25 / 1.0 | 0.59 | **+0.82** | +0.24 | 0.57 | 86% | +0.24 | 0.57 | 0.85 |
+| Reform-dominant (BA) | 0.25 / 1.0 | 0.59 | **+0.80** | +0.21 | 0.55 | 88% | +0.21 | 0.55 | 0.87 |
+
+Clean ordering **Green-dominant (+1.35) > Baseline (+1.12) > Reform-dominant (+0.82 ≈ +0.80 BA)**. Note the calibration columns: reform-dominant is the *most accurate* run (MAE 0.55–0.57, ρ up to 0.87) simply because throttling the pro-climate side drags the inflated aggregate back toward the +0.587 ground truth — accuracy here is a side effect of countering the model's own tilt, not of better dynamics.
+
+### Population trajectory (package-index mean, by day)
+
+| Condition | D0 | D1 | D2 | D3 | D4 | D5 |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| Green-dominant | 0.59 | 1.24 | 1.36 | 1.30 | 1.34 | 1.35 |
+| Baseline | 0.59 | 1.03 | 1.06 | 1.05 | 1.13 | 1.12 |
+| Reform-dominant | 0.59 | 0.77 | 0.81 | 0.79 | 0.79 | 0.82 |
+| Reform-dominant (BA) | 0.59 | 0.77 | 0.82 | 0.75 | 0.78 | 0.80 |
+
+All four jump on Day 1 then plateau — reach asymmetry sets the *height* of the plateau, not its shape.
+
+### Bucket-wise (the mechanism)
+
+Under 5/5/60/30 the informative buckets are **`both`** (n=30, doubly exposed, Day-0 mean +0.76) and **`neither`** (n=16, no broadcast — only peer messaging + memory, Day-0 mean +0.44). The committed `A-only`/`B-only` cells are n=2 each and are noise (reported for completeness only).
+
+**`both` bucket (n=30) — net drift D0 → D5:**
+
+| Condition | D0 | D5 | Net | reads |
+|---|:--:|:--:|:--:|---|
+| Green-dominant | 0.76 | **1.60** | **+0.84** | green reach wins → strongest climb |
+| Baseline | 0.76 | 1.23 | +0.47 | both sides full → moderate climb |
+| Reform-dominant | 0.76 | 0.84 | +0.08 | reform reach wins → **nearly frozen** |
+| Reform-dominant (BA) | 0.76 | 0.81 | +0.05 | same, topology-independent |
+
+The doubly-exposed majority is where reach asymmetry bites hardest: it ranges from a near-standstill (+0.05 to +0.08 when the reform side dominates) to a strong +0.84 climb when the green side dominates. This bucket drives the population ordering.
+
+**`neither` bucket (n=16) — no direct broadcast, moves only via peers + memory:**
+
+| Condition | D0 | D5 | Net |
+|---|:--:|:--:|:--:|
+| Baseline | 0.44 | 1.24 | +0.80 |
+| Green-dominant | 0.44 | 1.11 | +0.68 |
+| Reform-dominant (BA) | 0.44 | 1.04 | +0.60 |
+| Reform-dominant | 0.44 | 0.96 | +0.52 |
+
+Even with **zero** direct exposure, the unexposed cohort climbs +0.5 to +0.8 — peer diffusion (`k=2`) plus the pro-climate anchor carries the broadcast signal indirectly. The ordering here is weaker and noisier than in `both` (peer diffusion is a lagged, indirect channel), but the reform-dominant conditions still sit at the bottom, consistent with the population effect.
+
+### What this says about the systematic pro-climate bias (setup for next step)
+
+- **The reach lever is real and directional** — the population endpoint moves monotonically with which side keeps its audience, and the mechanism (the `both` bucket) is exactly the one that should respond. The probe works.
+- **The lever is asymmetric in strength.** A 4:1 reach advantage for the reform side only pulls the aggregate down to +0.82 (still above the +0.587 anchor, never net-negative), while the identical advantage for the green side pushes it up to +1.35. The model amplifies pro-climate persuasion readily but resists counter-attitudinal (sceptic) persuasion — the same asymmetry the memory sweep exposed in the B-only bucket, now visible through the reach channel with peer messaging on.
+- **Accuracy ≠ neutrality.** Reform-dominant scores the best MAE (0.55) only because throttling the green side happens to cancel the model's built-in inflation. That is a coincidence of two biases partly offsetting, not a calibrated simulation. The next task is to attack the pro-climate tilt at its source (Day-0 seeding / prompt framing / survey parsing) so that a *symmetric* reach configuration lands near the +0.587 ground truth on its own.
+
+### Caveats
+
+- **Single seed, n = 50, one model.** Directional effects, not error-barred estimates. The n = 2 committed-minority buckets are uninterpretable.
+- **Reach ≠ frequency.** These runs vary *audience fraction per broadcast*; the complementary frequency-asymmetry axis (more broadcasts from one side) is not yet CLI-exposed.
+- **Peer channel is on (`k=2`).** Unlike the memory-ablation sweep above (broadcast-only), movement here mixes broadcast reach with peer diffusion, which is why the `neither` bucket moves at all.
+
+---
+
+## v0.8 — memory-ablation sweep (run_6426018 / 6426231 / 6426233 / 6426250 / 6426433 / 6434951) — verbatim self-memory is the main inertia driver; stripping it makes agents markedly more responsive
+
+**Date:** 2026-07-02 (daily-summaries-off isolation run added 2026-07-03)
+**Runs (AIRE, Qwen3-14B via vLLM):**
+
+| Job dir | Condition |
+|---|---|
+| [`run_6426233_memory_baseline`](../data/output/experiments/run_6426233_memory_baseline/) | baseline (default memory) |
+| [`run_6426018_Day 0  achoring off after two days`](../data/output/experiments/) | Day-0 anchor TTL = 2 |
+| [`run_6426231_own_reasoning_false`](../data/output/experiments/run_6426231_own_reasoning_false/) | own_reasoning off |
+| [`run_6434951_Daily summaries off`](../data/output/experiments/run_6434951_Daily%20summaries%20off/) | **daily_summaries off (only)** — isolates the summaries tier (anchor kept at TTL = ∞, own_reasoning on) |
+| [`run_6426250_Daily summaries off and day 0 anchor off after 2 days`](../data/output/experiments/) | daily_summaries off + anchor TTL = 2 |
+| [`run_6426433_Daily summaries off and day 0 anchor off after 2 days and own reasoning off`](../data/output/experiments/) | daily_summaries off + anchor TTL = 2 + own_reasoning off |
+
+**Shared config (identical across all six, only `memory` differs):** `n_citizens=50`, `days=7`, `k_peers_per_day=0` (**broadcast-only — no peer messaging, so opinion movement is driven purely by the two political broadcasts + the agent's own memory**), `communication_mode=package`, `political_exposure_mode=rule_affinity_rank` with **split-50 targets** (`A-only=B-only=0.50`), `day0_anchor=ground_truth_with_rationale`, `Qwen/Qwen3-14B`, `thinking=False`, `random_seed=42`. Every run has the same **GT package mean = +0.587** and the same **Day-0 anchor = +0.587** (seeded from YouGov), so the Day-0 → Day-7 movement is directly comparable.
+
+**TL;DR.** With peer messaging off, the only things that can move an agent are the broadcasts and *what the agent remembers of its own past answers*. This sweep isolates the memory half. The headline: the **verbatim self-memory tier (Day-0 anchor + daily summaries + own-reasoning) is collectively the dominant source of inertia**. The fuller the memory, the *less* responsive and the *more* one-directionally inflationary the agent is; stripping those sections makes agents move more often, in larger daily steps, and stops the runaway monotonic climb. Peer-to-peer diffusion is **not** what pins opinions here — the agent's own remembered history is. **The single most important cut is bucket-wise (A-only vs B-only, below):** the aggregate mean hides a directional asymmetry — the pro-climate-exposed A-only bucket climbs strongly under *every* memory setting, while the sceptic B-only bucket is **frozen at baseline** and only gets persuaded *downward* by the anti-climate broadcast once memory is stripped. Memory's real job here is **shielding the sceptics from counter-attitudinal persuasion**, not damping both sides symmetrically.
+
+> **Baseline caveat:** because the memory pipeline was refactored in v0.8 (section-wise assembly, reflection-stage threading, shared verbatim window), this `memory_baseline` is **not** numerically comparable to pre-refactor v2 runs. Compare only *within* this batch.
+
+### Responsiveness by memory condition (Day-0 → Day-7, package index)
+
+| Condition | anchor | summaries | own‑reas. | Net drift (signed) | Movement (mean \|Δ\|) | % agents moved | **Avg daily step** | End index (D7) |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Baseline (default)** | ttl=∞ | on | on | **+0.51** | 0.74 | 86% | **0.18** | +1.09 |
+| Anchor TTL = 2 | ttl=2 | on | on | +0.33 | 0.92 | 94% | 0.21 | +0.92 |
+| own_reasoning off | ttl=∞ | on | **off** | +0.39 | 0.78 | 84% | 0.31 | +0.97 |
+| **Daily summaries off (only)** | ttl=∞ | **off** | on | +0.54 | 0.72 | 86% | 0.15 | +1.12 |
+| Summaries off + TTL = 2 | ttl=2 | **off** | on | +0.43 | 0.73 | 94% | 0.19 | +1.02 |
+| **All three stripped** | ttl=2 | **off** | **off** | +0.36 | **1.34** | 94% | **0.44** | +0.94 |
+
+*Net drift* = mean signed (Day7 − Day0) across agents; *Movement* = mean absolute shift; *Avg daily step* = mean absolute change between consecutive surveyed days (the cleanest day-to-day responsiveness proxy since broadcasts are the only external driver).
+
+### Package-index trajectory (population mean, by day)
+
+| Condition | D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | shape |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|---|
+| Baseline | 0.59 | 0.92 | 0.96 | 1.01 | 1.06 | 1.10 | 1.11 | 1.09 | **monotone climb → plateau** |
+| Anchor TTL = 2 | 0.59 | 0.96 | 1.06 | 0.94 | 0.95 | 0.95 | 0.93 | 0.92 | jump, then **falls back after anchor drops (D>2)** |
+| own_reasoning off | 0.59 | 0.91 | 1.03 | 0.93 | 0.98 | 1.05 | 0.87 | 0.97 | oscillates |
+| Daily summaries off (only) | 0.59 | 0.97 | 0.93 | 0.98 | 1.01 | 1.04 | 1.08 | 1.12 | **monotone climb → plateau (≈ baseline)** |
+| Summaries off + TTL = 2 | 0.59 | 0.85 | 0.88 | 0.87 | 0.98 | 0.98 | 0.98 | 1.02 | gentle drift |
+| All three stripped | 0.59 | 0.91 | 1.05 | 1.02 | 0.95 | 1.00 | 0.91 | 0.94 | **largest swings, no pinning** |
+
+### Bucket-wise trajectory (A-only vs B-only) — the population mean hides a directional asymmetry
+
+**This is the informative cut.** Under split-50 + `rule_affinity_rank` the two buckets don't just receive opposite broadcasts, they *start* far apart: affinity-rank sorts the model's pro-climate leaners into **A-only** (exposed only to pro-climate agent A; n = 25, Day-0 mean **+1.32**) and the climate-sceptic tail into **B-only** (exposed only to sceptic agent B; n = 25, Day-0 mean **−0.15**). Averaging them back to the +0.587 population mean cancels the persuasion signal, so read the buckets, not the aggregate. Both buckets are n = 25 in every run and share the same Day-0 anchors (+1.32 / −0.15), so cross-condition comparison is clean.
+
+**Net drift by bucket (Day-0 → Day-7 package index):**
+
+| Condition | A-only D0 | A-only D7 | **A-only net** | B-only D0 | B-only D7 | **B-only net** |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Baseline (default)** | 1.32 | 2.31 | **+0.99** | −0.15 | −0.12 | **+0.03** |
+| Anchor TTL = 2 | 1.32 | 2.23 | +0.91 | −0.15 | −0.39 | −0.25 |
+| own_reasoning off | 1.32 | 2.43 | +1.11 | −0.15 | −0.48 | −0.33 |
+| Daily summaries off (only) | 1.32 | 2.31 | +0.99 | −0.15 | −0.06 | +0.09 |
+| Summaries off + TTL = 2 | 1.32 | 2.27 | +0.95 | −0.15 | −0.23 | −0.09 |
+| **All three stripped** | 1.32 | 2.50 | **+1.18** | −0.15 | −0.61 | **−0.47** |
+
+**A-only trajectory (population mean, by day):**
+
+| Condition | D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Baseline | 1.32 | 2.01 | 2.10 | 2.16 | 2.24 | 2.31 | 2.30 | 2.31 |
+| Anchor TTL = 2 | 1.32 | 2.04 | 2.17 | 2.11 | 2.19 | 2.21 | 2.19 | 2.23 |
+| own_reasoning off | 1.32 | 1.99 | 2.29 | 2.21 | 2.28 | 2.47 | 2.33 | 2.43 |
+| Daily summaries off (only) | 1.32 | 2.09 | 2.10 | 2.18 | 2.21 | 2.23 | 2.24 | 2.31 |
+| Summaries off + TTL = 2 | 1.32 | 1.94 | 2.01 | 2.13 | 2.22 | 2.24 | 2.23 | 2.27 |
+| All three stripped | 1.32 | 1.96 | 2.21 | 2.45 | 2.47 | 2.44 | 2.38 | 2.50 |
+
+**B-only trajectory (population mean, by day):**
+
+| Condition | D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Baseline | −0.15 | −0.17 | −0.18 | −0.13 | −0.11 | −0.11 | −0.09 | −0.12 |
+| Anchor TTL = 2 | −0.15 | −0.12 | −0.05 | −0.23 | −0.29 | −0.31 | −0.33 | −0.39 |
+| own_reasoning off | −0.15 | −0.17 | −0.23 | −0.35 | −0.33 | −0.36 | −0.60 | −0.48 |
+| Daily summaries off (only) | −0.15 | −0.16 | −0.24 | −0.23 | −0.20 | −0.14 | −0.09 | −0.06 |
+| Summaries off + TTL = 2 | −0.15 | −0.25 | −0.25 | −0.39 | −0.26 | −0.29 | −0.28 | −0.23 |
+| All three stripped | −0.15 | −0.15 | −0.11 | −0.41 | −0.57 | −0.45 | −0.56 | −0.61 |
+
+**What the buckets reveal (and the average hid):**
+
+- **A-only persuasion is robust to memory — it climbs strongly in every condition (+0.91 to +1.18).** Congenial influence (a pro-climate agent nudging already-pro-climate agents further up) fires regardless of what the agent remembers; memory ablation only modulates the *magnitude* (largest when all three sections are stripped, +1.18; smallest under anchor TTL = 2, +0.91). The pro-side of the model is easy to push and hard to stop.
+- **B-only is the discriminating bucket — and it flips sign with memory.** At **baseline the sceptic cohort is effectively frozen (+0.03)**: full memory *shields* it from the anti-climate broadcast, so it never moves off its Day-0 −0.15. As verbatim self-memory is stripped, agent B's message starts to land and B-only drifts **down** toward it: −0.09 (summaries off + TTL 2) → −0.25 (anchor TTL 2) → −0.33 (own_reasoning off) → **−0.47 (all three stripped)**. Memory, not the peer channel (off here), is what prevents counter-attitudinal persuasion of the sceptics.
+- **The aggregate "pro-climate inertia" is really a B-side story.** Baseline's headline +0.51 net drift = A-only +0.99 averaged against a frozen B-only +0.03. What memory ablation actually *unlocks* is the anti-climate persuasion of the B-only bucket; the A-only bucket was already moving freely. Reading only the population mean would wrongly attribute the change to symmetric extra movement on both sides.
+- **Summaries-off-only confirms the no-op at bucket level too.** B-only stays frozen at **+0.09 ≈ baseline +0.03** and A-only is identical to baseline (+0.99) — removing the compressed gist tier alone shields the sceptics exactly as much as baseline does. The anti-climate persuasion only appears once the **Day-0 anchor** (TTL) or **own-reasoning** verbatim tier is touched.
+
+### What each memory section does to responsiveness
+
+- **The Day-0 anchor is a stickiness *and* inflation driver.** Baseline (anchor never expires) is the *only* run that climbs monotonically and holds near +1.1 — opinions ratchet up and the anchor re-pins them there every day. Expiring the anchor at TTL = 2 lifts the fraction of agents who ever move from **86% → 94%**, cuts net drift **+0.51 → +0.33**, and — visibly — the trajectory *bends back down* once the anchor disappears after Day 2 instead of continuing to inflate. The persistent Day-0 tether is what produces the runaway pro-climate climb.
+- **Own-reasoning is a day-to-day stabiliser.** Removing it (own_reasoning off) nearly **doubles the average daily step (0.18 → 0.31)**: with no verbatim record of its own prior rationale in front of it, the agent re-derives its position each day and wobbles more, even though the net endpoint is similar. So this section trades responsiveness for consistency.
+- **Daily summaries alone matter least — now cleanly isolated.** The dedicated *summaries-off-only* run (anchor kept at TTL = ∞, own_reasoning on — the sole difference from baseline) is **statistically indistinguishable from baseline**: net drift +0.54 vs +0.51, movement 0.72 vs 0.74, identical 86% moved, avg daily step *lower* at 0.15 vs 0.18, and the same **monotone climb → plateau** ending at +1.12 vs +1.09. Removing the compressed gist tier does **not** increase responsiveness. This also settles the earlier confound: the responsiveness gains seen in the *Summaries off + TTL = 2* run came from the **anchor expiry**, not from dropping summaries — with the anchor left intact, summaries removal is a no-op. The compressed gist tier is a negligible anchor next to the verbatim Day-0 anchor and own-reasoning.
+- **The effects stack.** Stripping all three verbatim self-memory sources at once is by far the most responsive configuration: **average daily step 0.44 (2.5× baseline)**, mean absolute shift **1.34 (1.8× baseline)**, and the largest single-agent move of the batch (|Δ| = 3.67, a full sign flip across the scale). Agents here are essentially re-reading only the broadcasts + recent reflections each day, so they track the incoming signal far more loosely to their own past.
+
+### Caveats
+
+- **Single seed, n = 50, one model, broadcast-only.** These are directional effects, not error-barred estimates; no peer channel (`k_peers=0`) by design, so this isolates memory but says nothing about peer diffusion.
+- **Direction of bias is unchanged.** Every condition still ends *above* the GT mean of +0.587 (net signed shift positive everywhere) — memory ablation reduces the *runaway* pro-climate climb and increases responsiveness, but does not remove the underlying pro-climate tilt of the model.
+- **Responsiveness ≠ accuracy.** A larger daily step means the agent reacts more to the latest broadcast; whether that tracks or *erodes* calibration to ground truth is a separate question (`calibration.csv` per run) not analysed here.
+
+---
+
 ## v0.8 — configurable-memory + debias-removal smoke (20260701_221142) — new build runs end-to-end, default memory reproduces the v2 dynamics
 
 **Date:** 2026-07-01

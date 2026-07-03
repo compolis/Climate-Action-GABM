@@ -3,13 +3,14 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [1.0](#10)
-3. [0.8 — Refactor Track: `sim.py` Split, v2 Memory Architecture, and Operational Polish](#08--refactor-track-simpy-split-v2-memory-architecture-and-operational-polish)
-4. [0.7 — HPC-First Infrastructure, Audit-Trail Outputs, and Network Defence](#07--hpc-first-infrastructure-audit-trail-outputs-and-network-defence)
-5. [0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs](#06--canonical-defaults-offline-political-messages-and-full-stack-smoke-docs)
-6. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
-7. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
-8. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
-9. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
+3. [0.9 — Persona-Null Ablation, Broadcast-Frequency CLI, and Affinity-Weight Ladder](#09--persona-null-ablation-broadcast-frequency-cli-and-affinity-weight-ladder)
+4. [0.8 — Refactor Track: `sim.py` Split, v2 Memory Architecture, and Operational Polish](#08--refactor-track-simpy-split-v2-memory-architecture-and-operational-polish)
+5. [0.7 — HPC-First Infrastructure, Audit-Trail Outputs, and Network Defence](#07--hpc-first-infrastructure-audit-trail-outputs-and-network-defence)
+6. [0.6 — Canonical Defaults, Offline Political Messages, and Full-Stack Smoke Docs](#06--canonical-defaults-offline-political-messages-and-full-stack-smoke-docs)
+7. [0.5 — Local LLM Provider, Prompt Unification, and Committed-Minority Audience Reframe](#05--local-llm-provider-prompt-unification-and-committed-minority-audience-reframe)
+8. [0.4 — Package Mode, Anchoring, Checkpointing, and Reach Controls](#04--package-mode-anchoring-checkpointing-and-reach-controls)
+9. [0.3 — Bias Calibration & Validation](#03--bias-calibration--validation)
+10. [0.2 — MVP: Competing-Minority Climate Opinion Model](#02--mvp-competing-minority-climate-opinion-model)
 
 
 ## Overview
@@ -20,6 +21,39 @@ Version 0.5 was opened mid-stream rather than as a single planned sprint; this r
 The full design specification lives in [docs/Model_Design.md](docs/Model_Design.md).
 Detailed issue descriptions and acceptance criteria are in [docs/github_issues.md](docs/github_issues.md).
 Experiment results and analysis are in [docs/result_report.md](docs/result_report.md).
+
+
+## 0.9 — Persona-Null Ablation, Broadcast-Frequency CLI, and Affinity-Weight Ladder
+
+v0.9 is the first **behaviour-bearing** release after the v0.8 refactor track. It adds a Tier-P persona-null ablation (a manipulation check on whether the model conditions on personas at all), a broadcast-frequency-asymmetry CLI that lets one side out-broadcast the other across a whole run, and a simplified three-tier affinity-weight ladder — plus a researcher-facing walkthrough of the affinity-ranking mechanism. Default behaviour is unchanged: `persona_mode="real"` and 1-vs-1 broadcasting reproduce prior canon bit-for-bit. No `__version__` bump (carried from v0.8).
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | Tier-P persona-null ablation — `SurveyedNation.apply_persona_mode(mode, seed)` in [src/cag/abm/environment.py](src/cag/abm/environment.py) with `real` / `shuffled` (derangement) / `neutral` arms; ground truth never touched | ✅ Done |
+| 2 | Persona override mechanism — `SurveyedCitizen.persona_override` + `get_persona()` hook in [src/cag/abm/agent.py](src/cag/abm/agent.py); `NEUTRAL_PERSONA_TEXT` constant | ✅ Done |
+| 3 | Wiring — `SIM_CONFIG["persona_mode"]="real"` (→ 34 keys), `VALID_PERSONA_MODES`, validation + application in [src/cag/abm/sim.py](src/cag/abm/sim.py); `nation.persona_map` stored | ✅ Done |
+| 4 | Audit trail + resume — `persona_map.csv` schema in [src/cag/io/results.py](src/cag/io/results.py) (final-output only); `persona_mode` in `_RESUME_HARD_KEYS` ([src/cag/io/checkpoint.py](src/cag/io/checkpoint.py)) | ✅ Done |
+| 5 | `--persona-mode {real,shuffled,neutral}` CLI flag ([src/cag/__main__.py](src/cag/__main__.py)); `tierP` bundle in [src/cag/presets.py](src/cag/presets.py); [scripts/aire/sweeps/tierP.txt](scripts/aire/sweeps/tierP.txt) (3 arms × 3 seeds) | ✅ Done |
+| 6 | Broadcast-frequency-asymmetry CLI — `--broadcasts-a` / `--broadcasts-b` / `--interleave`/`--no-interleave` flags + `build_days()` in [src/cag/__main__.py](src/cag/__main__.py); frequency lever orthogonal to `reach_a`/`reach_b` | ✅ Done |
+| 7 | Affinity-weight three-tier ladder — `balanced` (political 2.0 / values 1.0 / demographics 0.5), `vote_dominant` (political 4.0), `values_dominant` (values 4.0) in [src/cag/abm/config/exposure.py](src/cag/abm/config/exposure.py) | ✅ Done |
+| 8 | AIRE run labels — optional `RUN_LABEL` env var → self-describing scratch output dir suffix in [scripts/aire/run.sh](scripts/aire/run.sh) | ✅ Done |
+| 9 | Researcher docs — affinity scorecard/sort-and-slice walkthrough + weight table, `persona_mode` entry, and frequency-CLI section in [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) | ✅ Done |
+| 10 | Docs sweep — `CHANGE_LOG.md` [0.9], `ROADMAP.md` 0.9 (this section), `DEVELOPMENT_HISTORY.md` 2026-07-03 entries, `Model_Design.md` §31–§33 | ✅ Done |
+| 11 | Test suite — new [tests/test_persona_mode.py](tests/test_persona_mode.py) (20); new `TestBroadcastFrequency` in [tests/test_cli.py](tests/test_cli.py) (9); suite **647 passed, 1 skipped** (was 610) | ✅ Done |
+| 12 | No `__version__` bump — carried from v0.8; held for the user's release decision | ✅ Done |
+
+**Current integration suite context:** 647 passed, 1 skipped.
+
+### v0.9 carry-forward backlog (toward 1.0)
+
+- Persona-null demo notebook (Tier-P) once the AIRE `tierP` sweep run directories return — deferred this cycle.
+- AIRE production run of the persona-null sweep (3 arms × 3 seeds) to quantify the real/shuffled/neutral accuracy gap.
+- Deep rewrite of [docs/Run_Output_Guide.md](docs/Run_Output_Guide.md) (`persona_map.csv` addition) — carried from v0.7 / v0.8.
+- Condition B 1P-debias bias re-measurement (NB 13 partial rerun, ~120 API calls) — carried from v0.5 / v0.6 / v0.7 / v0.8.
+- 30–50-agent Qwen3 rerun for per-agent Spearman ρ stability — carried from v0.5 / v0.6 / v0.7 / v0.8.
+- Async/parallel dispatch implementation from [docs/Model_Design.md](docs/Model_Design.md) §16 — carried from v0.7 / v0.8.
+- Package-message v2 authoring — carried from v0.6 / v0.7 / v0.8.
+- NB 27 affinity-preset re-run against the shipped three-tier ladder (agreement percentages drifted) — new this cycle.
 
 
 ## 0.8 — Refactor Track: `sim.py` Split, v2 Memory Architecture, and Operational Polish

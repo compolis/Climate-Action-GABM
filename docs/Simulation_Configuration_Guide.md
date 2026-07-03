@@ -120,7 +120,7 @@ core.
 
 ## 4. Every setting explained
 
-This section covers all 33 settings, grouped by what they control. Each entry says what the setting
+This section covers all 34 settings, grouped by what they control. Each entry says what the setting
 does, its default, and whether it's something you'd normally change.
 
 ### Who is in the simulation
@@ -131,6 +131,25 @@ The maximum number of citizens to create from the YouGov survey. The actual numb
 lower if some survey rows can't be used. Smaller runs are faster and cheaper but noisier: below about
 30 citizens the four exposure groups get so small that results swing wildly from run to run, so very
 small sizes are best kept for quick tests. *Safe to change.*
+
+#### `persona_mode` — default `"real"`
+
+A **manipulation check** on whether the model actually conditions on each agent's assigned persona. It
+never touches the scoring target (real opinions are always read from the survey), so all three modes
+are scored against the same ground truth:
+
+| `persona_mode` | What each agent is told it is |
+|---|---|
+| `"real"` | **Default.** Its own real persona — demographics, voting history, and values. No change; results are bit-for-bit identical to leaving this unset. |
+| `"shuffled"` | *Another* agent's whole persona, verbatim (still a coherent real UK person). The reassignment is a derangement, so no agent keeps its own. |
+| `"neutral"` | The generic `"I am an adult living in the United Kingdom."` — no age, region, politics, or values. |
+
+If persona genuinely drives opinions, accuracy should be highest under `"real"`, collapse under
+`"neutral"`, and land in between (mismatched but coherent) under `"shuffled"`. The persona each agent
+ended up with is written to `persona_map.csv` for the audit trail. From the command line use
+`--persona-mode {real,shuffled,neutral}`; vary `--seed` to change the shuffle permutation. The `tierP`
+run preset (`--preset tierP`) bundles this with a Day-0-only, package-mode shape for the ablation.
+*Safe to change.*
 
 ### The daily schedule
 
@@ -173,6 +192,31 @@ which means "three pro broadcasts, one anti broadcast, then peer chat." Use eith
 How many network neighbours each citizen sends a message to during a peer-chat (`C`) phase. Higher
 numbers mean more AI calls (and more cost) per peer phase. If a citizen has fewer neighbours than this
 number, they simply message all of them. *Safe to change.*
+
+#### Broadcast-frequency asymmetry from the command line
+
+The shorthand above lets one side broadcast more often than the other *within a day*. When you run
+from the command line ([src/cag/__main__.py](../src/cag/__main__.py)) and give `--days` a plain
+number, three flags apply that same asymmetry to **every** day of the run without you having to write
+out a `days` list:
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--broadcasts-a N` | `1` | The pro-climate politician broadcasts `N` times each day. |
+| `--broadcasts-b M` | `1` | The anti-climate politician broadcasts `M` times each day. |
+| `--interleave` / `--no-interleave` | on | With `--interleave` the broadcasts alternate (`A,B,A,…`); with `--no-interleave` they run in blocks (`A,A,…,B`). Only matters when the two counts differ. |
+
+For example, `--days 5 --broadcasts-a 3 --broadcasts-b 1 --no-interleave` builds five identical days
+of `["P-A", "P-A", "P-A", "P-B", "C"]`; adding `--interleave` instead gives
+`["P-A", "P-B", "P-A", "P-A", "C"]`. Peer chat (`C`) is always appended — switch it off with
+`--k-peers 0`. The default `1`-vs-`1` is exactly the classic schedule, so leaving these flags off
+changes nothing.
+
+This is a **frequency** lever: how *often* each side speaks. It is distinct from `reach_a` / `reach_b`
+(see [Who hears the politicians](#who-hears-the-politicians)), which controls what *fraction of the
+audience* a single broadcast reaches. The two combine — you can have one side speak more often *and*
+to a wider slice. The flags only apply when `--days` is a number; if you pass an explicit `days` list
+(where each day already names its own phases) they are ignored, with a warning.
 
 ### The peer (social) network
 
@@ -344,6 +388,35 @@ The rule used to sort citizens into the four exposure groups (pro-only, anti-onl
 
 *Safe to change.*
 
+**How affinity ranking works.** The rule turns each citizen into two numbers and then sorts. There
+are two separate pieces:
+
+*Piece 1 — the scorecard.* Every citizen gets a **side-A score** (pull toward the pro-climate side)
+and a **side-B score** (pull toward the anti-climate side). Each score is a weighted sum of signals:
+their values (openness, self-transcendence, RWA, …), their demographics (age, education, region), and
+their politics (Brexit vote, left–right placement, party vote). The `affinity_weights` below set how
+much each signal counts. A citizen who is open, self-transcendent, Remain-voting and Labour/Green
+scores high on side A; someone authoritarian, Leave-voting and Reform/Conservative scores high on
+side B.
+
+*Piece 2 — sort and slice.* The scores are used **only for ranking** — their absolute size is
+meaningless, only who-outranks-whom matters. The rule then fills the four groups top-down to hit your
+target proportions exactly:
+
+1. **B-only** first — take the citizens with the highest side-B scores until that group is full.
+2. **A-only** next — from those left, take the highest side-A scores until full.
+3. **both** — from those still left, take the highest of *either* score until full.
+4. **neither** — everyone remaining (the citizens with the weakest political signal on both sides)
+   hears no politician.
+
+Because the group sizes come from `political_exposure_targets` and the slicing always fills them, **the
+target proportions are hit regardless of the weights** — the weights only change *which individuals*
+land near each group's boundary. That is why the weights are safe to tune.
+
+*A quick example (targets = 5% / 5% / 60% / 30%, 100 citizens):* the 5 most anti-leaning citizens
+become `B-only`, the 5 most pro-leaning of the rest become `A-only`, the next 60 most
+politically-engaged become `both`, and the 30 least-engaged fall into `neither`.
+
 #### `political_exposure_targets` — default `None`
 
 The proportions of citizens in each of the four groups. `None` uses the **committed-minority
@@ -361,14 +434,24 @@ A custom example: `{"A-only": 0.2, "B-only": 0.2, "both": 0.3, "neither": 0.3}`.
 
 #### `affinity_weights` — default `None`
 
-How strongly each piece of a citizen's profile counts when scoring their pull toward each side.
-`None` uses the **balanced** preset. Three presets:
+How strongly each piece of a citizen's profile counts when scoring their pull toward each side (see
+"How affinity ranking works" above). `None` uses the **balanced** preset.
 
-| Preset | Idea |
-|---|---|
-| `balanced` *(default)* | All three kinds of signal — values, demographics, and vote/politics — contribute, with values and vote choice weighted most. |
-| `vote_dominant` | "Is it really all just vote choice?" — boosts vote/Brexit/politics, shrinks the rest. |
-| `values_dominant` | "Can values alone reproduce the groups?" — boosts values, shrinks vote-related signals. |
+Each preset is a simple **three-tier ladder**: a dominant signal family, the next at a quarter or half,
+then demographics weakest. The three signal families are **vote/politics** (Brexit vote, left–right
+placement, party vote), **values** (openness, self-transcendence, conformity-tradition, SDO, RWA), and
+**demographics** (age, education, region):
+
+| Preset | vote / politics | values | demographics | Idea |
+|---|---:|---:|---:|---|
+| `balanced` *(default)* | 2.0 | 1.0 | 0.5 | Vote is the best proxy for media diet, so it leads — but only 2× values. |
+| `vote_dominant` | 4.0 | 1.0 | 0.5 | "Is it really all just vote choice?" — push vote to 4× values. |
+| `values_dominant` | 1.0 | 4.0 | 0.5 | "Can values alone reproduce the groups?" — flip the top two rungs. |
+
+Because only the *ordering* of scores matters, these ladders are easy to reason about: they change
+*which citizens sit near each group's edge*, never the group sizes. `vote_dominant` and
+`values_dominant` are deliberate distortions of `balanced` used to check how sensitive the results are
+to the choice of weights.
 
 You can also pass your own weights as `{"A": {...}, "B": {...}}` using the same signal names as the
 presets. The weights are deliberately hand-chosen and anchored to published correlations rather than
@@ -581,8 +664,8 @@ it stopped. When you resume, the model compares your new configuration against t
 - **Settings that must not change** — changing any of these cancels the resume, because it would make
   the second half incompatible with the first: `n_citizens`, `random_seed`, the network type and its
   resolved settings, `communication_mode`, `package_policies`, `day0_anchor`, `reach_a`, `reach_b`,
-  `audience_cap`, the three exposure settings, and the two political-message settings. The set of
-  citizens and the days already completed must also match (you may *add* future days).
+  `audience_cap`, `persona_mode`, the three exposure settings, and the two political-message settings.
+  The set of citizens and the days already completed must also match (you may *add* future days).
 
 - **Settings you may change** — these only produce a warning and the run continues: the AI model and
   provider (including the survey ones), `thinking`, `llm_temperature`, and the three local-

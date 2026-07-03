@@ -119,7 +119,11 @@ if [[ -n "${RESUME_FROM:-}" ]]; then
     RESUME_FLAG="--resume"
     echo "[sim] Resuming from ${RESUME_FROM}/checkpoints"
 else
-    OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}"
+    # Optional descriptive suffix so runs are easy to find in $SCRATCH:
+    #   RUN_LABEL=split50_freq3v1 sbatch scripts/aire/run.sh ...
+    # -> run_<jobid>_split50_freq3v1.  Empty/unset RUN_LABEL = no suffix.
+    SUFFIX="${RUN_LABEL:+_${RUN_LABEL}}"
+    OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}${SUFFIX}"
 fi
 mkdir -p "$OUTDIR"
 
@@ -131,6 +135,7 @@ echo "=================================================================="
 echo " Climate-Action-GABM AIRE run"
 echo "   job id      : ${SLURM_JOB_ID}"
 echo "   job name    : ${SLURM_JOB_NAME:-LLM-cag-run}"
+echo "   run label   : ${RUN_LABEL:-(none)}"
 echo "   node        : $(hostname)"
 echo "   repo        : ${REPO_DIR}"
 echo "   model       : ${HF_MODEL}"

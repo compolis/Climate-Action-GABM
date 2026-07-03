@@ -1,0 +1,30 @@
+# =============================================================================
+# Tier-P persona-null pilot — algorithmic-fidelity manipulation check.
+# 3 arms (real / shuffled / neutral) x 3 seeds (42/43/44) = 9 Day-0-only runs.
+# Each line is forwarded verbatim to `scripts/aire/run.sh "$@"`.
+# Submit:  bash scripts/aire/sweep.sh scripts/aire/sweeps/tierP.txt
+# Model:   Qwen3-14B (HF_MODEL default; no --model pin). Each run is N=100,
+#          Day-0 only (tierP preset: package mode, day0_anchor=llm_survey,
+#          memory=persona_only), so each Day-0 opinion is a pure function of
+#          (persona + policy question).
+#
+# NOTE: the master --seed drives the YouGov cohort sample, the shuffle
+# permutation, and exposure/network together, so the three seeds vary cohort
+# AND permutation at once. That is fine for this go/no-go pilot; the final
+# design separates sampling replicate from permutation seed.
+# =============================================================================
+
+# --- Arm A: real personas (each agent keeps its own) -------------------------
+--preset tierP --persona-mode real --seed 42
+--preset tierP --persona-mode real --seed 43
+--preset tierP --persona-mode real --seed 44
+
+# --- Arm B: shuffled personas (each agent gets another agent's whole persona) -
+--preset tierP --persona-mode shuffled --seed 42
+--preset tierP --persona-mode shuffled --seed 43
+--preset tierP --persona-mode shuffled --seed 44
+
+# --- Arm C: neutral persona (everyone gets the generic info-free persona) -----
+--preset tierP --persona-mode neutral --seed 42
+--preset tierP --persona-mode neutral --seed 43
+--preset tierP --persona-mode neutral --seed 44

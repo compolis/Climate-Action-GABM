@@ -65,6 +65,13 @@ _DEBIAS_STEP2_TEMPLATE = (
 )
 
 
+# Deliberately information-free persona used by the Tier-P "neutral" persona
+# ablation: it strips every demographic and value signal, so an agent's Day-0
+# opinion becomes a function of the policy question alone. Kept intentionally
+# generic (no age, region, politics, or values) — see apply_persona_mode().
+NEUTRAL_PERSONA_TEXT = "I am an adult living in the United Kingdom."
+
+
 def _format_policy_package(policy_ids) -> str:
     return "\n".join(
         f"- {SURVEY_QUESTIONS[policy_id]}" for policy_id in policy_ids
@@ -123,6 +130,13 @@ class SurveyedCitizen():
         self.political_exposure = "neither"
         self.network_neighbors = []
         self.reflections = []
+        # Persona-ablation override (Tier-P). When not None, get_persona()
+        # returns this string verbatim instead of composing from the agent's
+        # real attributes. Set by SurveyedNation.apply_persona_mode() for the
+        # "shuffled" (another agent's persona) and "neutral" (generic text)
+        # conditions; left None for the default "real" condition. Never affects
+        # ground truth, which is read from original_survey_data.
+        self.persona_override = None
         # Memory / prompt-assembly configuration. Defaults to the config that
         # reproduces the historical hard-wired behaviour; the simulation
         # driver (``run()``) overwrites this with a resolved config per run.
@@ -193,7 +207,12 @@ class SurveyedCitizen():
         Internally composed from :meth:`_build_demographics_text` and
         :meth:`_build_values_text`. If values text is empty, returns
         demographics alone (no trailing newline).
+
+        When ``persona_override`` is set (Tier-P persona ablation) it is
+        returned verbatim, bypassing the real attributes entirely.
         """
+        if self.persona_override is not None:
+            return self.persona_override
         demographics = self._build_demographics_text()
         values = self._build_values_text()
         if values:

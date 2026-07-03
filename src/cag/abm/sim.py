@@ -90,6 +90,12 @@ SIM_CONFIG = {
     # section toggles / verbatim_window_days / per-stage overrides.
     "memory": "default",
     "random_seed": 42,
+    # Tier-P persona ablation (manipulation check on algorithmic fidelity).
+    # "real" = every agent keeps its own persona (canonical, bit-identical to
+    # pre-Tier-P behaviour); "shuffled" = each agent is handed another agent's
+    # whole persona (a coherent real person); "neutral" = every agent gets a
+    # generic information-free persona. Ground truth is never altered.
+    "persona_mode": "real",
     # Local-LLM provider (provider="local"). All optional.
     "local_base_url": None,     # None → CAG_LOCAL_BASE_URL env or http://localhost:8080/v1
     "local_extra_body": None,   # dict merged into every local request body (e.g. server-specific knobs)
@@ -105,6 +111,10 @@ SIM_CONFIG = {
 
 
 VALID_DAY0_ANCHORS = ("llm_survey", "ground_truth", "ground_truth_with_rationale")
+
+# Tier-P persona-ablation conditions. Mirrors VALID_PERSONA_MODES in
+# cag.abm.environment (kept local for early validation in run_simulation).
+VALID_PERSONA_MODES = ("real", "shuffled", "neutral")
 
 
 # Per-day phase-sugar keys understood by ``_resolve_day_phases``. Listed
@@ -648,6 +658,13 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
             f"audience_cap must be a non-negative int or None, got {audience_cap!r}"
         )
 
+    persona_mode = cfg.get("persona_mode", "real") or "real"
+    if persona_mode not in VALID_PERSONA_MODES:
+        raise ValueError(
+            f"persona_mode must be one of {VALID_PERSONA_MODES}, "
+            f"got {persona_mode!r}"
+        )
+
     if (resume or checkpoint_every_day) and checkpoint_dir is None:
         raise ValueError(
             "checkpoint_dir is required when resume=True or "
@@ -675,6 +692,13 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
     nation.apply_reach_subsample(
         reach_a=float(reach_a),
         reach_b=float(reach_b),
+        seed=cfg["random_seed"],
+    )
+    # Tier-P persona ablation. Applied here (with the other audience
+    # manipulations) so it runs on both fresh and resume paths and is
+    # captured in the results audit trail. "real" is a no-op.
+    nation.persona_map = nation.apply_persona_mode(
+        persona_mode,
         seed=cfg["random_seed"],
     )
     # Layer 1: bump network params to keep small populations connected.
@@ -834,6 +858,7 @@ __all__ = [
     # Public API (notebooks, scripts)
     "SIM_CONFIG",
     "VALID_DAY0_ANCHORS",
+    "VALID_PERSONA_MODES",
     "make_phases",
     "run_simulation",
     "save_results",

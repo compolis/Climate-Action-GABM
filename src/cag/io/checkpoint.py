@@ -42,6 +42,10 @@ _RESUME_HARD_KEYS = (
     "political_exposure_mode", "political_exposure_targets",
     "affinity_weights",
     "political_message_source", "political_message_set",
+    # Persona ablation drives every agent's persona text (and thus every
+    # prompt); switching mode mid-run would make the resumed prompts
+    # inconsistent with the state built on Day 0.
+    "persona_mode",
     # Memory config is hard: the verbatim window drives which days get
     # compressed into daily_summaries, so a mid-run change would make the
     # stored summaries inconsistent with the resumed config.

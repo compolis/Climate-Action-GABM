@@ -677,6 +677,21 @@ sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
 # Same run, longer wall-clock + per-day checkpointing:
 sbatch --time=06:00:00 scripts/aire/run.sh --preset r14_canonical --exposure-targets split50 --checkpoint-every-day
 
+# 2july2026 run sample sbatch codes
+sbatch --time=06:00:00 scripts/aire/run.sh \
+    --n-citizens 50 --days 5 --k-peers 2 --seed 42 \
+    --exposure-targets '{"A-only":0.05,"B-only":0.05,"both":0.60,"neither":0.30}' \
+    --reach-a 1.0 --reach-b 1.0 \
+    --memory '{"persona":{"enabled":true},"day0_anchor":{"enabled":true,"ttl_days":1},"daily_summaries":{"enabled":true},"recent_reflections":{"enabled":true},"own_reasoning":{"enabled":true},"today_so_far":{"enabled":true},"opinion_trajectory":{"enabled":false},"verbatim_window_days":2,"stages":{"peer_message":{},"reflection":{},"survey":{}}}'
+
+sbatch --time=06:00:00 scripts/aire/run.sh \
+    --n-citizens 50 --days 5 --k-peers 2 --seed 42 \
+    --exposure-targets '{"A-only":0.05,"B-only":0.05,"both":0.60,"neither":0.30}' \
+    --reach-a 1.0 --reach-b 1.0 \
+    --network-type erdos_renyi \
+    --network-params '{"p":0.10}' \
+    --memory '{"persona":{"enabled":true},"day0_anchor":{"enabled":true,"ttl_days":1},"daily_summaries":{"enabled":true},"recent_reflections":{"enabled":true},"own_reasoning":{"enabled":true},"today_so_far":{"enabled":true},"opinion_trajectory":{"enabled":false},"verbatim_window_days":2,"stages":{"peer_message":{},"reflection":{},"survey":{}}}'
+
 # Resume a killed run (same OUTDIR, same hard keys):
 RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
 
