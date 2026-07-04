@@ -95,6 +95,38 @@ class TestBuildConfig(TestCase):
         cfg = cli.build_config({}, {"days": [{"phases": ["P-A"]}]})
         self.assertEqual(cfg["days"], [{"phases": ["P-A"]}])
 
+    def test_tier1_preset_resolves_asymmetry_design(self):
+        preset = dict(RUN_BUNDLE_PRESETS["tier1"]["config"])
+        cfg = cli.build_config(preset, {})
+        # Cohort + schedule bumped for the honest multi-seed run.
+        self.assertEqual(cfg["n_citizens"], 100)
+        self.assertEqual(cfg["k_peers_per_day"], 2)
+        self.assertEqual(cfg["communication_mode"], "package")
+        self.assertEqual(cfg["day0_anchor"], "ground_truth_with_rationale")
+        # Memory pinned to the v0.9 canon: default sections but anchor ttl=1.
+        self.assertEqual(cfg["memory"], {"day0_anchor": {"ttl_days": 1}})
+        # 5-day int schedule expands to the alternating P-A/P-B/C plan.
+        self.assertIsInstance(cfg["days"], list)
+        self.assertEqual(len(cfg["days"]), 5)
+        self.assertEqual(cfg["days"][0]["phases"], ["P-A", "P-B", "C"])
+        # Does NOT pin a model — AIRE run.sh / SIM_CONFIG supplies it.
+        self.assertNotIn("llm_model", cfg)
+        self.assertNotIn("llm_provider", cfg)
+
+    def test_tier1_preset_condition_overrides(self):
+        preset = dict(RUN_BUNDLE_PRESETS["tier1"]["config"])
+        # reform-dominant reach + the no-broadcast placebo exposure.
+        cfg = cli.build_config(
+            preset,
+            {"reach_a": 0.25, "reach_b": 1.0, "political_exposure_targets": "neither"},
+        )
+        self.assertEqual(cfg["reach_a"], 0.25)
+        self.assertEqual(cfg["reach_b"], 1.0)
+        self.assertEqual(cfg["political_exposure_targets"], "neither")
+        # Preset design keys untouched by the condition flags.
+        self.assertEqual(cfg["n_citizens"], 100)
+        self.assertEqual(cfg["day0_anchor"], "ground_truth_with_rationale")
+
 
 class TestArgparseTypeHelpers(TestCase):
 
