@@ -24,6 +24,109 @@ Notes:
 
 ---
 
+## v0.9 — Tier-P calibration & anchor justification (run_6457850…6457858, NB 37) — the raw model is inflated in *level* but faithful in *rank*; anchoring removes the level bias by construction
+
+**Date:** 2026-07-04
+**Analysed runs:** the same nine Tier-P Day-0 runs as NB 36 (3 arms × 3 seeds, N=100 agents, package mode, `day0_anchor="llm_survey"` — the raw *no-anchor* world where the LLM derives each opinion). Notebook: [`notebooks/37_tierP_calibration.ipynb`](../notebooks/37_tierP_calibration.ipynb); figures in [`data/output/calibration_analysis/`](../data/output/calibration_analysis/). Companion to the NB 36 Tier-P section below; the framing lives in [research_notes.md](research_notes.md) (2026-07-04 calibration note).
+
+**What the test asks.** NB 36 proved the model *ranks* agents correctly. This asks the level question: how far off is the raw (no-anchor) opinion, is the error a rank scramble or a common offset, and does the production anchor remove exactly that error? Standard calibration metrics only (MBE/MAE/RMSE, OLS `LLM ~ GT`, Pearson r/R², Spearman ρ). Day 0 only; seeds pooled (n=300/arm). Package pro-climate index, range ≈ −3…+3, GT mean **+0.662**.
+
+### Package calibration battery (Day 0, seeds pooled, n=300 per arm)
+
+| Arm | MBE | MAE | RMSE | Pearson r | R² | OLS slope | OLS intercept | Spearman ρ |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| **real** (no-anchor) | **+0.636** | 1.112 | 1.429 | 0.584 | 0.34 | 0.636 | +0.877 | **+0.617** |
+| **neutral** (floor) | **+1.503** | 1.631 | 2.017 | 0.012 | 0.00 | 0.001 | +2.165 | −0.030 |
+
+- **Raw inflation:** MBE = **+0.636** (real). Persona-free **floor** MBE = **+1.503**; having *a* persona removes **+0.868** = **58%** of the floor bias.
+- **Level, not rank:** Spearman ρ = **+0.617** preserved (restated from NB 36); OLS slope **0.636 < 1** ⇒ compression toward the +3 ceiling.
+- The `neutral` arm is a flat band far above the diagonal (r ≈ 0, slope ≈ 0) — the model's unconditional pro-climate prior. See Fig 1 (`fig1_calibration_scatter.png`).
+
+### Bias structure vs ground truth (real arm, Fig 2)
+
+`corr(GT, bias) = −0.380` (p = 9.1×10⁻¹²); bias-vs-GT OLS slope = **−0.364**. Low-GT (sceptical) agents are inflated *more* than high-GT agents — regression toward the pro-climate mean, steepened by the ceiling. The offset stays **same-signed across the GT range**, so it is an additive-style bias that anchoring removes cleanly rather than a rank scramble. Fig 3 (`fig3_bias_decomposition.png`) shows MBE by arm: neutral +1.50 → shuffled/real ≈ +0.64 (shuffled lands with real → it's *having a* persona, not the specific identity, that grounds the level).
+
+### Per-policy calibration (real arm, seeds pooled, per-policy scale −3…+3)
+
+| Policy | MBE | MAE | RMSE | Pearson r | OLS slope | Spearman ρ |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| Green housing | −0.153 | 1.307 | 1.794 | 0.336 | 0.311 | 0.304 |
+| Renewable energy | +0.333 | 1.000 | 1.512 | 0.294 | 0.202 | 0.377 |
+| Ban fossil licences | +0.360 | 1.520 | 2.033 | 0.521 | 0.605 | 0.544 |
+| Climate compensation | +0.677 | 1.837 | 2.336 | 0.419 | 0.532 | 0.439 |
+| Carbon tax | +0.960 | 1.720 | 2.217 | 0.377 | 0.384 | 0.389 |
+| Ban petrol cars | +1.637 | 2.043 | 2.566 | 0.386 | 0.243 | 0.464 |
+
+Inflation is concentrated in the salient behaviour-change policies — **Ban petrol cars +1.64** (worst), **Carbon tax +0.96** — while **Green housing is essentially calibrated (−0.15)**. Every policy keeps a positive Spearman ρ (0.30–0.54), so rank fidelity holds item-by-item. See Fig 4 (`fig4_per_policy_mbe.png`).
+
+### Ceiling / regression-to-mean check
+
+Package GT at the +3 ceiling: **3.0%** of agents; per-policy GT at +3: **23.8%** of responses (at −3: 9.7%). A non-trivial share start pinned pro-climate and cannot be inflated further, so the OLS slope < 1 and the negative bias-vs-GT slope are **partly a ceiling artefact** — the hook Tier 2 (scale-robustness) re-examines on ceiling-free rulers.
+
+### Anchor mechanism — why this bias is removed by construction (Fig 5)
+
+From [`src/cag/abm/sim.py`](../src/cag/abm/sim.py) `_run_day0`: `llm_survey` lets the LLM pick the Day-0 number (the +0.64-biased world measured here); the production default **`ground_truth_with_rationale`** seeds the Day-0 *number* from ground truth and lets the LLM write only the *rationale*. So under production anchoring Day-0 calibration is **MBE = 0, MAE = 0, ρ = 1.0 by construction** while keeping a coherent LLM reasoning chain for the dynamics — confirmed empirically on the v0.8 within-subjects runs (*"Day-0 index = the GT mean, ρ = 1.0, MAE = 0 by construction"*, §v0.8 below). Fig 5 (`fig5_anchor_demonstration.png`) contrasts the biased `llm_survey` histogram (MBE +0.64) with the anchored y = x world.
+
+**Bottom line.** The raw model is not trustworthy in *absolute level* (+0.64 package inflation, worse on cost/behaviour policies) but is faithful in *rank* (ρ ≈ 0.62) with a preserved-order offset. This is the empirical licence for the "difference-engine" stance and the quantitative justification for anchoring Day 0 to ground truth.
+
+---
+
+## v0.9 — Tier-P persona-null ablation (run_6457850…6457858, NB 36) — the LLM demonstrably conditions on personas: GO
+
+**Date:** 2026-07-04
+**Analysed runs:** nine Day-0-only runs, 3 arms × 3 seeds (42/43/44), N=100 agents each, package mode (6 climate policies), Qwen3-14B @ temp 0.5, `day0_anchor="llm_survey"` (the model *derives* each opinion from the persona — the no-anchor world), `memory="persona_only"`. Arm→run map (seed 42/43/44): **real** = run_6457850/851/852; **shuffled** = run_6457853/854/855; **neutral** = run_6457856/857/858. Notebook: [`notebooks/36_tierP_persona_null.ipynb`](../notebooks/36_tierP_persona_null.ipynb); figures in [`data/output/tierP_analysis/`](../data/output/tierP_analysis/). This is **Tier P** of the four-tier validation program — the foundational validity gate argued in [research_notes.md](research_notes.md) (2026-07-04 note); see there for the plain-language interpretation.
+
+**What the test asks.** Does the model actually read each agent's persona, or is it emitting a generic pro-climate prior? Three arms: **real** (agent gets its own YouGov persona), **shuffled** (agent gets *another* agent's whole persona via a within-sample derangement), **neutral** (no persona — *"I am an adult living in the United Kingdom."*). Only Day 0 is analysed (`day==0`); the redundant `day==1` survey from the tierP preset is ignored.
+
+**Scale:** package pro-climate index, mean of the six per-policy answers, range roughly −3…+3. Ground-truth (GT) mean +0.662 across all arms (same 100 agents drawn per seed).
+
+### Per-arm summary (Day 0, seeds pooled, n=300 per arm)
+
+| Arm | LLM mean | LLM SD | own-GT mean |
+|---|:--:|:--:|:--:|
+| real | +1.298 | **1.460** | +0.662 |
+| shuffled | +1.284 | **1.462** | +0.662 |
+| neutral | +2.166 | **0.147** | +0.662 |
+
+The `neutral` arm's cross-agent SD collapses to **0.147** (**10.1%** of the real arm's 1.460) and its mean jumps to +2.166 — persona-free agents converge on one uniformly pro-climate answer.
+
+### Rank-order fidelity: Spearman ρ (pooled n=300, bootstrap 95% CI)
+
+| Correlation | ρ | 95% CI | Reads as |
+|---|:--:|:--:|---|
+| real: LLM vs **own** GT | **+0.617** | [+0.541, +0.684] | model recovers the agent's real opinion |
+| shuffled: LLM vs **used**-persona GT | **+0.611** | [+0.537, +0.676] | tracks the persona it was *shown* (≈ real) |
+| shuffled: LLM vs **own** GT | −0.122 | [−0.230, −0.006] | does *not* track the body it's attached to |
+| neutral: LLM vs own GT | −0.030 | [−0.141, +0.085] | no persona → no signal |
+
+(Spearman ρ = rank correlation; +1 = perfect ordering agreement, 0 = none.) Per-seed ρ(real, own) = +0.632 / +0.629 / +0.603; ρ(shuffled, used) = +0.616 / +0.625 / +0.601 — both tight across seeds. ρ(shuffled, own) = −0.037 / −0.031 / −0.325 (the seed-44 value drives the small pooled negative; see the artefact note below).
+
+### The shuffled dissociation is the causal core
+
+In the shuffled arm the model tracks the **persona shown** (+0.611) and is ~0 to the **body** (−0.122) — a clean dissociation proving the persona *text*, not a fixed prior, drives the answer. The small negative (not exactly 0) is a **mechanical artefact of the derangement**: this draw made `own_gt` and `used_gt` themselves slightly anti-correlated (ρ = −0.075 pooled), and since the LLM tracks `used_gt` (+0.611), the predicted bleed-through is +0.611 × (−0.075) ≈ −0.046 (observed −0.122; the rest is seed-44 noise). It is not evidence of inverse persona-tracking.
+
+### Per-policy robustness: ρ(real, own) by policy (seeds pooled)
+
+| P1 | P2 | P3 | P4 | P5 | P6 |
+|:--:|:--:|:--:|:--:|:--:|:--:|
+| +0.377 | +0.544 | +0.464 | +0.304 | +0.389 | +0.439 |
+
+All six policies are comfortably positive — the persona signal is broad-based, not driven by any single item.
+
+### GO / NO-GO verdict — all three gates PASS → **GO**
+
+1. **Signal exists** — ρ(real, own) = +0.617, CI [+0.541, +0.684] excludes 0. **PASS.**
+2. **Persona not body** — ρ(shuffled, used) = +0.611 ≈ ρ(real); |ρ(shuffled, own)| = 0.122 ≪ 0.25 × 0.611 = 0.153. **PASS.** (Gate 2's "≈0" uses a *negligibility* test — |ρ| small and far below the used-GT correlation — not a CI-excludes-0 test, which at n=300 flags even a trivial −0.12 artefact as "significant".)
+3. **No persona → no heterogeneity** — neutral/real SD ratio = 0.101 < 0.35. **PASS.**
+
+The model demonstrably conditions on personas; Tier P clears the downstream tiers (bias-invariance, scale-robustness, multiverse) to proceed.
+
+### Calibration hook → done (NB 37)
+
+The `real` arm here is the raw *no-anchor* opinion: LLM mean +1.298 vs GT mean +0.662 = **+0.64** signed inflation. The `neutral` arm's +2.166 is the persona-free bias floor (+1.50 above GT). That measured inflation is exactly what `ground_truth_with_rationale` anchoring removes by construction. The full calibration battery (MBE/MAE/RMSE, OLS slope/intercept, Pearson r, per-policy table, ceiling diagnostics, anchor demonstration) is in the **NB 37** section above.
+
+---
+
 ## v0.8 — bias-invariance / difference-in-differences validation of the reach-asymmetry runs (run_6436142 / 6436192 / 6436203 / 6436638) — the pro-climate level bias cancels in between-condition contrasts
 
 **Date:** 2026-07-03

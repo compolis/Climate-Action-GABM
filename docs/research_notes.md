@@ -118,6 +118,136 @@ re-measurement under the patched code before any model claim is final.
 
 ## Notes
 
+### 2026-07-04 — Calibration: the raw model is inflated in *level* but faithful in *rank* — the empirical licence for anchoring
+
+This is the companion to the Tier-P note below. Tier P proved the model
+*orders* agents correctly; this note explains what we found when we asked the
+harder question — *how far off are the actual numbers?* — and why the answer is
+the justification for anchoring Day 0 to ground truth. The exact metrics live
+in [result_report.md](result_report.md) ("v0.9 — Tier-P calibration & anchor
+justification"); the analysis is [NB 37](../notebooks/37_tierP_calibration.ipynb).
+
+**The distinction that matters: level vs rank.** An opinion measurement can be
+wrong in two very different ways. It can put people in the *wrong order* (rank
+error — thinks a sceptic is greener than an activist), or it can order everyone
+correctly but read *systematically too high* across the board (level error —
+like a thermometer that always reads 5° hot). These have opposite consequences
+for this project. Rank error is fatal: if the model can't tell who's greener,
+no downstream comparison means anything. Level error is *survivable* — because
+when you compare two conditions run on the same agents, a common offset
+subtracts out. Tier P already told us rank is good (ρ ≈ 0.62). NB 37 measures
+the level error and checks it really is just an offset.
+
+**What we found.** Running the Day-0 survey with *no* anchor (letting the model
+derive each opinion from the persona), the model reads about **+0.64 too high**
+on the package pro-climate index — and with *no persona at all* it reads **+1.5
+too high**, sitting at a near-uniform "climate is good" answer. So a real
+persona pulls each agent most of the way back toward its true position, but a
+residual pro-climate tilt remains. Crucially, that residual is a *level*
+problem: the rank order is preserved (ρ ≈ 0.62), and the bias has the *same
+sign right across* the opinion range — it's an offset, not a scramble. It's
+worse on the salient behaviour-change policies (banning petrol cars is inflated
++1.6, carbon tax +1.0) and essentially absent on green housing standards, which
+is a sensible pattern: the model is most over-eager exactly where real public
+opinion is most divided and cost-sensitive.
+
+**One honest caveat — the ceiling.** The scale stops at +3, and a chunk of
+agents already sit there in reality. The model can't inflate someone who's
+already maxed out, which mechanically bends the fitted line and makes sceptics
+*look* like they're inflated more than greens. Some of the "regression to the
+mean" we see is therefore a scale artefact, not a modelling failure — which is
+precisely what the later scale-robustness tier is built to disentangle. Worth
+flagging now so we don't over-read the bias-vs-truth slope.
+
+**Why this is the licence to anchor.** Because the error is a preserved-order
+offset, we can remove it *by construction*: the production setting
+(`ground_truth_with_rationale`) seeds each agent's Day-0 *number* from the real
+survey value and asks the model only to *write the reasoning* behind it. That
+zeroes the Day-0 level error (perfect calibration by definition) while keeping a
+coherent, persona-grounded reasoning chain to drive the subsequent dynamics. In
+other words: we don't trust the model to tell us *where opinion sits*, but we do
+trust it to tell us *how opinion moves* once correctly placed — and NB 37 is the
+evidence that this division of labour is legitimate. This is the same
+"difference engine" logic as the v0.8 work, now backed by a direct calibration
+measurement of the thing anchoring throws away.
+
+---
+
+### 2026-07-04 — Tier P cleared: the model is genuinely reading personas (foundation gate = GO)
+
+The first of the four validation tiers is done, and it passed cleanly. This is
+the note explaining *what that means and why it matters*; the exact numbers
+live in [result_report.md](result_report.md) (the "v0.9 — Tier-P persona-null
+ablation" section), and the analysis is in
+[NB 36](../notebooks/36_tierP_persona_null.ipynb).
+
+**Why this gate had to come first.** The whole project rests on one bet: that
+even though the model reads *too* pro-climate in absolute terms, it still
+places agents in the *right order* and *reacts to who each agent is*. If that
+bet is wrong — if the model just emits a generic "climate is good" answer
+regardless of the persona we hand it — then every downstream comparison is
+measuring the prompt, not the person, and the project is dead on arrival. Tier
+P is the sanity check for exactly that.
+
+**How we tested it.** We ran the Day-0 survey three ways on the same 100
+agents, three random seeds each. In the **real** arm each agent got its own
+YouGov persona. In the **shuffled** arm we handed every agent *someone else's*
+entire persona (a *derangement* — a reshuffle where nobody keeps their own, so
+each agent is wearing a stranger's biography). In the **neutral** arm we
+stripped the persona entirely, leaving only "I am an adult living in the United
+Kingdom." Then we asked: does the model's opinion follow the persona, or not?
+
+**What we found — three things, all pointing the same way.**
+
+1. *Real agents recover their own opinions.* The rank correlation between the
+   model's Day-0 opinion and each agent's real survey answer is **ρ ≈ 0.62**
+   (Spearman ρ is a rank correlation: 1.0 means the model orders agents exactly
+   as the survey does, 0 means no relationship). That's a strong, seed-stable
+   signal — the model is clearly listening.
+
+2. *The smoking gun — shuffled agents track the persona they were handed, not
+   their own body.* When an agent wears a stranger's persona, its opinion
+   correlates **+0.61 with that stranger's** real opinion and essentially
+   **zero with its own** (−0.12, and even that small negative is a mechanical
+   side-effect of the reshuffle, not real signal — see the result report). This
+   is the cleanest possible evidence that the *persona text itself* drives the
+   answer. It isn't the agent's identity, or a fixed prior, or anything baked
+   into the model — swap the biography and the opinion swaps with it. That
+   dissociation is worth more than the real-arm correlation alone, because a
+   high real-arm correlation *could* in principle be an artefact of some other
+   agent property; the shuffle rules that out by construction.
+
+3. *No persona → no diversity.* Strip the persona and the 100 agents collapse
+   onto essentially one answer: the spread of opinions shrinks to **~10%** of
+   the real-arm spread, and they all land at a uniformly high pro-climate value.
+   This confirms that the variety we see across agents in the real runs is
+   *coming from the personas*, not from sampling noise or temperature.
+
+**What this licenses — and what it doesn't.** Tier P proves there *is* a
+persona-driven signal to work with, so the difference-engine program is cleared
+to continue to Tier 1 (does the bias cancel in differences?), Tier 2 (are we
+fooled by the scale ceiling?), and Tier 3 (does it replicate across models and
+seeds?). It does **not** say the model's *levels* are right — in fact this same
+run quantifies how wrong they are: the persona-free "neutral" floor sits about
++1.5 above the true mean, and even the real agents read about +0.6 high. That
+inflation is the very thing the anchoring machinery is designed to subtract,
+and measuring it precisely is a separate calibration notebook (deliberately
+kept out of this Tier-P analysis so the validity gate and the calibration story
+don't get tangled).
+
+**One methodological lesson worth remembering.** The automated GO/NO-GO check
+first *failed* Tier P on a technicality: it asked whether the shuffled-vs-own
+correlation's confidence interval excluded zero, and at n=300 even a trivially
+small −0.12 clears that bar. But "is this effect *negligibly small*?" is a
+different question from "is this effect *distinguishable from zero*?" — with
+enough data everything is distinguishable from zero. The fix was to score that
+gate as a *negligibility* test (is |ρ| small, and far below the used-persona
+correlation?) rather than a significance test. The finding never changed; only
+the yardstick did. Good reminder that for "this should be ≈0" claims,
+significance testing is the wrong tool.
+
+---
+
 ### 2026-07-03 — Validation strategy: what the four tiers aim to do (plain-language overview)
 
 *(This is the plain-terms companion to the "difference engine" note below.

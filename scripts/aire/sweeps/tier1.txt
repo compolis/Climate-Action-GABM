@@ -1,0 +1,62 @@
+# =============================================================================
+# Tier-1 bias-invariance sweep — the honest, multi-seed successor to the
+# seed-42 / n=50 v0.8 pilot (run_6436142/…/6436638, now demoted to preliminary).
+# 4 conditions x 3 seeds (42/43/44) = 12 runs. Each line is forwarded verbatim
+# to `scripts/aire/run.sh "$@"`.
+#
+# Submit (wall-clock justified below):
+#   bash scripts/aire/sweep.sh scripts/aire/sweeps/tier1.txt --time=11:00:00
+#
+# Model:   Qwen3-14B (HF_MODEL default; no --model pin). Each run is N=100,
+#          5-day alternating P-A/P-B/C schedule, package mode, k_peers=2,
+#          Day-0 anchor = ground_truth_with_rationale (tier1 preset), so any
+#          end-of-run gap above ground truth is pure pro-climate drift.
+#          Exposure/network/messages fall through to the SIM_CONFIG canon
+#          (committed_minority_symmetric, stochastic_block
+#          p_intra=0.15/p_inter=0.05, offline v1, temp 0.5). Memory is pinned
+#          by the tier1 preset to the v0.9 canon: full default sections with
+#          the Day-0 anchor expiring after day 1 (ttl_days=1), matching the
+#          pilot config exactly.
+#
+# Wall-clock estimate (from the pilot run.log TIMING blocks, n=50 x 6 agent-
+# days): worst pilot rate 55.21 s/agent-day (run_6436142 baseline). Tier 1 is
+# N=100, days=5 -> D=6 internal agent-days:
+#     55.21 s x 100 x 6 = 33,126 s = 552.1 min ~= 9h12m (sim only).
+# Add vLLM bring-up (~2 min warm cache) plus ~20% margin -> --time=11:00:00
+# (660 min). Per-day checkpointing is default-on, so any overrun is resumable.
+#
+# Conditions (reach_a = A/GREEN side, reach_b = B/REFORM side):
+#   baseline        reach 1.0 / 1.0   (symmetric)
+#   green_dominant  reach 1.0 / 0.25
+#   reform_dominant reach 0.25 / 1.0
+#   neither_placebo --exposure-targets neither (no broadcasts; reach irrelevant)
+#
+# NOTE: the master --seed drives the YouGov cohort sample, the network and the
+# exposure assignment together, so within a seed the SAME 100 agents (identical
+# ground truth) appear in all four conditions — a within-subjects design that
+# makes the paired difference-in-differences valid. DiD is computed per seed,
+# then pooled across the three seeds. Each line carries a `LABEL=` prefix so its
+# output lands in `run_<jobid>_<label>` for at-a-glance folder identification;
+# arms are also always recoverable from each run's config.json (reach_a/reach_b/
+# political_exposure_targets/random_seed).
+# =============================================================================
+
+# --- Condition A: baseline (symmetric reach) ---------------------------------
+LABEL=tier1_baseline_s42   --preset tier1 --reach-a 1.0 --reach-b 1.0 --seed 42
+LABEL=tier1_baseline_s43   --preset tier1 --reach-a 1.0 --reach-b 1.0 --seed 43
+LABEL=tier1_baseline_s44   --preset tier1 --reach-a 1.0 --reach-b 1.0 --seed 44
+
+# --- Condition B: green-dominant (A reaches all, B throttled) -----------------
+LABEL=tier1_green_dom_s42  --preset tier1 --reach-a 1.0 --reach-b 0.25 --seed 42
+LABEL=tier1_green_dom_s43  --preset tier1 --reach-a 1.0 --reach-b 0.25 --seed 43
+LABEL=tier1_green_dom_s44  --preset tier1 --reach-a 1.0 --reach-b 0.25 --seed 44
+
+# --- Condition C: reform-dominant (B reaches all, A throttled) ----------------
+LABEL=tier1_reform_dom_s42 --preset tier1 --reach-a 0.25 --reach-b 1.0 --seed 42
+LABEL=tier1_reform_dom_s43 --preset tier1 --reach-a 0.25 --reach-b 1.0 --seed 43
+LABEL=tier1_reform_dom_s44 --preset tier1 --reach-a 0.25 --reach-b 1.0 --seed 44
+
+# --- Condition D: neither placebo (no broadcasts — pipeline-null reference) ---
+LABEL=tier1_neither_s42    --preset tier1 --exposure-targets neither --seed 42
+LABEL=tier1_neither_s43    --preset tier1 --exposure-targets neither --seed 43
+LABEL=tier1_neither_s44    --preset tier1 --exposure-targets neither --seed 44

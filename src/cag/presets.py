@@ -76,6 +76,41 @@ RUN_BUNDLE_PRESETS = {
             "thinking": False,
         },
     },
+    "tier1": {
+        "description": (
+            "Tier-1 bias-invariance run shape: 100 agents, 5-day "
+            "alternating P-A/P-B/C schedule, package mode, k_peers=2, "
+            "Day-0 anchor = ground_truth_with_rationale (so any end-of-run "
+            "gap above ground truth is pure pro-climate drift). Exposure, "
+            "network, message set and temperature all fall through "
+            "to the SIM_CONFIG research canon (committed_minority_symmetric "
+            "targets, stochastic_block p_intra=0.15/p_inter=0.05, offline "
+            "v1 messages, temp 0.5). Memory is pinned to the v0.9 canon "
+            "(full default sections, but the Day-0 anchor expires after "
+            "day 1 via ttl_days=1) to match the pilot config exactly. "
+            "Does NOT pin a model "
+            "(AIRE run.sh forces --model $HF_MODEL, default Qwen/Qwen3-14B; "
+            "Mac uses the SIM_CONFIG default). Set the reach-asymmetry "
+            "condition with --reach-a / --reach-b, the no-broadcast placebo "
+            "with --exposure-targets neither, and vary --seed. This is the "
+            "honest multi-seed successor to the seed-42/n=50 v0.8 pilot. "
+            "Both use the same canon p_inter=0.05: at n=100 the SBM is 100% "
+            "connected so 0.05 stands, whereas the pilot's n=50 was auto-"
+            "bumped to 0.06 by the documented small-n connectivity repair "
+            "(_adjust_network_params_for_small_n; n in [30,100) -> 0.06). "
+            "So this is not a deliberate deviation — it is the same base "
+            "canon under the n-dependent repair."
+        ),
+        "config": {
+            "n_citizens": 100,
+            "days": 5,
+            "k_peers_per_day": 2,
+            "communication_mode": "package",
+            "day0_anchor": "ground_truth_with_rationale",
+            "memory": {"day0_anchor": {"ttl_days": 1}},
+            "thinking": False,
+        },
+    },
 }
 
 
