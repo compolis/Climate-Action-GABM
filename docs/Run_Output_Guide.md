@@ -303,6 +303,36 @@ Who talked to whom, and how much. Useful for confirming broadcasts reached the r
 | `n_messages` | Number of messages in that (day, phase, side, bucket) cell. |
 | `mean_chars` | Mean character length of those messages. |
 
+### `bucket_summary.csv` — one row per run × exposure bucket (cross-run seed)
+
+An end-of-run collapse designed so many run directories concatenate straight into a dose-response / targeting figure. One row per bucket, plus a `TOTAL` row.
+
+| Column | Meaning |
+|---|---|
+| `run_label` | Optional run label (blank unless set). |
+| `political_exposure` | Bucket, or `TOTAL`. |
+| `n_agents` | Agents in the bucket. |
+| `day0_gt_mean` | Mean Day-0 ground-truth package index. |
+| `end_mean` | Mean package index on the last day. |
+| `drift` | `end_mean − day0_gt_mean` (upward = pro-climate drift). |
+| `mae` | Mean \|end − GT\| over the bucket. |
+| `rank_rho` | Spearman ρ of end-of-run index vs GT (rank fidelity). |
+| `reached_a` / `reached_b` | How many in the bucket were actually reached by each side (post-subsample). |
+
+### `targeting_diagnostics.csv` — did reach-targeting select who it should?
+
+One row per political side, confirming that `reach_targeting` bit. For `persuadable`, `reached_mean_absgt` should be *below* `dropped_mean_absgt`.
+
+| Column | Meaning |
+|---|---|
+| `side` | `A` (pro) or `B` (anti). |
+| `targeting_mode` | `random` / `persuadable` / `degree` / `betweenness`. |
+| `reach` | The side's reach fraction. |
+| `n_audience` / `n_reached` / `n_dropped` | Audience partition after subsampling. |
+| `reached_mean_absgt` / `dropped_mean_absgt` | Mean \|GT package index\| of reached vs dropped (blank when nothing was dropped, i.e. reach 1.0). |
+
+These reflect `|GT|` only; a `degree`/`betweenness` run's centrality separation is confirmed against `network_snapshot.json` (see NB 42).
+
 ---
 
 ## 9. The qualitative-review files (the important ones)
@@ -391,6 +421,8 @@ The full context block handed to the survey LLM for each (agent, day, policy) �
 | `policy_id` | `ClimatePolicyID(N)`. |
 | `assembled_context` | The full prompt-context string produced by `assemble_context()`. |
 
+> **v0.9:** like `agent_timeline.csv`, this file is now written only for the **stratified sample** of agents (one per exposure bucket), not all agents — the context block is large and only the sampled rows are ever consumed downstream.
+
 ### 9.6 `daily_summaries.csv` — optional end-of-day note (often empty)
 
 Reserved for an optional end-of-day per-(agent, policy) summary that some memory configurations write (typically only from Day ≥ 2). It is header-only in runs that don't enable that step (as in the example run).
@@ -402,6 +434,22 @@ Reserved for an optional end-of-day per-(agent, policy) summary that some memory
 | `day` | Day. |
 | `policy_id` | `ClimatePolicyID(N)` or `climate_policy_package`. |
 | `summary` | Free-text end-of-day note. |
+
+### 9.7 `agent_prompts.csv` — every prompt a sampled agent saw (v0.9)
+
+The definitive "what did the agent see?" record: for each persona-facing LLM call by a **sampled** agent (one per exposure bucket), the exact system prompt, task prompt, and response. Joins to `agent_timeline.csv` on `(agent_id, day)`; ordered per agent by `prompt_seq`.
+
+| Column | Meaning |
+|---|---|
+| `agent_id` | Citizen ID (one of the sampled agents). |
+| `prompt_seq` | Per-agent monotonic call index. |
+| `day` | Day of the call. |
+| `phase` | `survey` / `C` / a broadcast phase. |
+| `stage` | `seed_rationale`, `survey_reasoning`, `survey_answer`, `reflection_broadcast`, `reflection_peer`, `peer_message`. |
+| `policy_id` | Target policy or `climate_policy_package`. |
+| `system_prompt` | The full assembled context (persona + memory). |
+| `user_prompt` | The task instruction the agent was given. |
+| `response` | The LLM's reply. |
 
 ---
 
@@ -417,6 +465,7 @@ A one-row-per-citizen snapshot of demographics, the assigned exposure bucket, an
 | `political_exposure` | Assigned bucket: `A-only`, `B-only`, `both`, `neither`. |
 | `affinity_score_a` / `affinity_score_b` | Pull toward the pro- / anti-climate side, used to assign the bucket. |
 | `year_of_birth`, `gender_id`, `region_id`, `education_id`, `ukge2019_vote_id`, `brexit_vote_id` | YouGov demographic codes for the sampled respondent. |
+| `reached_by_a` / `reached_by_b` | Whether this citizen was in the pro- / anti-side's audience *after* reach subsampling + targeting — the actual treated set, which differs from the structural bucket when `reach < 1`. |
 | `persona_text` | The natural-language persona built from those demographics and shown to the LLM. |
 
 Rows = `n_citizens`.
@@ -463,7 +512,7 @@ The raw structure, for re-drawing or custom analysis. `nodes` is a list of `{id,
 
 ## 12. Plots
 
-Each `*.png` is generated from the matching `*.csv` by `save_result_plots(results, out_path)` (in `cag.io.plots`, re-exported from `cag.abm.sim`). They are deterministic given the CSVs and are written only when the underlying data is present, so a given run may have fewer than the nine below.
+Each `*.png` is generated from the matching `*.csv` by `save_result_plots(results, out_path)` (in `cag.io.plots`, re-exported from `cag.abm.sim`). They are deterministic given the CSVs and are written only when the underlying data is present, so a given run may have fewer than those listed below. The trajectory plots also render **Day 0 as a distinct ground-truth-anchor marker** (not joined to the line) when `day0_anchor` is a ground-truth mode.
 
 | File | What it shows | When written |
 |---|---|---|
@@ -471,11 +520,19 @@ Each `*.png` is generated from the matching `*.csv` by `save_result_plots(result
 | `opinion_shares.png` | Stacked support / neutral / against percentages per policy per day. | always |
 | `package_index_trajectories.png` | Same as opinion_trajectories but for the package index. | package mode |
 | `package_index_shares.png` | Same as opinion_shares but for the package index. | package mode |
-| `package_index_by_bucket.png` | Package-index mean per exposure bucket over days. | package mode + buckets present |
+| `package_index_by_bucket.png` | Package-index mean per exposure bucket over days, with per-bucket GT. | package mode + buckets present |
 | `opinion_shares_by_bucket.png` | Per-policy shares split by exposure bucket. | buckets present |
 | `gap_widening.png` | A-only vs B-only mean package index over days — the polarisation headline. | both A-only and B-only present |
 | `network_graph.png` | The peer network drawn with nodes coloured by exposure bucket. | networkx installed + network exists |
 | `calibration_by_policy.png` | Agent-vs-ground-truth correlation / MAE per policy over days. | opinion + ground truth present |
+| `opinion_trajectories_by_bucket.png` | Per-policy mean opinion per exposure bucket, with per-bucket GT. | buckets present |
+| `polarization.png` | Package-index spread (std) over days. | package mode |
+| `drift_from_gt.png` | Mean(index − GT) over days, overall + per bucket. | package + GT present |
+| `opinion_ridgeline.png` | Package-index distribution per day (Day 0 → Day N joyplot). | package mode |
+| `network_before_after.png` | Peer graph coloured by opinion Day 0 vs Day N; nodes sized by degree, reached nodes ringed. | network + package present |
+| `targeting_mechanism.png` | End drift for reached vs unreached agents (two-step flow). | reached flags present |
+| `reach_qc.png` | Actually-reached counts per bucket per side. | reached flags present |
+| `calibration_before_after.png` | Package index vs GT, Day 0 vs Day N. | package + GT present |
 
 ---
 

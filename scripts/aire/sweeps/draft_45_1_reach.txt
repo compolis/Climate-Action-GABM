@@ -1,0 +1,22 @@
+# Draft-45 bite 1/4 — REACH dose-response (SBM, 1:1 frequency). 6 conditions x 3 seeds = 18 runs.
+# Base: tier1 preset, overridden to --days 7. Exposure = committed_minority_symmetric (5/5/60/30)
+# except the no-broadcast placebo (neither). Signed green-advantage axis (reform-louder -> green-louder).
+# Submit: bash scripts/aire/sweep.sh scripts/aire/sweeps/draft_45_1_reach.txt --time=15:00:00
+LABEL=d45_reach_reform25_s42 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --seed 42
+LABEL=d45_reach_reform25_s43 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --seed 43
+LABEL=d45_reach_reform25_s44 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --seed 44
+LABEL=d45_reach_reform50_s42 --preset tier1 --days 7 --reach-a 0.5 --reach-b 1.0 --seed 42
+LABEL=d45_reach_reform50_s43 --preset tier1 --days 7 --reach-a 0.5 --reach-b 1.0 --seed 43
+LABEL=d45_reach_reform50_s44 --preset tier1 --days 7 --reach-a 0.5 --reach-b 1.0 --seed 44
+LABEL=d45_reach_baseline_s42 --preset tier1 --days 7 --reach-a 1.0 --reach-b 1.0 --seed 42
+LABEL=d45_reach_baseline_s43 --preset tier1 --days 7 --reach-a 1.0 --reach-b 1.0 --seed 43
+LABEL=d45_reach_baseline_s44 --preset tier1 --days 7 --reach-a 1.0 --reach-b 1.0 --seed 44
+LABEL=d45_reach_green50_s42 --preset tier1 --days 7 --reach-a 1.0 --reach-b 0.5 --seed 42
+LABEL=d45_reach_green50_s43 --preset tier1 --days 7 --reach-a 1.0 --reach-b 0.5 --seed 43
+LABEL=d45_reach_green50_s44 --preset tier1 --days 7 --reach-a 1.0 --reach-b 0.5 --seed 44
+LABEL=d45_reach_green25_s42 --preset tier1 --days 7 --reach-a 1.0 --reach-b 0.25 --seed 42
+LABEL=d45_reach_green25_s43 --preset tier1 --days 7 --reach-a 1.0 --reach-b 0.25 --seed 43
+LABEL=d45_reach_green25_s44 --preset tier1 --days 7 --reach-a 1.0 --reach-b 0.25 --seed 44
+LABEL=d45_reach_placebo_s42 --preset tier1 --days 7 --reach-a 1.0 --reach-b 1.0 --exposure-targets neither --seed 42
+LABEL=d45_reach_placebo_s43 --preset tier1 --days 7 --reach-a 1.0 --reach-b 1.0 --exposure-targets neither --seed 43
+LABEL=d45_reach_placebo_s44 --preset tier1 --days 7 --reach-a 1.0 --reach-b 1.0 --exposure-targets neither --seed 44

@@ -24,6 +24,238 @@ Notes:
 
 ---
 
+## v0.9 — Tier-3 network-topology robustness, SEED SWEEP (27 runs = 3 topologies × 3 conditions × 3 seeds 42/43/44, NB 41) — the reach-asymmetry DiD is topology-robust *and* seed-replicated; the pilot's SBM effect-size edge does not survive
+
+**Date:** 2026-07-06
+**Supersedes** the seed-42-only section below (now demoted to pilot). **Analysed runs:** the full **network-topology arm** of Tier 3 — 27 Qwen3-14B runs under the `tier1` shape (N=100, 5-day P-A/P-B/C, package mode, `day0_anchor=ground_truth_with_rationale`, memory `day0_anchor.ttl_days=1`), varying **only** the peer-network factory across three seeds. SBM = Tier-1 runs `run_6458324…6458332`; BA `m=5` and WS `k=10, β=0.1` = `run_6475087–92` (s42) + `run_6480290…6480784` (s43/s44). Notebook: [`notebooks/41_tier3_network_robustness.ipynb`](../notebooks/41_tier3_network_robustness.ipynb); figures in [`data/output/tier3_network_analysis/`](../data/output/tier3_network_analysis/). The model-replication arm (Apertus / Llama) is separate and still pending.
+
+**Design.** Within each seed the three topologies share the *same 100 agents, ground truth, exposure buckets, and broadcasts* — only the wiring differs. Agents are re-drawn per seed, so the paired DiD (`end_green − end_reform`) is matched per (seed, agent) and **pooled over the three seeds (n=300 per topology)**, exactly as NB 38. BA/WS pinned to mean-degree parity (~10) with SBM, so density is controlled; only *structure* varies.
+
+### Headline DiD (Green-dom − Reform-dom), pooled n=300 — positive and significant on all three topologies
+
+| Topology | mean degree | DiD | 95% CI | p | Cohen dz |
+|---|:--:|:--:|:--:|:--:|:--:|
+| Stochastic-block (Tier-1) | 10.2 | +0.423 | [+0.337, +0.508] | <10⁻¹⁵ | +0.56 |
+| Barabási–Albert (m=5) | 9.5 | +0.337 | [+0.246, +0.428] | <10⁻¹⁰ | +0.42 |
+| Watts–Strogatz (k=10, β=0.1) | 10.0 | +0.360 | [+0.273, +0.447] | <10⁻¹⁰ | +0.47 |
+
+The reach-asymmetry is **topology-robust**: correctly-signed and significant on every network. The three effect sizes are now **statistically indistinguishable** (CIs overlap throughout).
+
+### Per-seed sign-stability — all nine cells positive; the SBM edge was a seed-42 draw
+
+| Topology | s42 | s43 | s44 | seed mean | seed std |
+|---|:--:|:--:|:--:|:--:|:--:|
+| SBM | +0.532 | +0.423 | +0.313 | +0.423 | 0.109 |
+| BA | +0.317 | +0.225 | +0.468 | +0.337 | 0.123 |
+| WS | +0.363 | +0.360 | +0.357 | +0.360 | **0.003** |
+
+Every (topology × seed) DiD is positive. **Correction to the pilot:** its SBM +0.53 lead over BA/WS was seed 42's high draw — SBM declines 0.53 → 0.42 → 0.31 across seeds, pooling to +0.42, and its CI now overlaps BA and WS. There is **no** structural SBM amplification; only sign, significance, and rough magnitude are topology-general. (WS is remarkably seed-stable, std 0.003.) This is consistent with SBM's exposure-assortativity ≈ 0 (below): there was never a population-level echo-chamber mechanism to produce a real edge.
+
+### Each side contributes — and green-amplification is now significant on all three
+
+| Topology | Green-dom − Baseline | Reform-dom − Baseline |
+|---|:--:|:--:|
+| SBM | +0.194 [+0.116, +0.272] | −0.228 [−0.306, −0.151] |
+| BA | +0.137 [+0.068, +0.207] (p=1×10⁻⁴) | −0.199 [−0.282, −0.117] |
+| WS | +0.123 [+0.051, +0.195] (p=9×10⁻⁴) | −0.237 [−0.326, −0.149] |
+
+Pooling over seeds resolves the pilot's one wobble: the green-amplification arm on BA (n.s. at seed 42) is now significant, so **both** arms (green amplifies up, reform suppresses down) contribute on every topology.
+
+### Treatment-on-treated (the contested `both` bucket, n=180) converges across topologies
+
+| Topology | TOT DiD | 95% CI | p |
+|---|:--:|:--:|:--:|
+| SBM | +0.498 | [+0.383, +0.613] | <10⁻¹⁰ |
+| BA | +0.435 | [+0.302, +0.569] | <10⁻⁸ |
+| WS | +0.478 | [+0.362, +0.593] | <10⁻¹⁰ |
+
+Among the ~60% who hear both broadcast streams the three topologies agree closely (0.44–0.50) — the whole-population differences are about *spillover* to the unexposed, not the persuasion effect itself.
+
+### Rank fidelity, bias-invariance, diagnostics
+
+- **Rank fidelity** (Spearman ρ, end vs GT) stays **0.78–0.87 across every topology × condition** — Qwen keeps agents correctly ordered regardless of graph. (Contrast: Llama-3.1-8B ρ ≈ 0.46.)
+- **Bias-invariance:** per-agent DiD~GT slopes mildly negative (SBM −0.174, BA −0.084, WS −0.137) — the ceiling artefact from Tier 2, not a treatment interaction. Signed bias positive throughout (pro-climate inflation), cancelling in the DiD.
+- **Diagnostics (avg over 3 seeds):** SBM max-deg 18, assort(exposure) **−0.017**, clustering 0.11, diameter 4; BA max-deg 37 (hubs), assort −0.003, clustering 0.20, diameter 3.7; WS max-deg 13, assort −0.016, clustering 0.49 (small-world), diameter 5. The graphs genuinely differ in structure; **SBM is not a treatment-aligned echo chamber** (assort ≈ 0).
+
+**Scorecard: 4/4 gates** (headline positive+significant on all 3; TOT positive on all 3; rank ρ ≥ 0.78 everywhere; bias-invariance slope flat-ish everywhere) — now with seed replication.
+
+**Bottom line.** The reach-asymmetry is **not an artefact of the stochastic-block network, and not of any single seed.** BA and WS reproduce a correctly-signed, significant, seed-stable, rank-faithful, bias-invariant asymmetry at the **same magnitude** as SBM. Safe to move away from SBM, unequivocally. The one pilot caveat that remained — a possible SBM effect-size edge — is now **retracted**: it did not survive seed replication. Remaining open item: the **model-replication arm** (Apertus / Llama).
+
+---
+
+## v0.9 — Tier-3 network-topology robustness (run_6475087…6475092 vs Tier-1 SBM run_6458324/6458327/6458330, seed 42, NB 41) — PILOT, superseded by the 3-seed section above
+
+**Date:** 2026-07-05
+**Analysed runs:** the **network-topology arm** of Tier 3 (the model-replication arm — Apertus / Llama — is separate and still pending). Six new seed-42 Qwen3-14B runs under the `tier1` run shape (N=100, 5-day P-A/P-B/C, package mode, `day0_anchor=ground_truth_with_rationale`, memory `day0_anchor.ttl_days=1`), varying **only** the peer-network factory: Barabási–Albert `m=5` (`run_6475087/88/89`) and Watts–Strogatz `k=10, β=0.1` (`run_6475090/91/92`) for baseline / green-dom / reform-dom. Compared against the **seed-42 Tier-1 stochastic-block runs** (`run_6458324` / `6458327` / `6458330`) as the SBM reference. Notebook: [`notebooks/41_tier3_network_robustness.ipynb`](../notebooks/41_tier3_network_robustness.ipynb); figures in [`data/output/tier3_network_analysis/`](../data/output/tier3_network_analysis/). Framing in [research_notes.md](research_notes.md) (2026-07-05 Tier-3 network note).
+
+**Why this is a clean test.** At seed 42 the three topologies share the *same 100 agents, the same YouGov ground truth, the same exposure-bucket assignment, and the same broadcasts* — only the peer-messaging wiring differs, so any change in the DiD across topologies is attributable purely to peer-message propagation. BA/WS parameters were pinned for mean-degree parity (~10) with the SBM canon, so density is controlled; only *structure* varies. **Single seed** — read as directional (within-seed) evidence, not a cross-draw significance claim.
+
+### Headline DiD (Green-dom − Reform-dom) is positive and significant on all three topologies
+
+| Topology | mean degree | DiD | 95% CI | p | Cohen dz |
+|---|:--:|:--:|:--:|:--:|:--:|
+| Stochastic-block (Tier-1) | 10.1 | +0.532 | [+0.382, +0.681] | <10⁻⁵ | +0.71 |
+| Barabási–Albert (m=5) | 9.5 | +0.317 | [+0.155, +0.478] | 1.8×10⁻⁴ | +0.39 |
+| Watts–Strogatz (k=10, β=0.1) | 10.0 | +0.363 | [+0.206, +0.520] | 1×10⁻⁵ | +0.46 |
+
+The reach-asymmetry is **topology-robust**: correctly-signed and within-seed significant on every network (n=100 matched pairs each). Effect size is largest on SBM, but the CIs overlap, so the SBM edge is **suggestive, not proven** at a single seed.
+
+### Each side contributes — but off-SBM the asymmetry leans on reform-suppression
+
+Secondary contrasts vs the symmetric baseline:
+
+| Topology | Green-dom − Baseline | Reform-dom − Baseline |
+|---|:--:|:--:|
+| SBM | +0.297 (p=1×10⁻⁴) | −0.235 (p=1.6×10⁻³) |
+| BA | +0.093 (p=0.14, **n.s.**) | −0.223 (p=2×10⁻³) |
+| WS | +0.135 (p=0.02) | −0.228 (p=6×10⁻³) |
+
+On SBM both sides move; on BA/WS the green-amplification arm weakens (n.s. on BA) while reform-suppression is stable — off the exposure-structured graph the asymmetry is carried more by *reform being suppressible* than by *green amplifying*.
+
+### Treatment-on-treated (the contested `both` bucket) converges across topologies
+
+| Topology | TOT DiD (`both`, n=60) | 95% CI | p |
+|---|:--:|:--:|:--:|
+| SBM | +0.583 | [+0.380, +0.786] | <10⁻⁴ |
+| BA | +0.494 | [+0.255, +0.733] | 1.1×10⁻⁴ |
+| WS | +0.556 | [+0.350, +0.761] | <10⁻⁴ |
+
+Among the ~60% who hear both broadcast streams the three topologies agree closely (0.49–0.58) — so the whole-population DiD differences above are mostly about how *spillover* reaches the unexposed through differently-wired graphs, not about the persuasion effect itself.
+
+### Rank fidelity and bias-invariance hold off-SBM
+
+- **Rank fidelity** (Spearman ρ, end-of-run index vs ground truth) stays **0.82–0.90 across every topology × condition** — Qwen keeps agents correctly ordered regardless of graph, so the difference-engine framing survives leaving SBM. (Contrast: Llama-3.1-8B collapsed to ρ ≈ 0.46 on the same test — see the pending Tier-3 model-arm note.)
+- **Bias-invariance:** per-agent DiD regressed on ground truth gives a flat-ish slope on all three (SBM −0.124, BA −0.080, WS −0.059) — the mild negative reflects the known ceiling effect (Tier 2), not a treatment interaction. Signed bias is positive throughout (+0.28…+0.81), the familiar pro-climate inflation, present in every condition and therefore cancelling in the DiD.
+
+### Network diagnostics — the graphs really differ, and SBM is *not* a treatment-aligned echo chamber
+
+| Topology | max degree | assortativity(exposure) | avg clustering | diameter |
+|---|:--:|:--:|:--:|:--:|
+| SBM | 17 | −0.025 | 0.103 | 4 |
+| BA | 41 (hubs) | −0.006 | 0.213 | 3 |
+| WS | 12 | −0.028 | 0.505 (small-world) | 5 |
+
+**Correction to the going-in assumption.** SBM builds its two blocks from `political_exposure` (A-only→block 0, B-only→block 1), so we expected a treatment-aligned echo chamber. It is **not**: its exposure-assortativity is ≈ 0 (−0.025), because the committed-minority design puts ~90% of agents (`both` + `neither`) round-robin across *both* blocks; only the ~10% A-only/B-only are actually sorted. So SBM's mild effect-size edge is **not** explained by population-level exposure homophily.
+
+**Scorecard: 4/4 gates** (headline positive+significant on all 3 topologies; TOT positive on all 3; rank fidelity ≥ 0.82 everywhere; bias-invariance slope flat-ish everywhere).
+
+**Bottom line.** The reach-asymmetry effect is **not an artefact of the stochastic-block network.** Barabási–Albert and Watts–Strogatz both reproduce a correctly-signed, within-seed-significant, rank-faithful, bias-invariant asymmetry, so it is safe to move away from SBM. Open items: single seed (a seed sweep is needed before any cross-topology *effect-size* claim), and the SBM effect-size edge is suggestive only. This is the **network arm** of Tier 3; the **model-replication arm** (Apertus / Llama) remains.
+
+---
+
+## v0.9 — Tier-2 scale-robustness (re-analysis of run_6458324…6458335, NB 40) — the headline survives every ruler; the Tier-1 "sceptic-tilt" was a scale-ceiling artefact and the effect is ~uniform (bias-invariance restored)
+
+**Date:** 2026-07-05
+**Analysed data:** the same 12 Tier-1 runs, **re-analysed only (no new runs)**. Notebook: [`notebooks/40_tier2_scale_robustness.ipynb`](../notebooks/40_tier2_scale_robustness.ipynb); figures in [`data/output/tier2_analysis/`](../data/output/tier2_analysis/). Framing in [research_notes.md](research_notes.md) (2026-07-05 Tier-2 note).
+
+**What the test asks.** The −3…+3 opinion scale has a ceiling; agents near +3 cannot move up, which can *manufacture* an asymmetry (Green looks more persuasive only because pro-climate agents have run out of room). Tier 2 re-expresses the same final opinions on rulers **without** a ceiling and rechecks the two Tier-1 headlines. Four monotone re-expressions of the package DiD (Green-dom − Reform-dom, n=300 pooled): **raw** (native scale, = NB 38 reference), **headroom** (raw DiD ÷ room-above-start `3−GT`), **logit** (`(x+3)/6` then log-odds; stretches boundary moves), **rank** (percentile on a common ruler; pure ordinal). The raw ruler reproduces NB 38 exactly (DiD +0.423, acid slope −0.174) — internal check.
+
+### Headline is robust on every ruler
+
+| Ruler | Green−Reform DiD | Cohen dz | p |
+|---|:--:|:--:|:--:|
+| raw | +0.423 | +0.56 | 1×10⁻¹⁹ |
+| headroom | +0.197 | +0.60 | 4×10⁻²¹ |
+| logit | +0.695 | +0.43 | 7×10⁻¹³ |
+| rank | +0.088 | +0.59 | 3×10⁻²¹ |
+
+Positive and significant on all four — including the scale-free **rank** ruler — so the headline Green>Reform effect is **not** a ruler artefact.
+
+### The "sceptic-tilt" is a scale artefact — Tier-1 acid-test revised
+
+Acid slope (per-agent DiD regressed on ground truth):
+
+| Ruler | acid slope | p | verdict |
+|---|:--:|:--:|---|
+| raw | −0.174 | 3.7×10⁻⁸ | strong tilt |
+| headroom | +0.022 | 0.14 | **flat** |
+| logit | −0.026 | 0.71 | **flat** |
+| rank | −0.017 | 0.007 | negligible residual |
+
+Tertile (sceptic→green, standardised): raw **0.93→0.19** (steep) vs headroom 0.58→0.68 and logit 0.46→0.51 (flat).
+
+- On the two ceiling-free **cardinal** rulers the sceptic-tilt **vanishes** (n.s.). Only a **negligible ordinal residual** survives on rank (slope −0.017 — significant only at n=300; the Tier-P negligibility-vs-significance lesson applies).
+- **Reconciles with Tier 1's ceiling dig-in.** Tier 1 dropped the 16% *fully saturated* agents and the raw slope held, so it (wrongly) concluded "not a ceiling artefact". But the bounded scale also *gradually* compresses the whole upper range, not just the pinned agents; the logit/headroom rulers correct that graded squash and the tilt then disappears.
+- **Bias-invariance restored.** Because the effect is ~uniform across the spectrum on an appropriate ruler, the Tier-1 raw-scale acid-test "failure" (gate 5a) was itself the artefact. The DiD **is** bias-invariant — a cleaner, stronger claim than Tier 1 alone reached.
+
+**Scorecard: 3/3 gates** (headline positive+significant on all rulers; rank-DiD positive; sceptic-tilt verdict consistent across rulers).
+
+**Bottom line.** The Tier-1 headline (broad, robust, correctly-signed reach-asymmetry effect) passes the ruler stress-test untouched, and the one Tier-1 caveat — a stronger effect for sceptics — dissolves under scale-free measurement. The effect is essentially uniform across the opinion spectrum, so the reach-asymmetry contrast is genuinely bias-invariant. This clears the "scale-ceiling" objection; Tier 3 (replication across models/seeds) is the remaining gate.
+
+---
+
+## v0.9 — Tier-1 bias-invariance & per-policy breakdown of the reach-asymmetry effect (run_6458324…6458335, NB 38 / NB 39) — a broad, robust, correctly-signed reach-asymmetry effect (the raw-scale "sceptic-tilt" is shown by Tier 2 above to be a scale artefact)
+
+**Date:** 2026-07-04
+**Analysed runs:** 12 Tier-1 runs — **4 conditions × 3 seeds (42/43/44), N=100 agents**, package mode, Qwen3-14B, `day0_anchor="ground_truth_with_rationale"`, memory anchor `ttl_days=1`. Conditions set by reach: **baseline** (reach 1.0/1.0), **green_dom** (1.0/0.25), **reform_dom** (0.25/1.0), **neither** (no broadcasts, placebo). Notebooks: [`notebooks/38_tier1_bias_invariance.ipynb`](../notebooks/38_tier1_bias_invariance.ipynb) (package level) and [`notebooks/39_tier1_per_policy.ipynb`](../notebooks/39_tier1_per_policy.ipynb) (per-policy); figures in [`data/output/tier1_analysis/`](../data/output/tier1_analysis/). This is the honest, multi-seed successor to the v0.8 seed-42/n=50 pilot below (now demoted to preliminary). Plain-language framing in [research_notes.md](research_notes.md) (2026-07-04 Tier-1 note).
+
+**Design.** Within a seed the *same 100 agents* (identical GT) appear in all four worlds — a within-subjects design; Day 0 is pinned to GT exactly (verified: max |Day0 − GT| = 0.0), so every difference-in-differences (DiD) has the shared GT and the model's pro-climate inflation cancel algebraically. DiD is computed per (seed, agent) and pooled over the three seeds (n=300 matched pairs). Package index scale ≈ −3…+3; GT mean **+0.662**.
+
+### Level view — every world inflates (bias still present), rank preserved
+
+| Condition | mean shift (end−GT) | 95% CI | Spearman ρ (end vs GT) |
+|---|:--:|:--:|:--:|
+| Baseline | +0.607 | [+0.515, +0.699] | 0.849 |
+| Green-dominant | **+0.802** | [+0.699, +0.905] | 0.782 |
+| Reform-dominant | **+0.379** | [+0.292, +0.466] | 0.863 |
+| Neither (placebo) | +0.477 | [+0.400, +0.554] | 0.867 |
+
+All four worlds sit above GT (the known inflation); rank fidelity is high everywhere (ρ 0.78–0.87).
+
+### Causal result — paired difference-in-differences (package, n=300 pooled)
+
+| Contrast | Mean DiD | 95% CI | Paired p | Cohen dz |
+|---|:--:|:--:|:--:|:--:|
+| **Green − Reform** | **+0.423** | [+0.337, +0.508] | ≈1×10⁻¹⁹ | **+0.563** |
+| Green − Baseline | +0.194 | [+0.116, +0.272] | <10⁻⁴ | +0.283 |
+| Reform − Baseline | −0.228 | [−0.306, −0.151] | <10⁻⁴ | −0.336 |
+| Green − Neither (placebo) | +0.324 | [+0.240, +0.408] | <10⁻⁴ | +0.439 |
+| Reform − Neither (placebo) | −0.098 | [−0.171, −0.026] | 0.0078 | −0.155 |
+
+- **Headline:** a louder Green side leaves citizens **+0.42 package-index points** more pro-climate than a louder Reform side — medium effect, overwhelmingly significant.
+- **Placebo behaves:** vs the no-broadcast world, green pushes **up** (+0.32) and reform pushes **down** (−0.10) — opposite signs, so the broadcasts themselves do the work.
+- **Sign-stable across seeds:** Green − Reform = +0.532 (s42) / +0.423 (s43) / +0.313 (s44), all positive. (Seed-42 = +0.532 replicates the pilot's +0.53 almost exactly.)
+
+### Where the effect lives — exposure buckets (ITT vs treatment-on-treated)
+
+The committed-minority design (`committed_minority_symmetric`: A 0.05 / B 0.05 / both 0.60 / neither 0.30) splits each cohort into reach buckets, so the whole-population **+0.42** is an **intention-to-treat (ITT)** average — deliberately diluted by the 40% who hear zero or one side. Green − Reform DiD by bucket (pooled 3 seeds):
+
+| Bucket | n | DiD | 95% CI | Paired p | Cohen d |
+|---|:--:|:--:|:--:|:--:|:--:|
+| **both** (treated) | 180 | **+0.498** | [+0.383, +0.613] | 5×10⁻¹⁵ | +0.64 |
+| A-only | 15 | +0.389 | [+0.14, +0.64] | 0.005 | +0.86 |
+| B-only | 15 | +0.600 | [+0.08, +1.12] | 0.026 | +0.64 |
+| **neither** (unexposed) | 90 | **+0.248** | [+0.11, +0.39] | 0.001 | +0.37 |
+
+- **Treatment-on-treated (TOT):** the "both" bucket (the 60% who actually hear competing broadcasts) gives **+0.50 — ≈1.18× the population average** — the meaningful persuasion size *when messages land*. Quoting only the ITT +0.42 understates the mechanism.
+- **Social spillover / two-step flow:** the "neither" bucket is **+0.25 and significant** — *not* a placebo failure but real network diffusion. These agents receive no broadcasts yet still exchange peer messages (`k_peers=2`) with exposed neighbours, so the broadcast effect propagates through the social network. The genuinely clean placebo remains the neither-*condition* world (green−neither +0.32 / reform−neither −0.10 above), where **nobody** is exposed.
+- **Caveat:** A-only/B-only are n=15 pooled — directional hints only. Cleanly isolating single-side dose-response (large A-only/B-only samples, e.g. a `split50` design) is a candidate Tier-3 exposure-design arm (see [research_notes.md](research_notes.md)); it is not needed for the core reach-asymmetry claim, which the well-powered "both" bucket already carries.
+
+### The acid test — does the effect depend on where agents started? (raw scale says yes; Tier 2 says no)
+
+On the raw scale, regressing the per-agent Green − Reform DiD on GT gives slope **−0.174 (p = 3.7×10⁻⁸, r = −0.311)** — the gap *looks* monotonically larger for sceptics: **sceptic third +0.699 / middle +0.395 / green third +0.140**. Dropping the 16% of agents fully saturated at a ±3 bound (14% at the +3 green ceiling) barely moves it (**−0.174 → −0.190**), so it is *not* driven by the literally-pinned agents.
+
+- **But this is a scale-ceiling artefact — resolved in the Tier-2 section above (NB 40).** The bounded ruler *gradually* compresses the whole upper range, not just the pinned agents; on ceiling-free rulers (headroom, logit) the slope is flat/non-significant and the effect is ~uniform across the spectrum. So the raw-scale acid-test "failure" was itself the artefact, and **the DiD is bias-invariant** — the reach-asymmetry effect does not depend on where agents started. *(An earlier draft of this subsection read the raw-scale slope as a genuine behavioural sceptic-tilt; Tier 2, run minutes later, corrected it.)*
+
+**Scorecard: 6 / 7 raw-scale gates** (direction ✓, significance ✓, magnitude ✓, placebo ✓, rank fidelity ✓, seed-stability ✓; raw-scale bias-invariance acid slope ✗ — **restored on ceiling-free rulers in Tier 2**).
+
+### Per-policy breakdown (NB 39) — the effect is BROAD (6/6 policies)
+
+| Policy | Green − Reform DiD | 95% CI | Cohen d | % at ±3 ceiling | mean GT |
+|---|:--:|:--:|:--:|:--:|:--:|
+| Ban petrol cars | **+0.62** | [+0.47, +0.77] | 0.48 | 36% | −0.14 |
+| Ban fossil licences | +0.55 | [+0.40, +0.70] | 0.41 | 42% | +0.40 |
+| Carbon tax | +0.46 | [+0.31, +0.61] | 0.35 | 29% | +0.43 |
+| Green housing | +0.39 | [+0.27, +0.50] | 0.38 | 43% | +1.60 |
+| Climate compensation | +0.31 | [+0.16, +0.46] | 0.23 | 31% | −0.06 |
+| Renewable energy | +0.21 | [+0.11, +0.32] | 0.23 | 41% | +1.75 |
+
+All six policies show a significant, correctly-signed pro-climate effect. The ordering tracks contestedness: **divisive policies (Ban petrol cars, Ban fossil licences, Carbon tax) move most; near-consensus popular policies (Renewable energy, Green housing) move least — and are the most ceiling-bound (41–43% saturated), so a ceiling genuinely masks movement *there***. The per-policy raw-scale acid slope is negative on all 6 (5/6 significant) — but, like the package-level tilt, this is a scale-ceiling effect that flattens under Tier-2's ceiling-free rulers.
+
+**Bottom line.** The reach manipulation produces a broad, robust, correctly-signed persuasion effect that survives the model's pro-climate bias in every between-condition contrast (the difference-engine works), across all six policies, and — per the Tier-2 section above — on every ceiling-free ruler. The apparent raw-scale "sceptic-tilt" is a scale-ceiling artefact (Tier 2); the effect is essentially **uniform** across the opinion spectrum, so the contrast is genuinely **bias-invariant**.
+
+---
+
 ## v0.9 — Tier-P calibration & anchor justification (run_6457850…6457858, NB 37) — the raw model is inflated in *level* but faithful in *rank*; anchoring removes the level bias by construction
 
 **Date:** 2026-07-04
@@ -128,6 +360,8 @@ The `real` arm here is the raw *no-anchor* opinion: LLM mean +1.298 vs GT mean +
 ---
 
 ## v0.8 — bias-invariance / difference-in-differences validation of the reach-asymmetry runs (run_6436142 / 6436192 / 6436203 / 6436638) — the pro-climate level bias cancels in between-condition contrasts
+
+> **⚠ Superseded by the v0.9 Tier-1 section above (2026-07-04, NB 38/39).** This is the n=50, seed-42 **pilot**. Tier-1 (n=100 × 3 seeds) replicates the headline (Green − Reform = +0.53 at seed 42 → **+0.42 pooled**) but at higher power **overturns two claims made here**: (1) the DiD is *not* strictly GT-independent — the acid-test slope is **−0.17 (p<10⁻⁷)** vs the underpowered −0.115 (p=0.20) reported below; and (2) that residual GT-dependence is **not** a ceiling artefact — it survives dropping saturated agents (−0.174→−0.190). Treat the numbers below as the preliminary pilot; cite Tier-1 for the load-bearing result.
 
 **Date:** 2026-07-03
 **Analysed runs:** the four reach-asymmetry runs in the section below (baseline, reform-dominant, green-dominant, reform-dominant BA). All use `seed=42, n=50`, so the **same 50 agents with identical ground-truth (GT) values** appear in every condition — a within-subjects design (verified: agent set and per-agent GT identical across all four). This section is the quantitative backing for the "difference-engine" framing argued in [research_notes.md](research_notes.md) (2026-07-03 note); see there for the plain-language interpretation.

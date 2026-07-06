@@ -75,6 +75,8 @@ SIM_CONFIG = {
     "day0_anchor": "ground_truth_with_rationale",
     "reach_a": 1.0,             # fraction of A-audience reached by political agent A broadcasts (0.0-1.0)
     "reach_b": 1.0,             # fraction of B-audience reached by political agent B broadcasts (0.0-1.0)
+    "reach_targeting_a": "random",  # audience selection for agent A when reach_a<1.0: "random" | "persuadable" (undecided, by |GT package index|) | "degree" | "betweenness" (peer-graph centrality). No-op at reach_a=1.0.
+    "reach_targeting_b": "random",  # audience selection for agent B when reach_b<1.0: "random" | "persuadable" | "degree" | "betweenness". No-op at reach_b=1.0.
     "audience_cap": None,       # if int, cap each political agent's audience to this many citizens (uniform random) BEFORE reach subsample. None = no cap.
     # Political-exposure assignment. See cag.abm.environment for full
     # mode/preset semantics. Defaults: affinity-rank mode with the new
@@ -553,8 +555,10 @@ def _log_experiment_config(cfg, resume, checkpoint_dir):
         cfg.get("audience_cap"),
     )
     logging.info(
-        "[broadcast]  reach_a=%.2f  reach_b=%.2f  message_source=%s  message_set=%s",
+        "[broadcast]  reach_a=%.2f  reach_b=%.2f  targeting_a=%s  targeting_b=%s  "
+        "message_source=%s  message_set=%s",
         float(cfg.get("reach_a", 1.0)), float(cfg.get("reach_b", 1.0)),
+        cfg.get("reach_targeting_a", "random"), cfg.get("reach_targeting_b", "random"),
         cfg.get("political_message_source"),
         cfg.get("political_message_set"),
     )
@@ -648,6 +652,18 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
                 f"{name} must be a float in [0.0, 1.0], got {val!r}"
             )
 
+    reach_targeting_a = cfg.get("reach_targeting_a", "random")
+    reach_targeting_b = cfg.get("reach_targeting_b", "random")
+    for name, mode in (
+        ("reach_targeting_a", reach_targeting_a),
+        ("reach_targeting_b", reach_targeting_b),
+    ):
+        if mode not in ("random", "persuadable", "degree", "betweenness"):
+            raise ValueError(
+                f"{name} must be one of 'random', 'persuadable', 'degree', "
+                f"'betweenness', got {mode!r}"
+            )
+
     audience_cap = cfg.get("audience_cap", None)
     if audience_cap is not None and (
         not isinstance(audience_cap, int)
@@ -689,18 +705,6 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
         cap=audience_cap,
         seed=cfg["random_seed"],
     )
-    nation.apply_reach_subsample(
-        reach_a=float(reach_a),
-        reach_b=float(reach_b),
-        seed=cfg["random_seed"],
-    )
-    # Tier-P persona ablation. Applied here (with the other audience
-    # manipulations) so it runs on both fresh and resume paths and is
-    # captured in the results audit trail. "real" is a no-op.
-    nation.persona_map = nation.apply_persona_mode(
-        persona_mode,
-        seed=cfg["random_seed"],
-    )
     # Layer 1: bump network params to keep small populations connected.
     _adjust_network_params_for_small_n(cfg, len(nation.agents_active))
     nation.create_network(
@@ -713,6 +717,25 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
     _auto_connect_components(nation, seed=cfg["random_seed"])
     # Layer 3: visibility log line (always emitted).
     _log_network_summary(nation)
+    # Reach subsample runs AFTER the peer network is built + repaired so
+    # centrality-based targeting (degree / betweenness) ranks each political
+    # agent's audience by position in the FINAL social graph. The random and
+    # persuadable modes are unaffected by this ordering (each uses its own
+    # seeded RNG / ground-truth score), so moving it here is a no-op for them.
+    nation.apply_reach_subsample(
+        reach_a=float(reach_a),
+        reach_b=float(reach_b),
+        seed=cfg["random_seed"],
+        targeting_a=reach_targeting_a,
+        targeting_b=reach_targeting_b,
+    )
+    # Tier-P persona ablation. Applied here (with the other audience
+    # manipulations) so it runs on both fresh and resume paths and is
+    # captured in the results audit trail. "real" is a no-op.
+    nation.persona_map = nation.apply_persona_mode(
+        persona_mode,
+        seed=cfg["random_seed"],
+    )
 
     n_agents = len(nation.agents_active)
 
@@ -722,6 +745,23 @@ def run_simulation(config, nation, checkpoint_dir=None, resume=False,
     # sharing (and mutating) one config object.
     for agent in nation.agents_active.values():
         agent.memory_cfg = deepcopy(rt["memory_cfg"])
+
+    # Resolve which agents get full prompt capture + the diagnostic timeline
+    # (one per exposure bucket by default; an explicit id list overrides).
+    # Gating capture to this small sample keeps agent_prompts.csv bounded.
+    _explicit = cfg.get("timeline_sample_agent_ids")
+    if _explicit:
+        _capture_ids = [a for a in _explicit if a in nation.agents_active]
+    else:
+        _seen = {}
+        for _aid in sorted(nation.agents_active.keys(), key=str):
+            _bucket = getattr(nation.agents_active[_aid], "political_exposure", None)
+            if _bucket not in _seen:
+                _seen[_bucket] = _aid
+        _capture_ids = list(_seen.values())
+    nation._prompt_capture_ids = _capture_ids
+    for _aid in _capture_ids:
+        nation.agents_active[_aid]._capture_prompts = True
 
     # Resume vs fresh start
     if resume:

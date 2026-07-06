@@ -1,0 +1,16 @@
+# Draft-45 bite 2/4 — FREQUENCY dose-response (SBM, full reach 1.0/1.0). 4 conditions x 3 seeds = 12 runs.
+# broadcasts-a:broadcasts-b sets how many times each side speaks per day; 1:1 is the reach baseline
+# (bite 1), so reach and frequency overlay on a common advantage axis.
+# Submit: bash scripts/aire/sweep.sh scripts/aire/sweeps/draft_45_2_frequency.txt --time=15:00:00
+LABEL=d45_freq_green2v1_s42 --preset tier1 --days 7 --broadcasts-a 2 --broadcasts-b 1 --seed 42
+LABEL=d45_freq_green2v1_s43 --preset tier1 --days 7 --broadcasts-a 2 --broadcasts-b 1 --seed 43
+LABEL=d45_freq_green2v1_s44 --preset tier1 --days 7 --broadcasts-a 2 --broadcasts-b 1 --seed 44
+LABEL=d45_freq_green3v1_s42 --preset tier1 --days 7 --broadcasts-a 3 --broadcasts-b 1 --seed 42
+LABEL=d45_freq_green3v1_s43 --preset tier1 --days 7 --broadcasts-a 3 --broadcasts-b 1 --seed 43
+LABEL=d45_freq_green3v1_s44 --preset tier1 --days 7 --broadcasts-a 3 --broadcasts-b 1 --seed 44
+LABEL=d45_freq_reform1v2_s42 --preset tier1 --days 7 --broadcasts-a 1 --broadcasts-b 2 --seed 42
+LABEL=d45_freq_reform1v2_s43 --preset tier1 --days 7 --broadcasts-a 1 --broadcasts-b 2 --seed 43
+LABEL=d45_freq_reform1v2_s44 --preset tier1 --days 7 --broadcasts-a 1 --broadcasts-b 2 --seed 44
+LABEL=d45_freq_reform1v3_s42 --preset tier1 --days 7 --broadcasts-a 1 --broadcasts-b 3 --seed 42
+LABEL=d45_freq_reform1v3_s43 --preset tier1 --days 7 --broadcasts-a 1 --broadcasts-b 3 --seed 43
+LABEL=d45_freq_reform1v3_s44 --preset tier1 --days 7 --broadcasts-a 1 --broadcasts-b 3 --seed 44

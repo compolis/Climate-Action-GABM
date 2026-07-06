@@ -136,6 +136,122 @@ def build_package_index_by_bucket(results):
     return out[columns]
 
 
+def build_bucket_summary(results):
+    """One row per (run, bucket) end-of-run summary -- the cross-run seed.
+
+    Columns: run_label, political_exposure, n_agents, day0_gt_mean, end_mean,
+    drift, mae, rank_rho, reached_a, reached_b. A final ``TOTAL`` row pools
+    all agents. Deliberately one-row-per-run-per-bucket so many run dirs
+    concatenate straight into the dose-response / targeting figures.
+    """
+    columns = [
+        "run_label", "political_exposure", "n_agents", "day0_gt_mean",
+        "end_mean", "drift", "mae", "rank_rho", "reached_a", "reached_b",
+    ]
+    traj = results.get("package_index_trajectories")
+    gt = results.get("package_ground_truth")
+    attrs = results.get("agent_attributes")
+    if (traj is None or traj.empty or gt is None or gt.empty
+            or attrs is None or attrs.empty):
+        return pd.DataFrame(columns=columns)
+
+    cfg = results.get("config") or {}
+    run_label = str(cfg.get("run_label") or "") if isinstance(cfg, dict) else ""
+
+    end_day = int(traj["day"].max())
+    end = traj[traj["day"] == end_day][["agent_id", "package_index"]]
+    merged = end.merge(gt[["agent_id", "ground_truth"]], on="agent_id", how="inner")
+    bucket_map = dict(zip(attrs["agent_id"], attrs["political_exposure"]))
+    merged["political_exposure"] = merged["agent_id"].map(bucket_map)
+    ra_map = dict(zip(attrs["agent_id"], attrs.get("reached_by_a", pd.Series(dtype=bool))))
+    rb_map = dict(zip(attrs["agent_id"], attrs.get("reached_by_b", pd.Series(dtype=bool))))
+
+    def _summarise(sub, label):
+        n = len(sub)
+        if n == 0:
+            return None
+        gt_vals = sub["ground_truth"].astype(float)
+        end_vals = sub["package_index"].astype(float)
+        if n >= 2 and gt_vals.nunique() > 1 and end_vals.nunique() > 1:
+            rho = float(end_vals.corr(gt_vals, method="spearman"))
+        else:
+            rho = float("nan")
+        return {
+            "run_label": run_label,
+            "political_exposure": label,
+            "n_agents": n,
+            "day0_gt_mean": float(gt_vals.mean()),
+            "end_mean": float(end_vals.mean()),
+            "drift": float(end_vals.mean() - gt_vals.mean()),
+            "mae": float((end_vals - gt_vals).abs().mean()),
+            "rank_rho": rho,
+            "reached_a": int(sum(bool(ra_map.get(a, False)) for a in sub["agent_id"])),
+            "reached_b": int(sum(bool(rb_map.get(a, False)) for a in sub["agent_id"])),
+        }
+
+    rows = []
+    for bucket in _sorted_buckets(merged["political_exposure"].dropna().unique()):
+        r = _summarise(merged[merged["political_exposure"] == bucket], bucket)
+        if r is not None:
+            rows.append(r)
+    total = _summarise(merged, "TOTAL")
+    if total is not None:
+        rows.append(total)
+    return pd.DataFrame(rows, columns=columns)
+
+
+def build_targeting_diagnostics(results):
+    """Per-side reach-targeting diagnostic: did targeting select who we meant?
+
+    For each political side, compares the reached audience against the
+    side's structural-audience members who were NOT reached, on mean
+    |ground-truth package index| (persuadable targeting keeps the smaller
+    |GT|; a random/full-reach side shows an empty dropped set). One row per
+    side; empty when there is no reach data.
+    """
+    columns = [
+        "side", "targeting_mode", "reach", "n_audience", "n_reached",
+        "n_dropped", "reached_mean_absgt", "dropped_mean_absgt",
+    ]
+    attrs = results.get("agent_attributes")
+    gt = results.get("package_ground_truth")
+    if attrs is None or attrs.empty or gt is None or gt.empty:
+        return pd.DataFrame(columns=columns)
+    cfg = results.get("config") or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    absgt = dict(zip(gt["agent_id"], gt["ground_truth"].astype(float).abs()))
+
+    def _mean_abs(sub):
+        vals = [absgt[a] for a in sub["agent_id"] if a in absgt]
+        return float(sum(vals) / len(vals)) if vals else float("nan")
+
+    rows = []
+    for side, reached_col, audience, mode_key, reach_key in (
+        ("A", "reached_by_a", {"A-only", "both"}, "reach_targeting_a", "reach_a"),
+        ("B", "reached_by_b", {"B-only", "both"}, "reach_targeting_b", "reach_b"),
+    ):
+        if reached_col not in attrs.columns:
+            continue
+        aud = attrs[attrs["political_exposure"].isin(audience)]
+        if aud.empty:
+            continue
+        reached = aud[aud[reached_col].astype(bool)]
+        dropped = aud[~aud[reached_col].astype(bool)]
+        rows.append({
+            "side": side,
+            "targeting_mode": str(cfg.get(mode_key, "random")),
+            "reach": float(cfg.get(reach_key, 1.0)),
+            "n_audience": len(aud),
+            "n_reached": len(reached),
+            "n_dropped": len(dropped),
+            "reached_mean_absgt": _mean_abs(reached),
+            "dropped_mean_absgt": _mean_abs(dropped),
+        })
+    return pd.DataFrame(rows, columns=columns)
+
+
 def build_opinion_shares_by_bucket(results):
     """Support/neutral/against shares per (policy, day, bucket)."""
     columns = [

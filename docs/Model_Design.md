@@ -2571,3 +2571,46 @@ NB 27 ([notebooks/27_affinity_exposure_demo.ipynb](../notebooks/27_affinity_expo
 
 ---
 
+## 34. Per-side reach targeting: persuadable and network-centrality (v0.9, 2026-07-05)
+
+### 34.1 Motivation
+
+`reach_a` / `reach_b` (§17) already let one committed minority reach a larger *fraction* of its audience per broadcast, but the reached subset was always drawn **uniformly at random**. Real campaigns with a reach budget don't spend it at random — they *microtarget*. v0.9 adds per-side control over *which* audience members a limited reach keeps, so the model can ask whether spending reach on the *movable* or the *well-connected* changes the outcome, not just spending *more* of it.
+
+### 34.2 The four modes
+
+`SurveyedNation.apply_reach_subsample(..., targeting_a, targeting_b)` in [environment.py](../src/cag/abm/environment.py) accepts, per side, one of:
+
+| Mode | Keeps the `floor(reach·n)` audience members with… | Models |
+|---|---|---|
+| `random` (default) | a uniform random draw (prior behaviour) | untargeted reach |
+| `persuadable` | the **smallest** `|get_real_package_index()|` (closest to the neutral midpoint) | spending reach on the undecided / swing |
+| `degree` | the **highest** degree centrality on the peer graph | buying the most-connected "influencers" |
+| `betweenness` | the **highest** betweenness centrality (bridges between clusters) | buying the cross-community brokers |
+
+All non-random modes hard-rank on the score and keep the top slice; a seeded permutation (the *same* seed as the random arm) breaks ties, so the modes differ **only** by selection criterion, not by a different random draw. Every mode is a **no-op at `reach = 1.0`** (the whole audience is kept). `political_exposure` labels are untouched — only the broadcast audience narrows.
+
+### 34.3 Setup ordering
+
+Centrality is a property of the peer graph, so the graph must exist before reach is subsampled. `run_simulation` setup in [sim.py](../src/cag/abm/sim.py) was reordered: `create_network` → `assign_network_blocks` → `_auto_connect_components` (the §25 repair) now run **before** `apply_reach_subsample`, so degree/betweenness are computed on the final, repaired graph. The `random` and `persuadable` arms use their own seeded RNG / ground-truth scores and are unaffected by the reorder — verified bit-for-bit by the unchanged test suite.
+
+### 34.4 Configuration and wiring
+
+New `SIM_CONFIG["reach_targeting_a"]` / `["reach_targeting_b"]` (default `"random"`), validated in `run_simulation`; `--reach-targeting-a/-b` CLI flags ([__main__.py](../src/cag/__main__.py)); both are `_RESUME_HARD_KEYS` ([checkpoint.py](../src/cag/io/checkpoint.py)) since they change the audience. Because centrality does not discriminate on `|GT|` and persuadability does not discriminate on degree, the same reach budget selects genuinely different audiences (NB 42: at reach 0.4, persuadable kept mean `|GT|` 0.89 vs 2.04 dropped; degree kept mean degree 9.17 vs 3.67). Targeting only bites at `reach < 1.0`, and the random-vs-targeted gap is widest at moderate reach.
+
+## 35. v0.9 observability layer and diagnostic figures (2026-07-05)
+
+### 35.1 Full prompt capture — `agent_prompts.csv`
+
+A new `SurveyedCitizen._chat()` wrapper ([agent.py](../src/cag/abm/agent.py)) routes every persona-facing `send_chat` call (seed rationale, both survey steps, broadcast + peer reflections, peer-message generation — single and package variants) and, when the agent is flagged for capture, records the exact `(system_prompt, user_prompt, response)` triple. To keep the file bounded regardless of `n_citizens`, capture is **gated to a stratified sample of one agent per exposure bucket** (or an explicit `timeline_sample_agent_ids`), resolved once in `run_simulation` and shared with `agent_timeline`. This is the definitive "everything the agent saw" audit surface; NB 43 walks one agent's trail stage by stage. `agent_prompts.csv` is final-output only (`_CHECKPOINT_SKIP_KEYS`).
+
+### 35.2 Reached-audience flags and cross-run tables
+
+The *structural* exposure bucket is not the same as *who was actually reached* once `reach < 1` and targeting apply, so `agent_attributes.csv` gains per-agent `reached_by_a` / `reached_by_b` booleans (post-subsample audience membership) — the basis for treatment-on-treated and targeting analysis. Two new tables are built in [aggregators.py](../src/cag/io/aggregators.py): `bucket_summary.csv` (one row per run × bucket: n, Day-0 GT mean, end mean, drift, MAE, rank ρ, reached counts — deliberately shaped as the **cross-run aggregation seed** so many run directories concatenate into a dose-response), and `targeting_diagnostics.csv` (per side: mode, reach, reached-vs-dropped mean `|GT|`). The heavy `survey_assembled_context.csv` — written for every agent though only the sampled rows are consumed by the timeline — is now gated to the same sample at collection time, so it scales with the ~4-agent sample rather than `n_citizens`.
+
+### 35.3 New diagnostic figures
+
+[plots.py](../src/cag/io/plots.py) `save_result_plots` gains eight figures: `opinion_trajectories_by_bucket`, `polarization`, `drift_from_gt`, `opinion_ridgeline` (Day-0→Day-N distribution joyplot), `network_before_after` (nodes coloured by opinion, sized by degree, reached nodes ringed), `targeting_mechanism` (reached-vs-unreached spillover), `reach_qc`, and `calibration_before_after`. The existing trajectory and by-bucket plots now render **Day 0 as a distinct anchor marker** — conditional on `day0_anchor` being a ground-truth mode, so an `llm_survey` Day 0 stays on the line — with 95 % CI ribbons, line markers, and per-bucket GT references.
+
+---
+

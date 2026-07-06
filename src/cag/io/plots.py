@@ -23,6 +23,74 @@ def _policy_short_names():
     }
 
 
+def _save_or_show(fig, output_path):
+    import matplotlib.pyplot as plt
+    if output_path:
+        fig.savefig(output_path, dpi=150, bbox_inches="tight")
+        logging.info(f"Plot saved to {output_path}")
+    else:
+        plt.show()
+    return fig
+
+
+def _day0_is_anchor(results):
+    """True when Day 0 is a ground-truth anchor (not a simulated opinion)."""
+    cfg = results.get("config") or {}
+    if not isinstance(cfg, dict):
+        return False
+    return cfg.get("day0_anchor") in ("ground_truth", "ground_truth_with_rationale")
+
+
+def _mean_ci_by_day(df, value_col):
+    """Return (mean, lo, hi) Series indexed by day; 95% normal-approx CI."""
+    g = df.groupby("day")[value_col]
+    m = g.mean()
+    n = g.count()
+    sem = (g.std(ddof=1) / n.pow(0.5)).fillna(0.0)
+    return m, m - 1.96 * sem, m + 1.96 * sem
+
+
+def _mean_line_with_anchor(ax, mean_series, *, anchor, color="black",
+                           linewidth=2, label="Mean",
+                           anchor_label="Day-0 GT anchor"):
+    """Plot a mean trajectory. When ``anchor`` and Day 0 is present, render
+    Day 0 as a distinct diamond marker and start the line at Day 1 (Day 0 is
+    an injected ground-truth anchor, not a simulated opinion)."""
+    s = mean_series.sort_index()
+    if anchor and 0 in s.index and len(s.index) > 1:
+        ax.scatter([0], [s.loc[0]], color=color, marker="D", s=45, zorder=5,
+                   edgecolors="black", linewidths=0.5, label=anchor_label)
+        rest = s[s.index >= 1]
+        ax.plot(rest.index, rest.values, color=color, linewidth=linewidth,
+                marker="o", markersize=4, label=label)
+    else:
+        ax.plot(s.index, s.values, color=color, linewidth=linewidth,
+                marker="o", markersize=4, label=label)
+
+
+def _ci_band(ax, m, lo, hi, *, anchor, color="black", alpha=0.12, label=None):
+    idx = m.index
+    mask = (idx >= 1) if anchor else (idx >= idx.min())
+    ax.fill_between(idx[mask], lo.values[mask], hi.values[mask],
+                    color=color, alpha=alpha, label=label)
+
+
+def _per_bucket_gt_means(results):
+    """dict bucket -> mean package ground truth, plus 'TOTAL'."""
+    gt = results.get("package_ground_truth")
+    attrs = results.get("agent_attributes")
+    out = {}
+    if gt is None or gt.empty or attrs is None or attrs.empty:
+        return out
+    bmap = dict(zip(attrs["agent_id"], attrs["political_exposure"]))
+    g = gt.copy()
+    g["political_exposure"] = g["agent_id"].map(bmap)
+    for bucket, sub in g.groupby("political_exposure"):
+        out[bucket] = float(sub["ground_truth"].mean())
+    out["TOTAL"] = float(gt["ground_truth"].mean())
+    return out
+
+
 def plot_opinion_trajectories(results, output_path=None):
     """Plot opinion trajectories over time."""
     import matplotlib.pyplot as plt
@@ -39,6 +107,7 @@ def plot_opinion_trajectories(results, output_path=None):
     fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 5 * nrows), squeeze=False)
 
     policy_names = _policy_short_names()
+    anchor = _day0_is_anchor(results)
 
     for i, pid in enumerate(policies):
         ax = axes[i // ncols, i % ncols]
@@ -49,8 +118,9 @@ def plot_opinion_trajectories(results, output_path=None):
             ax.plot(agent_data["day"], agent_data["numeric"],
                     alpha=0.15, color="steelblue", linewidth=0.8)
 
-        mean = pdf.groupby("day")["numeric"].mean()
-        ax.plot(mean.index, mean.values, color="black", linewidth=2, label="Mean")
+        m, lo, hi = _mean_ci_by_day(pdf, "numeric")
+        _ci_band(ax, m, lo, hi, anchor=anchor)
+        _mean_line_with_anchor(ax, m, anchor=anchor)
 
         ax.set_xlabel("Day")
         ax.set_ylabel("Opinion (-3 to +3)")
@@ -144,8 +214,10 @@ def plot_package_index_trajectories(results, output_path=None):
             linewidth=0.8,
         )
 
-    mean = df.groupby("day")["package_index"].mean()
-    ax.plot(mean.index, mean.values, color="black", linewidth=2, label="Mean")
+    anchor = _day0_is_anchor(results)
+    m, lo, hi = _mean_ci_by_day(df, "package_index")
+    _ci_band(ax, m, lo, hi, anchor=anchor, label="95% CI")
+    _mean_line_with_anchor(ax, m, anchor=anchor)
 
     package_ground_truth_df = results.get("package_ground_truth")
     if package_ground_truth_df is not None and not package_ground_truth_df.empty:
@@ -239,10 +311,8 @@ def plot_package_index_by_bucket(results, output_path=None):
     nrows = (n + ncols - 1) // ncols
     fig, axes = plt.subplots(nrows, ncols, figsize=(7 * ncols, 4.5 * nrows), squeeze=False)
 
-    gt_mean = None
-    pkg_gt = results.get("package_ground_truth")
-    if pkg_gt is not None and not pkg_gt.empty:
-        gt_mean = float(pkg_gt["ground_truth"].mean())
+    gt_bucket = _per_bucket_gt_means(results)
+    gt_total = gt_bucket.get("TOTAL")
 
     for i, bucket in enumerate(present):
         ax = axes[i // ncols, i % ncols]
@@ -252,10 +322,18 @@ def plot_package_index_by_bucket(results, output_path=None):
             ax.plot(adata["day"], adata["package_index"],
                     alpha=0.18, color="steelblue", linewidth=0.8)
         mean = bdf.groupby("day")["package_index"].mean()
-        ax.plot(mean.index, mean.values, color="black", linewidth=2, label="Mean")
-        if gt_mean is not None:
-            ax.axhline(gt_mean, color="red", linestyle="--", linewidth=1.2,
-                       label=f"GT mean ({gt_mean:+.2f})")
+        # Plain markered mean line (Day 0 included). The Day-0 anchor diamond
+        # is dropped in bucket panels because the Bucket GT line already marks
+        # that value; the diamond is kept in plot_package_index_trajectories.
+        ax.plot(mean.index, mean.values, color="black", marker="o",
+                markersize=5, linewidth=2, label="Mean")
+        gmt = gt_bucket.get(bucket)
+        if gmt is not None:
+            ax.axhline(gmt, color="red", linestyle="--", linewidth=1.4,
+                       label=f"Bucket GT ({gmt:+.2f})")
+        if gt_total is not None:
+            ax.axhline(gt_total, color="dimgray", linestyle="-.", linewidth=1.2,
+                       alpha=0.9, label=f"Pop GT ({gt_total:+.2f})")
         ax.set_title(f"{bucket} (n={bdf['agent_id'].nunique()})")
         ax.set_xlabel("Day")
         ax.set_ylabel("Package index (-3..+3)")
@@ -511,6 +589,332 @@ def plot_calibration_by_policy(results, output_path=None):
     return fig
 
 
+def plot_opinion_trajectories_by_bucket(results, output_path=None):
+    """Per-policy figure: bucket MEAN opinion lines + per-bucket GT refs."""
+    import matplotlib.pyplot as plt
+
+    from cag.io.aggregators import _attach_bucket, _sorted_buckets
+
+    traj = results.get("opinion_trajectories")
+    attrs = results.get("agent_attributes")
+    gt = results.get("ground_truth")
+    if traj is None or traj.empty or attrs is None or attrs.empty:
+        logging.warning("No data for opinion_trajectories_by_bucket.")
+        return None
+    joined = _attach_bucket(traj, attrs)
+    buckets = _sorted_buckets(joined["political_exposure"].dropna().unique())
+    policies = list(joined["policy_id"].unique())
+    if not buckets or not policies:
+        return None
+    anchor = _day0_is_anchor(results)
+
+    gt_means = {}
+    if gt is not None and not gt.empty:
+        bmap = dict(zip(attrs["agent_id"], attrs["political_exposure"]))
+        gj = gt.copy()
+        gj["political_exposure"] = gj["agent_id"].map(bmap)
+        for (pid, b), sub in gj.groupby(["policy_id", "political_exposure"]):
+            gt_means[(str(pid), b)] = float(sub["ground_truth"].mean())
+
+    colors = plt.cm.tab10.colors
+    n = len(policies)
+    ncols = min(n, 3)
+    nrows = (n + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 4.5 * nrows), squeeze=False)
+    names = _policy_short_names()
+
+    for i, pid in enumerate(policies):
+        ax = axes[i // ncols, i % ncols]
+        pdf = joined[joined["policy_id"] == pid]
+        for bi, b in enumerate(buckets):
+            bsub = pdf[pdf["political_exposure"] == b]
+            if bsub.empty:
+                continue
+            c = colors[bi % len(colors)]
+            m = bsub.groupby("day")["numeric"].mean()
+            _mean_line_with_anchor(ax, m, anchor=anchor, color=c, label=b,
+                                   anchor_label=None)
+            gmt = gt_means.get((str(pid), b))
+            if gmt is not None:
+                ax.axhline(gmt, color=c, linestyle=":", linewidth=0.8, alpha=0.6)
+        ax.set_ylim(-3.5, 3.5)
+        ax.set_title(names.get(str(pid), str(pid))[:30])
+        ax.set_xlabel("Day")
+        ax.set_ylabel("Opinion (-3..+3)")
+        ax.legend(fontsize=7, loc="best")
+
+    for j in range(n, nrows * ncols):
+        axes[j // ncols, j % ncols].set_visible(False)
+    fig.suptitle("Opinion Trajectories by Bucket (mean per bucket)", fontsize=13)
+    plt.tight_layout()
+    return _save_or_show(fig, output_path)
+
+
+def plot_polarization(results, output_path=None):
+    """Std of the package index over time (dispersion / polarization)."""
+    import matplotlib.pyplot as plt
+
+    df = results.get("package_index_trajectories")
+    if df is None or df.empty:
+        return None
+    std = df.groupby("day")["package_index"].std(ddof=1)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(std.index, std.values, color="purple", marker="o", linewidth=2,
+            label="Std dev")
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Package-index std (spread)")
+    ax.set_ylim(bottom=0)
+    ax.set_title("Opinion Dispersion / Polarization over Time")
+    ax.legend()
+    plt.tight_layout()
+    return _save_or_show(fig, output_path)
+
+
+def plot_drift_from_gt(results, output_path=None):
+    """Mean(index - ground truth) over time, overall + per bucket."""
+    import matplotlib.pyplot as plt
+
+    from cag.io.aggregators import _attach_bucket, _sorted_buckets
+
+    traj = results.get("package_index_trajectories")
+    gt = results.get("package_ground_truth")
+    attrs = results.get("agent_attributes")
+    if traj is None or traj.empty or gt is None or gt.empty:
+        return None
+    gmap = dict(zip(gt["agent_id"], gt["ground_truth"].astype(float)))
+    d = traj.copy()
+    d["gt"] = d["agent_id"].map(gmap)
+    d = d.dropna(subset=["gt"])
+    if d.empty:
+        return None
+    d["drift"] = d["package_index"] - d["gt"]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    overall = d.groupby("day")["drift"].mean()
+    ax.plot(overall.index, overall.values, color="black", linewidth=2.5,
+            marker="o", label="All")
+    if attrs is not None and not attrs.empty:
+        dj = _attach_bucket(d, attrs)
+        colors = plt.cm.tab10.colors
+        for bi, b in enumerate(_sorted_buckets(dj["political_exposure"].dropna().unique())):
+            sub = dj[dj["political_exposure"] == b].groupby("day")["drift"].mean()
+            ax.plot(sub.index, sub.values, color=colors[bi % len(colors)],
+                    alpha=0.8, marker=".", label=b)
+    ax.axhline(0, color="grey", linestyle="--", linewidth=0.8)
+    ax.set_xlabel("Day")
+    ax.set_ylabel("Mean(index - ground truth)")
+    ax.set_title("Drift from Ground Truth over Time")
+    ax.legend(fontsize=8)
+    plt.tight_layout()
+    return _save_or_show(fig, output_path)
+
+
+def plot_opinion_ridgeline(results, output_path=None):
+    """Joyplot: the package-index distribution for each day (Day 0 -> Day N)."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    df = results.get("package_index_trajectories")
+    if df is None or df.empty:
+        return None
+    days = sorted(int(d) for d in df["day"].unique())
+    xs = np.linspace(-3.2, 3.2, 200)
+
+    def _kde(vals):
+        vals = np.asarray(vals, dtype=float)
+        if len(vals) < 2 or float(np.std(vals)) == 0.0:
+            y = np.zeros_like(xs)
+            if len(vals):
+                y[int(np.argmin(np.abs(xs - float(np.mean(vals)))))] = 1.0
+            return y
+        h = max(1.06 * float(np.std(vals)) * len(vals) ** (-1 / 5), 0.15)
+        d = (xs[None, :] - vals[:, None]) / h
+        return np.exp(-0.5 * d ** 2).sum(axis=0) / (len(vals) * h * np.sqrt(2 * np.pi))
+
+    fig, ax = plt.subplots(figsize=(8, 1.1 * len(days) + 2))
+    for i, day in enumerate(days):
+        vals = df[df["day"] == day]["package_index"].values
+        y = _kde(vals)
+        y = y / (y.max() or 1.0) * 0.9
+        color = plt.cm.viridis(i / max(1, len(days) - 1))
+        ax.fill_between(xs, i, i + y, color=color, alpha=0.8, linewidth=0.8,
+                        edgecolor="white")
+        ax.text(-3.35, i + 0.05, f"Day {day}", va="bottom", ha="right", fontsize=8)
+    ax.axvline(0, color="grey", linestyle=":", linewidth=0.8)
+    ax.set_yticks([])
+    ax.set_xlim(-3.6, 3.5)
+    ax.set_xlabel("Package index (-3..+3)")
+    ax.set_title("Opinion Distribution Evolution (ridgeline)")
+    plt.tight_layout()
+    return _save_or_show(fig, output_path)
+
+
+def plot_network_before_after(results, output_path=None):
+    """Two-panel peer graph coloured by opinion at Day 0 vs Day N.
+
+    Node colour = package index, size = degree, black ring = reached by a
+    political agent. The money shot for centrality-targeting runs.
+    """
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    snap = results.get("network_snapshot")
+    traj = results.get("package_index_trajectories")
+    attrs = results.get("agent_attributes")
+    if not snap or not snap.get("nodes") or traj is None or traj.empty:
+        return None
+    try:
+        import networkx as nx
+    except ImportError:  # pragma: no cover
+        return None
+
+    G = nx.Graph()
+    for node in snap["nodes"]:
+        G.add_node(node["id"])
+    for u, v in snap.get("edges", []):
+        G.add_edge(u, v)
+    deg = dict(G.degree())
+    days = sorted(int(d) for d in traj["day"].unique())
+    d0, dn = days[0], days[-1]
+
+    def _op(day):
+        sub = traj[traj["day"] == day]
+        return {str(k): v for k, v in zip(sub["agent_id"], sub["package_index"])}
+
+    o0, on = _op(d0), _op(dn)
+    reached = set()
+    if attrs is not None and not attrs.empty and "reached_by_a" in attrs.columns:
+        for _, r in attrs.iterrows():
+            if bool(r.get("reached_by_a")) or bool(r.get("reached_by_b")):
+                reached.add(str(r["agent_id"]))
+
+    pos = nx.spring_layout(G, seed=42)
+    norm = mpl.colors.Normalize(vmin=-3, vmax=3)
+    cmap = plt.cm.RdYlGn
+    fig, axes = plt.subplots(1, 2, figsize=(15, 7))
+    for ax, omap, title, day in ((axes[0], o0, "Day", d0), (axes[1], on, "Day", dn)):
+        node_colors = [cmap(norm(float(omap.get(str(n), 0.0)))) for n in G.nodes()]
+        sizes = [60 + 25 * deg.get(n, 0) for n in G.nodes()]
+        edgecols = ["black" if str(n) in reached else "none" for n in G.nodes()]
+        lws = [1.6 if str(n) in reached else 0.3 for n in G.nodes()]
+        nx.draw_networkx_edges(G, pos, alpha=0.2, width=0.5, ax=ax)
+        nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=sizes,
+                               edgecolors=edgecols, linewidths=lws, ax=ax)
+        ax.set_title(f"{title} {day} (colour=opinion, size=degree, ring=reached)")
+        ax.set_axis_off()
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    fig.colorbar(sm, ax=list(axes), fraction=0.025, label="Opinion (-3..+3)")
+    fig.suptitle("Peer Network: Opinion Before vs After", fontsize=13)
+    return _save_or_show(fig, output_path)
+
+
+def plot_targeting_mechanism(results, output_path=None):
+    """Two-step flow: end drift from GT for reached vs unreached agents."""
+    import matplotlib.pyplot as plt
+
+    traj = results.get("package_index_trajectories")
+    gt = results.get("package_ground_truth")
+    attrs = results.get("agent_attributes")
+    if (traj is None or traj.empty or gt is None or gt.empty
+            or attrs is None or attrs.empty or "reached_by_a" not in attrs.columns):
+        return None
+    end_day = int(traj["day"].max())
+    end = traj[traj["day"] == end_day][["agent_id", "package_index"]].copy()
+    gmap = dict(zip(gt["agent_id"], gt["ground_truth"].astype(float)))
+    reached = {
+        r["agent_id"]: (bool(r.get("reached_by_a")) or bool(r.get("reached_by_b")))
+        for _, r in attrs.iterrows()
+    }
+    end["gt"] = end["agent_id"].map(gmap)
+    end = end.dropna(subset=["gt"])
+    if end.empty:
+        return None
+    end["drift"] = end["package_index"] - end["gt"]
+    end["group"] = end["agent_id"].map(
+        lambda a: "reached" if reached.get(a) else "unreached")
+    means = end.groupby("group")["drift"].mean()
+    order = [g for g in ("reached", "unreached") if g in means.index]
+    if not order:
+        return None
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.bar(order, [means[g] for g in order],
+           color=["steelblue", "lightgrey"][:len(order)])
+    ax.axhline(0, color="grey", linewidth=0.8)
+    ax.set_ylabel("Mean end drift from GT")
+    ax.set_title("Two-Step Flow: Reached vs Unreached")
+    plt.tight_layout()
+    return _save_or_show(fig, output_path)
+
+
+def plot_reach_qc(results, output_path=None):
+    """QC bar: actually-reached counts (per side) against bucket sizes."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    from cag.io.aggregators import _sorted_buckets
+
+    attrs = results.get("agent_attributes")
+    if attrs is None or attrs.empty or "reached_by_a" not in attrs.columns:
+        return None
+    buckets = _sorted_buckets(attrs["political_exposure"].dropna().unique())
+    if not buckets:
+        return None
+    sizes = [int((attrs["political_exposure"] == b).sum()) for b in buckets]
+    ra = [int(attrs[attrs["political_exposure"] == b]["reached_by_a"].astype(bool).sum())
+          for b in buckets]
+    rb = [int(attrs[attrs["political_exposure"] == b]["reached_by_b"].astype(bool).sum())
+          for b in buckets]
+    x = np.arange(len(buckets))
+    w = 0.25
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(x - w, sizes, w, label="bucket size", color="lightgrey")
+    ax.bar(x, ra, w, label="reached by A", color="forestgreen")
+    ax.bar(x + w, rb, w, label="reached by B", color="firebrick")
+    ax.set_xticks(x)
+    ax.set_xticklabels(buckets)
+    ax.set_ylabel("Agents")
+    ax.set_title("Reach / Targeting QC (actually reached)")
+    ax.legend(fontsize=8)
+    plt.tight_layout()
+    return _save_or_show(fig, output_path)
+
+
+def plot_calibration_before_after(results, output_path=None):
+    """Package index vs GT at Day 0 (anchored) and Day N (drifted)."""
+    import matplotlib.pyplot as plt
+
+    traj = results.get("package_index_trajectories")
+    gt = results.get("package_ground_truth")
+    if traj is None or traj.empty or gt is None or gt.empty:
+        return None
+    gmap = dict(zip(gt["agent_id"], gt["ground_truth"].astype(float)))
+    days = sorted(int(d) for d in traj["day"].unique())
+    d0, dn = days[0], days[-1]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5), squeeze=False)
+    for ax, day, title in ((axes[0, 0], d0, f"Day {d0}"), (axes[0, 1], dn, f"Day {dn}")):
+        sub = traj[traj["day"] == day].copy()
+        sub["gt"] = sub["agent_id"].map(gmap)
+        sub = sub.dropna(subset=["gt"])
+        if sub.empty:
+            ax.set_visible(False)
+            continue
+        try:
+            rho = float(sub["package_index"].corr(sub["gt"], method="spearman"))
+        except Exception:  # noqa: BLE001
+            rho = float("nan")
+        ax.scatter(sub["gt"], sub["package_index"], alpha=0.6)
+        ax.plot([-3, 3], [-3, 3], color="grey", linestyle="--", linewidth=0.8)
+        ax.set_xlim(-3.5, 3.5)
+        ax.set_ylim(-3.5, 3.5)
+        ax.set_xlabel("Ground truth")
+        ax.set_ylabel("Package index")
+        ax.set_title(f"{title} (rho={rho:+.2f})")
+    fig.suptitle("Calibration Before vs After (package index)", fontsize=13)
+    plt.tight_layout()
+    return _save_or_show(fig, output_path)
+
+
 def save_result_plots(results, out_path):
     """Write the standard PNG outputs for a completed run."""
     out_path = Path(out_path)
@@ -551,5 +955,22 @@ def save_result_plots(results, out_path):
     calib_path = out_path / "calibration_by_policy.png"
     if plot_calibration_by_policy(results, output_path=calib_path) is not None:
         plot_paths["calibration_by_policy"] = calib_path
+
+    # O2 additions: bucket trajectories, dispersion/drift, hero figures,
+    # targeting diagnostics. Each returns None on insufficient data and is
+    # then skipped.
+    for name, fn in (
+        ("opinion_trajectories_by_bucket", plot_opinion_trajectories_by_bucket),
+        ("polarization", plot_polarization),
+        ("drift_from_gt", plot_drift_from_gt),
+        ("opinion_ridgeline", plot_opinion_ridgeline),
+        ("network_before_after", plot_network_before_after),
+        ("targeting_mechanism", plot_targeting_mechanism),
+        ("reach_qc", plot_reach_qc),
+        ("calibration_before_after", plot_calibration_before_after),
+    ):
+        p = out_path / f"{name}.png"
+        if fn(results, output_path=p) is not None:
+            plot_paths[name] = p
 
     return plot_paths
