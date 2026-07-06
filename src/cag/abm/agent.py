@@ -156,6 +156,13 @@ class SurveyedCitizen():
         self._survey_reasoning_steps = {}     # {policy_id: [sim_step, ...]}
         self._survey_raw_response_steps = {}  # {policy_id: [sim_step, ...]}
         self._survey_assembled_context_steps = {}  # {policy_id: [sim_step, ...]}
+        # Full-prompt audit trail. When ``_capture_prompts`` is True (set by
+        # the sim driver for a small stratified sample of agents), every
+        # persona-facing LLM call appends the exact (system_prompt,
+        # user_prompt, response) triple here via ``_chat``. Off by default so
+        # normal runs and non-sampled agents are unaffected.
+        self._capture_prompts = False
+        self.prompt_log = []  # list of dicts (see _chat / agent_prompts.csv)
 
     def _sim_step(self):
         """Return the next sim_step from the attached environment, or 0
@@ -165,6 +172,32 @@ class SurveyedCitizen():
         if env is None or not hasattr(env, "_next_sim_step"):
             return 0
         return env._next_sim_step()
+
+    def _chat(self, system_prompt, user_prompt, *, stage, day, phase="",
+              policy_id="", **kwargs):
+        """Call :func:`send_chat` and, for sampled agents, log the full prompt.
+
+        Behaviour is identical to a bare ``send_chat`` when
+        ``_capture_prompts`` is False (the default) -- non-sampled agents and
+        normal runs are unaffected. When True, the exact (system_prompt,
+        user_prompt, response) triple is appended to ``self.prompt_log`` with
+        its stage/day/phase/policy so ``agent_prompts.csv`` documents
+        everything the agent actually saw.
+        """
+        response = send_chat(system_prompt, user_prompt, **kwargs)
+        if getattr(self, "_capture_prompts", False):
+            self.prompt_log.append({
+                "agent_id": self.id,
+                "prompt_seq": len(self.prompt_log),
+                "day": day,
+                "phase": phase,
+                "stage": stage,
+                "policy_id": str(policy_id) if policy_id not in (None, "") else "",
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "response": response,
+            })
+        return response
 
     def __str__(self):
         """
@@ -655,8 +688,10 @@ class SurveyedCitizen():
             anti_sycophancy=_ANTI_SYCOPHANCY,
             policy_question=policy_question,
         )
-        reasoning = send_chat(
-            system_prompt, step1_prompt, api_key=api_key, model=model,
+        reasoning = self._chat(
+            system_prompt, step1_prompt, stage="survey_reasoning",
+            day=day, phase="survey", policy_id=policy_id,
+            api_key=api_key, model=model,
             provider=provider, temperature=temperature, thinking=thinking,
         )
 
@@ -676,8 +711,10 @@ class SurveyedCitizen():
             policy_question=policy_question,
             response_options=response_options,
         )
-        llm_response = send_chat(
-            step2_system, step2_prompt, api_key=api_key, model=model,
+        llm_response = self._chat(
+            step2_system, step2_prompt, stage="survey_answer",
+            day=day, phase="survey", policy_id=policy_id,
+            api_key=api_key, model=model,
             provider=provider, temperature=temperature, thinking=thinking,
         )
 
@@ -718,7 +755,10 @@ class SurveyedCitizen():
             f'In a few sentences, reflect on how this affects your thinking about {policy_description}.\n'
             f'Do not state a final position \u2014 just think out loud.'
         )
-        reflection_text = send_chat(system_prompt, user_prompt, api_key=api_key,
+        reflection_text = self._chat(system_prompt, user_prompt,
+                                    stage="reflection_broadcast", day=day,
+                                    phase=phase, policy_id=policy_id,
+                                    api_key=api_key,
                                     model=model, provider=provider,
                                     temperature=temperature, thinking=thinking)
         self.reflections.append({
@@ -741,7 +781,9 @@ class SurveyedCitizen():
             f"2\u20133 sentences. Be genuine and conversational: "
             f"{policy_description}"
         )
-        return send_chat(system_prompt, user_prompt, api_key=api_key,
+        return self._chat(system_prompt, user_prompt, stage="peer_message",
+                         day=day, phase="C", policy_id=policy_id,
+                         api_key=api_key,
                          model=model, provider=provider,
                          temperature=temperature, thinking=thinking)
 
@@ -763,7 +805,10 @@ class SurveyedCitizen():
             f"your thinking about {policy_description}.\n"
             f"Do not state a final position — just think out loud."
         )
-        reflection_text = send_chat(system_prompt, user_prompt, api_key=api_key,
+        reflection_text = self._chat(system_prompt, user_prompt,
+                                    stage="reflection_peer", day=day,
+                                    phase="C", policy_id=policy_id,
+                                    api_key=api_key,
                                     model=model, provider=provider,
                                     temperature=temperature, thinking=thinking)
         self.reflections.append({
@@ -822,8 +867,9 @@ class SurveyedCitizen():
             "In 2-3 sentences, explain why, given your background and "
             "values, you genuinely hold this position."
         )
-        rationale = send_chat(
-            system_prompt, user_prompt, api_key=api_key, model=model,
+        rationale = self._chat(
+            system_prompt, user_prompt, stage="seed_rationale",
+            day=day, policy_id=policy_id, api_key=api_key, model=model,
             provider=provider, temperature=temperature, thinking=thinking,
         )
         if policy_id not in self.survey_reasoning:
@@ -849,8 +895,10 @@ class SurveyedCitizen():
             "or less convincing. Do not state a final position — just think "
             "out loud."
         )
-        reflection_text = send_chat(
-            system_prompt, user_prompt, api_key=api_key, model=model,
+        reflection_text = self._chat(
+            system_prompt, user_prompt, stage="reflection_broadcast",
+            day=day, phase=phase, policy_id=PACKAGE_SCOPE,
+            api_key=api_key, model=model,
             provider=provider, temperature=temperature, thinking=thinking,
         )
         self.reflections.append({
@@ -875,8 +923,10 @@ class SurveyedCitizen():
             "free to mention if some parts appeal to you more than others:\n"
             f"{package_description}"
         )
-        return send_chat(
-            system_prompt, user_prompt, api_key=api_key,
+        return self._chat(
+            system_prompt, user_prompt, stage="peer_message",
+            day=day, phase="C", policy_id=PACKAGE_SCOPE,
+            api_key=api_key,
             model=model, provider=provider,
             temperature=temperature, thinking=thinking,
         )
@@ -899,8 +949,10 @@ class SurveyedCitizen():
             "your thinking about the overall package. Do not state a final "
             "position — just think out loud."
         )
-        reflection_text = send_chat(
-            system_prompt, user_prompt, api_key=api_key,
+        reflection_text = self._chat(
+            system_prompt, user_prompt, stage="reflection_peer",
+            day=day, phase="C", policy_id=PACKAGE_SCOPE,
+            api_key=api_key,
             model=model, provider=provider,
             temperature=temperature, thinking=thinking,
         )

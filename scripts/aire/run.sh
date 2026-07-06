@@ -77,7 +77,16 @@ set -euo pipefail
 # ---- Server plumbing (rarely changes) ---------------------------------------
 HF_MODEL="${HF_MODEL:-Qwen/Qwen3-14B}"                    # change via:  HF_MODEL=swiss-ai/Apertus-8B-2509 sbatch ...
 SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai-v0.8.5.sif}"
-PORT="${PORT:-8000}"
+# Per-job unique vLLM port so two jobs sharing a GPU node don't collide on a
+# single fixed port (8000), which crashed node-shared sweep jobs. Derived from
+# the Slurm job id; falls back to 8000 outside Slurm. Override with PORT=... .
+if [[ -z "${PORT:-}" ]]; then
+    if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+        PORT=$(( 10000 + SLURM_JOB_ID % 50000 ))
+    else
+        PORT=8000
+    fi
+fi
 BASE_URL="http://localhost:${PORT}/v1"
 
 # Hugging Face token: env var wins, then $HOME/.cache/huggingface/token.
@@ -183,7 +192,14 @@ READY=0
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-1500}"   # 25 minutes by default
 WAITED=0
 while (( WAITED < MAX_WAIT_SECONDS )); do
-    if curl -sf "${BASE_URL}/models" > /dev/null 2>&1; then
+    # STRONG readiness gate: a 200 on /v1/models arrives BEFORE the engine has
+    # registered the model, so the sim's first call 404s ("model does not
+    # exist"). Gate instead on a real chat completion for THIS model returning
+    # 200 — the exact operation the sim performs — which closes the race.
+    if curl -sf "${BASE_URL}/chat/completions" \
+            -H 'Content-Type: application/json' \
+            -d "{\"model\":\"${HF_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}" \
+            > /dev/null 2>&1; then
         READY=1
         break
     fi

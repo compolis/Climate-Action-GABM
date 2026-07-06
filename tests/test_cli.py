@@ -128,6 +128,27 @@ class TestBuildConfig(TestCase):
         self.assertEqual(cfg["day0_anchor"], "ground_truth_with_rationale")
 
 
+class TestReachTargetingCLI(TestCase):
+    """--reach-targeting-a/-b flags map to SIM_CONFIG keys and validate."""
+
+    def test_reach_targeting_flags(self):
+        args = cli.parse_args([
+            "--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2",
+            "--reach-targeting-a", "persuadable",
+            "--reach-targeting-b", "random",
+        ])
+        cfg = cli._args_to_sim_dict(args)
+        self.assertEqual(cfg["reach_targeting_a"], "persuadable")
+        self.assertEqual(cfg["reach_targeting_b"], "random")
+
+    def test_reach_targeting_rejects_bad_value(self):
+        with self.assertRaises(SystemExit):
+            cli.parse_args([
+                "--outdir", "/tmp/x", "--n-citizens", "5", "--days", "2",
+                "--reach-targeting-a", "bogus",
+            ])
+
+
 class TestArgparseTypeHelpers(TestCase):
 
     def test_maybe_json_string(self):

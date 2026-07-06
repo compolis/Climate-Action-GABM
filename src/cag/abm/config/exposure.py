@@ -50,6 +50,15 @@ import math
 TARGETS_COMMITTED_MINORITY_SYMMETRIC = {
     "A-only": 0.05, "B-only": 0.05, "both": 0.60, "neither": 0.30,
 }
+# Larger committed minorities for base-size robustness / the reach x base-size
+# interaction (full-paper phase). Grown at the expense of the unexposed
+# ``neither`` cell, holding the cross-cutting ``both`` cell fixed at 0.60.
+TARGETS_COMMITTED_MINORITY_10 = {
+    "A-only": 0.10, "B-only": 0.10, "both": 0.60, "neither": 0.20,
+}
+TARGETS_COMMITTED_MINORITY_15 = {
+    "A-only": 0.15, "B-only": 0.15, "both": 0.60, "neither": 0.10,
+}
 TARGETS_COMMITTED_MINORITY_UK_2024 = {
     "A-only": 0.08, "B-only": 0.14, "both": 0.33, "neither": 0.45,
 }
@@ -68,6 +77,8 @@ TARGETS_NEITHER = {
 }
 TARGET_PRESETS = {
     "committed_minority_symmetric": TARGETS_COMMITTED_MINORITY_SYMMETRIC,
+    "committed_minority_10": TARGETS_COMMITTED_MINORITY_10,
+    "committed_minority_15": TARGETS_COMMITTED_MINORITY_15,
     "committed_minority_uk_2024": TARGETS_COMMITTED_MINORITY_UK_2024,
     "legacy_v05": TARGETS_LEGACY_V05,
     "split50": TARGETS_SPLIT_50,

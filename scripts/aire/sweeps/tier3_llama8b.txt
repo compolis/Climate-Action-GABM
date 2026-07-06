@@ -1,0 +1,45 @@
+# =============================================================================
+# Tier-3 multiverse — model-family replication arm #2: Llama-3.1-8B-Instruct.
+# 3 conditions x 1 seed (42) = 3 runs. Each line is forwarded verbatim to
+# `scripts/aire/run.sh "$@"`. Same run shape as Tier 1 (reuses the `tier1`
+# preset), so the ONLY thing that changes vs. the Qwen3-14B Tier-1 headline is
+# the model — this is the cross-model replication of the reach-asymmetry DiD.
+#
+# Submit (note the HF_MODEL env var — it drives BOTH the vLLM server and
+# --model inside run.sh; that is the only model lever, so DO NOT add --model to
+# any line below):
+#   HF_MODEL=meta-llama/Llama-3.1-8B-Instruct \
+#       bash scripts/aire/sweep.sh scripts/aire/sweeps/tier3_llama8b.txt --time=11:00:00
+#
+# Model:   meta-llama/Llama-3.1-8B-Instruct. Neither Apertus nor Llama ships a
+#          ~14B checkpoint (Llama 3.x = 8B / 70B; the only ~13B is the old
+#          Llama-2-13b-chat), and run.sh pins --tensor-parallel-size 1, so the
+#          single-GPU-comparable pick in each family is the 8B-Instruct. Gated
+#          model: needs HF_TOKEN + a one-time licence accept on the HF model
+#          page before the first pull.
+#
+# Run shape (tier1 preset): N=100, 5-day alternating P-A/P-B/C schedule,
+#          package mode, k_peers=2, Day-0 anchor = ground_truth_with_rationale,
+#          memory day0_anchor ttl_days=1. Exposure/network/messages fall through
+#          to the SIM_CONFIG canon (committed_minority_symmetric, stochastic_block
+#          p_intra=0.15/p_inter=0.05, offline v1, temp 0.5) — identical to Tier 1.
+#
+# Wall-clock: --time=11:00:00 mirrors Tier 1 (n=100, days=5). An 8B model is
+#          smaller than Qwen3-14B, so this is a safe upper bound; per-day
+#          checkpointing is default-on, so any overrun is resumable.
+#
+# Conditions (reach_a = A/GREEN side, reach_b = B/REFORM side); the headline
+# contrast is green_dominant vs reform_dominant, with baseline as the symmetric
+# anchor. The `neither` placebo is dropped here (least informative cross-model).
+# DiD is paired within the seed: the same 100 agents (identical ground truth)
+# appear in all three conditions, recoverable from each run's config.json.
+# =============================================================================
+
+# --- Condition A: baseline (symmetric reach) ---------------------------------
+LABEL=tier3_llama8b_baseline_s42   --preset tier1 --reach-a 1.0 --reach-b 1.0 --seed 42
+
+# --- Condition B: green-dominant (A reaches all, B throttled) -----------------
+LABEL=tier3_llama8b_greendom_s42   --preset tier1 --reach-a 1.0 --reach-b 0.25 --seed 42
+
+# --- Condition C: reform-dominant (B reaches all, A throttled) ----------------
+LABEL=tier3_llama8b_reformdom_s42  --preset tier1 --reach-a 0.25 --reach-b 1.0 --seed 42

@@ -1,0 +1,46 @@
+# =============================================================================
+# Tier-3 multiverse — network-topology robustness arm (Qwen3-14B).
+# 3 conditions x 2 topologies x 1 seed (42) = 6 runs. Each line is forwarded
+# verbatim to `scripts/aire/run.sh "$@"`. Same model + run shape as the Tier-1
+# headline (Qwen3-14B, `tier1` preset), so the ONLY thing that changes vs. Tier 1
+# is the peer-messaging network topology — this asks whether the reach-asymmetry
+# DiD survives when the social graph is scale-free (hubs) or small-world instead
+# of the canonical stochastic-block model.
+#
+# Submit (default HF_MODEL = Qwen/Qwen3-14B from run.sh — no env override, no
+# --model on any line):
+#   bash scripts/aire/sweep.sh scripts/aire/sweeps/tier3_network.txt --time=11:00:00
+#
+# Topologies (params pinned for ~mean-degree parity with the SBM canon so the
+# structure — not raw connectivity — is what varies):
+#   Tier-1 canon SBM (p_intra=0.15/p_inter=0.05, 2 blocks, n=100) has mean degree
+#   ~10. We match that:
+#     barabasi_albert  m=5   -> scale-free, mean degree ~2m = 10; hubs (most
+#                              relevant to asymmetric reach).
+#     watts_strogatz   k=10  -> small-world, mean degree = k = 10; high clustering
+#     beta=0.1              + short paths (echo-chamber probe).
+#   JSON is written COMPACT (no spaces) so it survives sweep.sh's intentional
+#   word-splitting of each line; quotes come from variable expansion and are
+#   passed through literally to --network-params.
+#
+# Run shape (tier1 preset): N=100, 5-day alternating P-A/P-B/C schedule,
+#          package mode, k_peers=2, Day-0 anchor = ground_truth_with_rationale,
+#          memory day0_anchor ttl_days=1. Exposure/messages fall through to the
+#          SIM_CONFIG canon (committed_minority_symmetric, offline v1, temp 0.5).
+#
+# Wall-clock: --time=11:00:00 mirrors Tier 1; per-day checkpointing is default-on.
+#
+# Conditions (reach_a = A/GREEN side, reach_b = B/REFORM side); headline contrast
+# is green_dominant vs reform_dominant, baseline as symmetric anchor. DiD is
+# paired within the seed per topology (same 100 agents across the 3 conditions).
+# =============================================================================
+
+# --- Barabasi-Albert (scale-free / hubs, m=5) --------------------------------
+LABEL=tier3_ba_baseline_s42   --preset tier1 --network-type barabasi_albert --network-params {"m":5} --reach-a 1.0 --reach-b 1.0 --seed 42
+LABEL=tier3_ba_greendom_s42   --preset tier1 --network-type barabasi_albert --network-params {"m":5} --reach-a 1.0 --reach-b 0.25 --seed 42
+LABEL=tier3_ba_reformdom_s42  --preset tier1 --network-type barabasi_albert --network-params {"m":5} --reach-a 0.25 --reach-b 1.0 --seed 42
+
+# --- Watts-Strogatz (small-world, k=10, beta=0.1) ----------------------------
+LABEL=tier3_ws_baseline_s42   --preset tier1 --network-type watts_strogatz --network-params {"k":10,"beta":0.1} --reach-a 1.0 --reach-b 1.0 --seed 42
+LABEL=tier3_ws_greendom_s42   --preset tier1 --network-type watts_strogatz --network-params {"k":10,"beta":0.1} --reach-a 1.0 --reach-b 0.25 --seed 42
+LABEL=tier3_ws_reformdom_s42  --preset tier1 --network-type watts_strogatz --network-params {"k":10,"beta":0.1} --reach-a 0.25 --reach-b 1.0 --seed 42

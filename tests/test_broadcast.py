@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 from cag.abm.agent import SurveyedCitizen, PoliticalAgent
 from cag.abm.environment import SurveyedNation
-from cag.abm.attributes.opinion import ClimatePolicyID, PACKAGE_SCOPE, SURVEY_QUESTIONS
+from cag.abm.attributes.opinion import ClimatePolicyID, PACKAGE_SCOPE, SURVEY_QUESTIONS, PRO_CLIMATE_INDEX_COLUMN
 from cag.abm.democracy.elections.brexit import BrexitVoteID
 from cag.abm.democracy.elections.ukge2019 import UKGE2019VoteID
 from gabm.abm.attributes.politics import PoliticsID
@@ -408,6 +408,177 @@ class TestApplyReachSubsample(unittest.TestCase):
             sn.apply_reach_subsample(reach_a=1.5, reach_b=1.0, seed=42)
         with self.assertRaises(ValueError):
             sn.apply_reach_subsample(reach_a=1.0, reach_b=-0.1, seed=42)
+
+
+# ===================================================================
+# Tests: SurveyedNation.apply_reach_subsample() -- targeting modes
+# ===================================================================
+
+class TestReachTargeting(unittest.TestCase):
+    """Per-side persuadable-vs-random reach targeting."""
+
+    def _make_nation(self, n_per_profile=10):
+        sn = SurveyedNation()
+        sn.political_agent_a = PoliticalAgent("agent_a", "pro_climate")
+        sn.political_agent_b = PoliticalAgent("agent_b", "anti_climate")
+        cid = 0
+        for profile in _PROFILES:
+            for _ in range(n_per_profile):
+                citizen = SurveyedCitizen(
+                    agent_id=cid,
+                    environment=sn,
+                    brexit_vote_id=profile.get("brexit_vote_id"),
+                    ukge2019_vote_id=profile.get("ukge2019_vote_id"),
+                    politics_id=profile.get("politics_id"),
+                )
+                sn.agents_active[citizen.id] = citizen
+                cid += 1
+        sn.assign_political_exposure(mode="rule_priority_chain")
+        # Assign a deterministic spread of ground-truth package indices so
+        # "persuadable" (near-midpoint) targeting has a well-defined order.
+        # raw = 4 + numeric, with numeric in [-3, +3] -> raw in [1, 7].
+        for i, c in enumerate(sn.agents_active.values()):
+            raw = 4 + (((i % 13) - 6) / 2.0)
+            c.original_survey_data = {PRO_CLIMATE_INDEX_COLUMN: raw}
+        return sn
+
+    def test_full_reach_persuadable_no_change(self):
+        sn = self._make_nation()
+        full_a = list(sn.political_agent_a.connected_citizens)
+        sn.apply_reach_subsample(
+            reach_a=1.0, reach_b=1.0, seed=42,
+            targeting_a="persuadable", targeting_b="persuadable",
+        )
+        self.assertEqual(sn.political_agent_a.connected_citizens, full_a)
+
+    def test_persuadable_keeps_the_undecided(self):
+        sn = self._make_nation()
+        full_a = list(sn.political_agent_a.connected_citizens)
+        sn.apply_reach_subsample(
+            reach_a=0.5, reach_b=1.0, seed=42, targeting_a="persuadable",
+        )
+        kept = sn.political_agent_a.connected_citizens
+        kept_ids = {c.id for c in kept}
+        dropped = [c for c in full_a if c.id not in kept_ids]
+        mean_kept = sum(abs(c.get_real_package_index()) for c in kept) / len(kept)
+        mean_dropped = sum(abs(c.get_real_package_index()) for c in dropped) / len(dropped)
+        self.assertLess(mean_kept, mean_dropped)
+
+    def test_persuadable_deterministic(self):
+        sn1 = self._make_nation()
+        sn2 = self._make_nation()
+        for sn in (sn1, sn2):
+            sn.apply_reach_subsample(
+                reach_a=0.4, reach_b=0.6, seed=7,
+                targeting_a="persuadable", targeting_b="persuadable",
+            )
+        self.assertEqual(
+            [c.id for c in sn1.political_agent_a.connected_citizens],
+            [c.id for c in sn2.political_agent_a.connected_citizens],
+        )
+        self.assertEqual(
+            [c.id for c in sn1.political_agent_b.connected_citizens],
+            [c.id for c in sn2.political_agent_b.connected_citizens],
+        )
+
+    def test_per_side_independence(self):
+        sn = self._make_nation()
+        ref = self._make_nation()
+        sn.apply_reach_subsample(
+            reach_a=0.5, reach_b=0.5, seed=42,
+            targeting_a="persuadable", targeting_b="random",
+        )
+        ref.apply_reach_subsample(reach_a=0.5, reach_b=0.5, seed=42)  # both random
+        # Agent B (random in both) is identical -> A's targeting doesn't leak.
+        self.assertEqual(
+            [c.id for c in sn.political_agent_b.connected_citizens],
+            [c.id for c in ref.political_agent_b.connected_citizens],
+        )
+        # Agent A (persuadable) differs from the random draw.
+        self.assertNotEqual(
+            sorted(c.id for c in sn.political_agent_a.connected_citizens),
+            sorted(c.id for c in ref.political_agent_a.connected_citizens),
+        )
+
+    def test_invalid_targeting_raises(self):
+        sn = self._make_nation()
+        with self.assertRaises(ValueError):
+            sn.apply_reach_subsample(
+                reach_a=0.5, reach_b=1.0, seed=42, targeting_a="bogus",
+            )
+
+    def _make_nation_with_network(self, network_type="barabasi_albert",
+                                  network_params=None, seed=42):
+        sn = self._make_nation()
+        sn.create_network(
+            network_type=network_type,
+            network_params=network_params or {"m": 2},
+            seed=seed,
+        )
+        return sn
+
+    def test_centrality_requires_network(self):
+        sn = self._make_nation()  # no create_network -> self.network is None
+        with self.assertRaises(RuntimeError):
+            sn.apply_reach_subsample(
+                reach_a=0.5, reach_b=1.0, seed=42, targeting_a="degree",
+            )
+
+    def test_degree_keeps_the_central(self):
+        import networkx as nx
+        sn = self._make_nation_with_network()
+        cmap = nx.degree_centrality(sn.network)
+        full_a = list(sn.political_agent_a.connected_citizens)
+        sn.apply_reach_subsample(
+            reach_a=0.5, reach_b=1.0, seed=42, targeting_a="degree",
+        )
+        kept = sn.political_agent_a.connected_citizens
+        kept_ids = {c.id for c in kept}
+        dropped = [c for c in full_a if c.id not in kept_ids]
+        mean_kept = sum(cmap[c.id] for c in kept) / len(kept)
+        mean_dropped = sum(cmap[c.id] for c in dropped) / len(dropped)
+        self.assertGreater(mean_kept, mean_dropped)
+
+    def test_betweenness_keeps_the_central(self):
+        import networkx as nx
+        sn = self._make_nation_with_network()
+        cmap = nx.betweenness_centrality(sn.network)
+        full_b = list(sn.political_agent_b.connected_citizens)
+        sn.apply_reach_subsample(
+            reach_a=1.0, reach_b=0.5, seed=42, targeting_b="betweenness",
+        )
+        kept = sn.political_agent_b.connected_citizens
+        kept_ids = {c.id for c in kept}
+        dropped = [c for c in full_b if c.id not in kept_ids]
+        mean_kept = sum(cmap[c.id] for c in kept) / len(kept)
+        mean_dropped = sum(cmap[c.id] for c in dropped) / len(dropped)
+        self.assertGreaterEqual(mean_kept, mean_dropped)
+
+    def test_full_reach_centrality_no_change(self):
+        sn = self._make_nation_with_network()
+        full_a = list(sn.political_agent_a.connected_citizens)
+        sn.apply_reach_subsample(
+            reach_a=1.0, reach_b=1.0, seed=42,
+            targeting_a="degree", targeting_b="betweenness",
+        )
+        self.assertEqual(sn.political_agent_a.connected_citizens, full_a)
+
+    def test_centrality_deterministic(self):
+        sn1 = self._make_nation_with_network()
+        sn2 = self._make_nation_with_network()
+        for sn in (sn1, sn2):
+            sn.apply_reach_subsample(
+                reach_a=0.4, reach_b=0.4, seed=9,
+                targeting_a="degree", targeting_b="betweenness",
+            )
+        self.assertEqual(
+            [c.id for c in sn1.political_agent_a.connected_citizens],
+            [c.id for c in sn2.political_agent_a.connected_citizens],
+        )
+        self.assertEqual(
+            [c.id for c in sn1.political_agent_b.connected_citizens],
+            [c.id for c in sn2.political_agent_b.connected_citizens],
+        )
 
 
 # ===================================================================

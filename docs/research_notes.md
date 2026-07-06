@@ -118,6 +118,224 @@ re-measurement under the patched code before any model claim is final.
 
 ## Notes
 
+### 2026-07-06 — Tier 3 (network arm), seed sweep: the finding replicates across seeds, and the "SBM is stronger" hint goes away
+
+This is the follow-up to the 2026-07-05 network note below. That earlier note ran on a **single random
+seed** and flagged two loose ends: (1) it could only speak to the *direction* of the effect, not its
+*size*, and (2) the stochastic-block network (SBM) looked a touch stronger than the others, which we
+called "a hint, not a result." We have now closed both by re-running the whole thing on **three seeds
+(42, 43, 44)** — a full 3 networks × 3 conditions × 3 seeds = **27 runs**. See
+[result_report.md](result_report.md) (2026-07-06 Tier-3 seed-sweep section) for the tables; this is the
+plain reading. (The model arm — Apertus, Llama — is still a separate, pending gate.)
+
+**What a "seed" is, and why three of them matters.** The seed is the random draw that decides which 100
+people we simulate and how the graph gets wired. One seed is one roll of the dice: a result that looks
+clean on a single roll might just be luck. Running the same experiment on three independent seeds and
+combining them (300 matched people per network instead of 100) tells us whether the effect is real or a
+fluke of one draw. Because the people are re-drawn each seed, we always compare a person to *themselves*
+within the same seed, then pool the three — never mixing people across seeds.
+
+**Finding 1 — the headline is now seed-replicated.** A louder Green side beats a louder Reform side on
+**every one of the nine** network-by-seed combinations, and the pooled effect is strong and clearly
+significant on all three networks: SBM **+0.42**, Barabási–Albert **+0.34**, Watts–Strogatz **+0.36**
+(package-index points; all p well below 0.001). So the reach-asymmetry isn't just robust to network
+*shape* — it's robust to the random draw too. This upgrades the earlier note from "directionally true on
+one seed" to "replicated."
+
+**Finding 2 — the SBM "edge" was a lucky seed, and it's now retracted.** On the single pilot seed the SBM
+came out at +0.53 versus +0.32 and +0.36 for the other two, which is why we hedged about it. With three
+seeds the story is clear: SBM's per-seed values are **0.53, 0.42, 0.31** — the pilot happened to catch
+its *highest* draw. Averaged out it lands at +0.42, and its confidence interval now overlaps the other
+two networks completely. In other words, the three networks are **indistinguishable in effect size**;
+there is no special amplification from the stochastic-block graph. This sits comfortably with Finding 2
+of the old note (the SBM was never actually an echo chamber — its exposure-sorting score is ≈ 0), so
+there was never a mechanism for it to be genuinely stronger. Watts–Strogatz, for what it's worth, was
+astonishingly steady across seeds (0.363 / 0.360 / 0.357).
+
+**Finding 3 — pooling tightened a loose thread.** On the single pilot seed, one of the two "halves" of
+the asymmetry — the *Green amplifies people upward* half — was not statistically clean on the
+Barabási–Albert graph (it was a bit noisy). With three seeds it firms up and becomes significant, so we
+can now say **both** halves contribute on **all three** networks: turning the Green side up pushes
+opinion up, and turning the Reform side up pushes it down. The extra data removed the wobble rather than
+moving the conclusion.
+
+**Everything else still holds.** Rank fidelity — the model keeping people in the right order relative to
+the real survey — stays high (Spearman ρ ≈ 0.78–0.87) on every network and condition, so Qwen keeps the
+persona signal when we rewire the graph. And in the genuinely contested audience (the ~60% who hear
+*both* sides), the three networks agree tightly (effect 0.44–0.50), so the small whole-population
+differences are about how the message *spills over* to people who weren't directly targeted, not about
+the persuasion itself.
+
+**Where this leaves Tier 3.** The network arm is now fully passed *and* seed-replicated: the finding
+reproduces on scale-free and small-world graphs, at the same size, correctly-signed, rank-faithful, and
+bias-invariant. The one caveat the old note left open — a possible SBM size advantage — is closed and
+retracted. The only remaining Tier-3 gate is the **model arm**: does the same hold on a different AI
+model family?
+
+### 2026-07-05 — Tier 3 (network arm): the reach-asymmetry isn't an artefact of the social graph
+
+> **Update (2026-07-06):** the single-seed caveat below has since been closed by a three-seed sweep —
+> see the 2026-07-06 note above. The headline replicated; the tentative "SBM is a touch stronger" hint
+> in Finding 1 did **not** survive the extra seeds and is retracted. The rest of this note still stands.
+
+Tier 3 is the "does it replicate?" gate. It has two independent arms: swap the **AI model** (does the
+finding survive on other model families?) and swap the **social network** (does it survive a different
+peer-messaging graph?). This note covers the **network arm** only; the model arm (Apertus, Llama) is
+separate and still running. See [result_report.md](result_report.md) (2026-07-05 Tier-3 network
+section) for the tables — this is the plain reading.
+
+**Why the network could matter.** Citizens don't only hear the political broadcasts; they also pass
+messages to their neighbours on a social network, so *who is wired to whom* can amplify or dampen a
+persuasion effect. Our default network is a **stochastic-block model (SBM)** — two communities with
+dense ties inside and sparse ties across. Crucially, those two blocks are built from each citizen's
+**exposure bucket** (the A-only crowd in one block, the B-only crowd in the other). That raised a
+fair worry: maybe the reach-asymmetry only shows up because the graph *itself* is organised around
+who hears which side — a built-in echo chamber doing the work, not the messages. To test that, we
+re-ran the exact same experiment on two networks that are **blind to exposure**: a **Barabási–Albert**
+graph (a "scale-free" network with a few very highly-connected hubs, like a handful of influencers)
+and a **Watts–Strogatz** graph (a "small-world" network — mostly local, tight-knit clusters with a
+few long-range shortcuts). All three were tuned to the same average number of connections per person
+(~10), so we change the *shape* of the wiring, not its overall density.
+
+**The clean part of the design.** Because we fixed the random seed, all three networks contain the
+*same 100 people*, with the same real opinions, the same exposure assignment, and the same
+broadcasts — the *only* thing that changes is the wiring. So any difference in the result is due to
+network shape and nothing else. (Caveat: this is a single random draw, so we read the *direction* and
+*significance* within that draw, not a claim about the effect's exact *size* across many draws — a
+seed sweep is the deferred next step.)
+
+**Finding 1 — the headline survives on every network.** A louder Green side still beats a louder
+Reform side on all three graphs, correctly signed and statistically clear in each. The effect is a
+touch larger on the SBM, but the confidence intervals overlap, so we treat "SBM is stronger" as a
+hint, not a result. The reach-asymmetry is **not** an artefact of the stochastic-block graph — it is
+safe to move away from SBM.
+
+**Finding 2 — and it corrects our going-in worry — the SBM is not actually an echo chamber.** We
+measured how strongly the network sorts people by exposure — a number called *assortativity* (+1 =
+perfectly sorted into like-with-like, 0 = no sorting at all). For the SBM it came out ≈ 0. The reason
+is our exposure design: ~90% of citizens are in the `both` or `neither` buckets, and those get split
+evenly across the two SBM blocks; only the ~10% dedicated-audience citizens are actually sorted by
+side. So the SBM was never the treatment-aligned echo chamber we feared, which means its slightly
+larger effect *can't* be attributed to homophily. A nice example of the data correcting an
+assumption we walked in with.
+
+**Finding 3 — the model still keeps people in the right order, off-SBM too.** The whole
+difference-engine argument needs the simulation to preserve *who is greener than whom* relative to the
+real survey (measured by Spearman ρ, a rank-order correlation where near +1 means the ordering is
+faithfully kept). That held comfortably (ρ ≈ 0.82–0.90) on every network — Qwen doesn't lose the
+persona signal when we rewire the graph. (This is the same test on which the smaller Llama-3.1-8B
+model fell apart at ρ ≈ 0.46, which is why Qwen-14B stays our primary model.)
+
+**Where this leaves Tier 3.** The network arm passes: the finding reproduces on scale-free and
+small-world graphs, correctly-signed, rank-faithful, and bias-invariant. The remaining Tier-3 gates
+are the **model arm** — does the same hold on a different AI model family? — and, for a full
+effect-*size* claim, a seed sweep on the alternative topologies.
+
+### 2026-07-05 — Tier 2: the sceptic-tilt was the ruler, not the people (and bias-invariance is restored)
+
+Tier 2 asks the one question Tier 1 couldn't answer about itself: *are we being fooled by the
+opinion ruler running out of room?* Our scale stops at +3, so citizens who already sit near the top
+physically can't move much further. That can fake an asymmetry — the Green side looks more
+persuasive just because pro-climate citizens have no headroom while sceptics do. See
+[result_report.md](result_report.md) (2026-07-05 Tier-2 section) for the tables; this is the plain
+reading. It is a **pure re-analysis — no new runs**: the same 12 Tier-1 runs, re-measured on four
+rulers (the raw −3…+3 scale; a "headroom" ruler that scores movement as a fraction of the room a
+citizen had; a "logit" ruler that stretches moves near the ceiling; and a pure rank ruler that keeps
+only the ordering and so is immune to any scale distortion).
+
+**Finding 1 — the headline is bulletproof.** A louder Green side beats a louder Reform side on
+*every* ruler, including the scale-free rank one (same direction, similar standardised size, all
+overwhelmingly significant). The core result is not an artefact of how we drew the scale.
+
+**Finding 2 — and this corrects Tier 1 — the "sceptics move more" tilt is the ruler, not the
+people.** On the two ceiling-free rulers the tilt vanishes (flat, non-significant); only a negligible
+ordinal residual survives on the rank ruler (significant merely because we have 300 citizens — the
+same negligibility-vs-significance trap we flagged in Tier P). Tier 1 had tried to rule out a ceiling
+by dropping the citizens literally pinned at +3, and the tilt held — but that missed the point: the
+bounded scale gradually squashes the *whole* upper range, not just the pinned few. Re-scaling fixes
+that graded squash, and the tilt evaporates.
+
+**Why this is good news.** The effect turns out to be **roughly uniform** across the spectrum — it
+moves sceptics and greens by about the same amount. So the reach-asymmetry effect does *not* depend
+on where a citizen started, which is exactly the **bias-invariance** the whole difference-engine
+argument needs. Tier 1's raw-scale acid-test "failure" was itself a scale artefact; on an appropriate
+ruler, bias-invariance holds cleanly. The honest, load-bearing claim is therefore simpler and
+stronger than the Tier-1 draft below: *a broad, directional, bias-invariant persuasion effect,
+robust to how the opinion scale is drawn.* The last remaining gate is Tier 3 — does it replicate
+across different AI models and seeds?
+
+### 2026-07-04 — Tier 1 in plain language: the aim and the full implications (explainer)
+
+#### What Tier 1 was trying to find out
+
+The model has a known quirk (from NB 37): its simulated citizens sound **more pro-climate than real people** — it's inflated in *level*. That's a problem if you read opinions off it directly.
+
+But the whole point of the project is not to predict *levels* — it's to measure **what happens when one political side can shout louder than the other**. So Tier 1 asked one simple question:
+
+> **When we give the Green side a bigger megaphone than the Reform side (or vice versa), does the resulting shift in public opinion come through clearly — even though the model is biased?**
+
+The trick to answering it: run the **same 100 citizens** through four different worlds (equal megaphones, green-louder, reform-louder, and a silent "no broadcasts" control), and compare each person **to themselves** across worlds. Because everyone starts pinned to their *real* survey opinion, when you subtract one world from another the bias is identical in both and **cancels out** — leaving only the effect of who was louder. (That's the "difference-in-differences" method.) We repeated everything for three random samples so nothing rests on one lucky draw.
+
+#### What we found — and what it means
+
+**1. The core method works. The persuasion effect is real, strong, and cleanly directional.**
+A louder Green side leaves people meaningfully more pro-climate than a louder Reform side (+0.42 on a −3…+3 scale, a medium-sized effect, essentially certain to be real, same direction in all three samples). The silent placebo confirms it: green pushes opinion up, reform pushes it down. So **yes — the model can be trusted to measure the *direction and relative size* of a messaging asymmetry, despite its bias.** This is the green light for the asymmetry paper.
+
+**2. The effect is broad, not a fluke of one issue.**
+All six climate policies moved the right way. The biggest movements were on **contested** policies (banning petrol cars, banning fossil-fuel licences, carbon tax); the smallest were on policies **almost everyone already supports** (renewable energy, green housing) — and those are small mostly because people are already at the top of the scale with nowhere to go. So the signal is genuinely spread across the board.
+
+**3. A twist that looked real at first — but wasn't.**
+On the raw −3…+3 scale the effect *appears* bigger for sceptics (≈+0.70 for the most-sceptical third of people vs +0.14 for the greenest third), and dropping the people literally pinned at the top didn't remove it — so our first reading called it a genuine behavioural fact. **Tier 2 (done minutes later) overturned that.** The bounded scale quietly squashes *everyone* in the upper range, not just the pinned few; when we re-measure on rulers with no ceiling (see the 2026-07-05 Tier-2 note above), the tilt disappears. So it was **largely a measurement artefact of the ruler**, not a real difference between sceptics and greens.
+
+**4. What's actually true: the effect is close to uniform — and that's good news.**
+Once the ceiling is handled properly, a louder Green side moves sceptics and already-green citizens by about the *same* amount. That means the persuasion effect doesn't depend on where a person started — which is exactly the **bias-invariance** we wanted: the model's pro-climate lean cancels cleanly in the difference, for everyone.
+
+#### The bottom line
+
+- **For the model:** it's a valid "difference engine." You can't trust its absolute opinion *levels*, but you **can** trust it to measure how an imbalance in political messaging changes opinion — the thing the whole study is about.
+- **For the science:** louder one-sided messaging produces a broad, correctly-signed shift in public opinion, roughly **uniform across the spectrum** — it moves sceptics and greens alike, rather than only winning over one group. (Our first-pass "it mostly wins over sceptics" reading turned out to be a scale-ceiling artefact — see point 3.)
+- **For the paper:** state it as *"a broad, directional persuasion effect that survives the model's bias and is uniform across the opinion spectrum"* — i.e. genuinely **bias-invariant**, robust to how the opinion scale is drawn.
+- **For what's next:** Tier 2 has now done the scale-aware re-measurement and confirmed the effect is uniform (the ceiling was the culprit). The remaining question is Tier 3: does the whole finding replicate across different AI models and seeds?
+
+### 2026-07-04 — Tier 1: the difference-engine works (headline robust) — [updated 2026-07-05: the raw-scale "sceptic-tilt" below was a scale artefact; see the Tier-2 note above]
+
+Tier 1 is the honest, multi-seed rerun of the reach-asymmetry pilot (n=100,
+three seeds, four worlds: equal reach, green-dominant, reform-dominant, and a
+no-broadcast placebo). It set out to answer one question: when one political
+side gets a louder megaphone, does the opinion shift it causes come through
+cleanly once we strip out the model's known pro-climate lean? See
+[result_report.md](result_report.md) (2026-07-04 Tier-1 section) for the tables;
+this note is the plain-language reading.
+
+**The good news — the difference engine holds.** Comparing the same citizen
+across worlds and differencing (so the ground-truth anchor and the model's
+inflation cancel), a louder Green side leaves people about **+0.42 index points**
+more pro-climate than a louder Reform side — a solid, medium-sized, wildly
+significant effect that is the same sign in every seed, and the placebo moves the
+two sides in opposite directions (green up, reform down). Breaking it down policy
+by policy, **all six policies move the right way**, biggest on the contested ones
+(ban petrol cars, ban fossil licences, carbon tax) and smallest on the
+near-consensus favourites (renewable energy, green housing) where most people are
+already maxed out. So the persuasion signal is broad, not a one-policy artefact.
+
+**The apparent caveat — and why Tier 2 overturned it.** On the raw scale the effect *looks* like it
+depends on the starting point — markedly larger for sceptical citizens (+0.70 in the most-sceptical
+third vs +0.14 in the greenest third) — and removing the citizens literally pinned at the +3 ceiling
+doesn't change it, which initially led us to call it a genuine behavioural sceptic-tilt. **Tier 2
+(2026-07-05) showed that was wrong.** The bounded ruler compresses the *whole* upper range, not just
+the pinned agents; on ceiling-free rulers (headroom, logit) the slope goes flat and only a
+negligible ordinal residual remains. So the effect is essentially **uniform** across the spectrum —
+which means the pilot's original *bias-invariant* reading was right after all, and Tier-1's raw-scale
+acid-test "failure" was itself the scale artefact.
+
+**What this means for the paper.** We *can* claim bias-invariance: one-sided messaging produces a
+broad, correctly-signed shift that survives the model's level bias in every contrast, across all six
+policies, and (per Tier 2) on every ceiling-free ruler, roughly **uniformly across the opinion
+spectrum**. The residual level-inflation on high-consensus policies is a measurement ceiling that
+also produced the raw-scale sceptic-tilt illusion — both are handled by scale-aware measurement, not
+real threats to the contrast. Tier 2 is now done; Tier 3 (replication across models and seeds) is
+the last gate.
+
 ### 2026-07-04 — Calibration: the raw model is inflated in *level* but faithful in *rank* — the empirical licence for anchoring
 
 This is the companion to the Tier-P note below. Tier P proved the model

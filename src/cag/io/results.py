@@ -26,6 +26,7 @@ from cag.abm.attributes.opinion import (
 from cag.io.aggregators import (
     _resolve_timeline_sample_ids,
     build_agent_timeline,
+    build_bucket_summary,
     build_calibration_table,
     build_day0_vs_dayN_shifts,
     build_message_flow,
@@ -33,6 +34,7 @@ from cag.io.aggregators import (
     build_opinion_shares_by_bucket,
     build_package_index_by_bucket,
     build_package_index_shares,
+    build_targeting_diagnostics,
 )
 
 
@@ -70,7 +72,8 @@ _RESULT_CSV_SCHEMAS = {
     "agent_attributes": [
         "agent_id", "political_exposure", "affinity_score_a", "affinity_score_b",
         "year_of_birth", "gender_id", "region_id", "education_id",
-        "ukge2019_vote_id", "brexit_vote_id", "persona_text",
+        "ukge2019_vote_id", "brexit_vote_id",
+        "reached_by_a", "reached_by_b", "persona_text",
     ],
     # Tier-P persona-ablation audit trail: which agent's persona each agent
     # actually carried this run (itself for "real", another agent for
@@ -81,12 +84,20 @@ _RESULT_CSV_SCHEMAS = {
         "event_type", "policy_id", "counterparty_id", "counterparty_role",
         "content", "metadata_json",
     ],
+    # Full-prompt audit trail for the sampled agents: every persona-facing
+    # LLM call's exact (system_prompt, user_prompt, response). Joins to
+    # agent_timeline by (agent_id, day, policy_id); ordered per agent by
+    # prompt_seq. Sampled-only + final-only (see _CHECKPOINT_SKIP_KEYS).
+    "agent_prompts": [
+        "agent_id", "prompt_seq", "day", "phase", "stage", "policy_id",
+        "system_prompt", "user_prompt", "response",
+    ],
 }
 
 # Keys that are written only on the final save_results() call, never by
 # per-day checkpoints. Diagnostic artefacts the simulation does NOT need
 # to resume from (and which can be expensive to recompute every day).
-_CHECKPOINT_SKIP_KEYS = frozenset({"agent_timeline", "persona_map"})
+_CHECKPOINT_SKIP_KEYS = frozenset({"agent_timeline", "persona_map", "agent_prompts"})
 
 
 def _collect_results(nation, config):
@@ -243,11 +254,19 @@ def _collect_results(nation, config):
         }
         for agent_id, source_agent_id in persona_map_raw.items()
     ]
-    sample_ids = _resolve_timeline_sample_ids(
-        agent_attributes_df,
-        sample_size=config.get("timeline_sample_size", 3),
-        explicit_ids=config.get("timeline_sample_agent_ids"),
-    )
+    sample_ids = getattr(nation, "_prompt_capture_ids", None)
+    if not sample_ids:
+        sample_ids = _resolve_timeline_sample_ids(
+            agent_attributes_df,
+            sample_size=config.get("timeline_sample_size", 3),
+            explicit_ids=config.get("timeline_sample_agent_ids"),
+        )
+    _sac_sample_set = set(sample_ids)
+
+    prompt_rows = []
+    for agent in nation.agents_active.values():
+        for entry in getattr(agent, "prompt_log", None) or []:
+            prompt_rows.append(entry)
 
     results = {
         "opinion_trajectories": pd.DataFrame(
@@ -274,8 +293,13 @@ def _collect_results(nation, config):
             survey_raw_response_rows,
             columns=_RESULT_CSV_SCHEMAS["survey_raw_response"],
         ),
+        # survey_assembled_context is the heaviest per-agent artefact (the full
+        # system prompt per survey call). Only the sampled agents' rows are ever
+        # consumed (by agent_timeline), so gate the CSV to that sample - the
+        # same set as agent_prompts / the timeline.
         "survey_assembled_context": pd.DataFrame(
-            survey_assembled_context_rows,
+            [r for r in survey_assembled_context_rows
+             if r["agent_id"] in _sac_sample_set],
             columns=_RESULT_CSV_SCHEMAS["survey_assembled_context"],
         ),
         "daily_summaries": pd.DataFrame(
@@ -292,6 +316,9 @@ def _collect_results(nation, config):
         "config": config,
         "network_diagnostics": _safe_network_diagnostics(nation, config),
         "network_snapshot": _safe_network_snapshot(nation),
+        "agent_prompts": pd.DataFrame(
+            prompt_rows, columns=_RESULT_CSV_SCHEMAS["agent_prompts"],
+        ),
         "_timeline_sample_ids": sample_ids,
     }
     results["agent_timeline"] = build_agent_timeline(results, sample_ids)
@@ -356,6 +383,12 @@ def collect_agent_attributes(nation):
     `get_persona()` string the LLM sees in every system prompt, captured
     here so reviewers can audit who each agent is without re-running.
     """
+    reached_a = set()
+    reached_b = set()
+    if getattr(nation, "political_agent_a", None) is not None:
+        reached_a = {c.id for c in nation.political_agent_a.connected_citizens}
+    if getattr(nation, "political_agent_b", None) is not None:
+        reached_b = {c.id for c in nation.political_agent_b.connected_citizens}
     rows = []
     for agent in nation.agents_active.values():
         try:
@@ -373,6 +406,8 @@ def collect_agent_attributes(nation):
             "education_id": _enum_value(getattr(agent, "education_id", None)),
             "ukge2019_vote_id": _enum_value(getattr(agent, "ukge2019_vote_id", None)),
             "brexit_vote_id": _enum_value(getattr(agent, "brexit_vote_id", None)),
+            "reached_by_a": agent.id in reached_a,
+            "reached_by_b": agent.id in reached_b,
             "persona_text": persona_text,
         })
     return pd.DataFrame(rows, columns=_RESULT_CSV_SCHEMAS["agent_attributes"])
@@ -474,6 +509,8 @@ def _write_all_csvs(out_path, results, *, is_checkpoint=False):
             "day0_vs_dayN_shifts": build_day0_vs_dayN_shifts(results),
             "calibration": build_calibration_table(results),
             "message_flow": build_message_flow(results),
+            "bucket_summary": build_bucket_summary(results),
+            "targeting_diagnostics": build_targeting_diagnostics(results),
         }
         for name, df in derived.items():
             if df is None or df.empty:

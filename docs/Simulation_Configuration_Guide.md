@@ -89,6 +89,7 @@ These are the knobs designed for experiments. Changing them is normal and expect
 | The shape of the social network | `network_type`, `network_params` |
 | Who hears which politician, and in what proportions | `political_exposure_targets`, `affinity_weights`, `political_exposure_mode` |
 | How far each politician's broadcasts reach | `reach_a`, `reach_b`, `audience_cap` |
+| Which audience members a limited reach keeps | `reach_targeting_a`, `reach_targeting_b` |
 | Which climate policies are in the package | `package_policies` |
 | Using a cloud AI model instead of the local one | `llm_provider`, `llm_model` |
 | Using a stronger model just for the surveys | `survey_provider`, `survey_model`, `thinking` |
@@ -368,6 +369,20 @@ The fraction of a politician's audience that actually receives each broadcast (`
 audience). `reach_a` is for the pro-climate side, `reach_b` for the anti-climate side. Lowering one
 side models a politician with weaker media presence. Values must be between 0 and 1. *Safe to change.*
 
+#### `reach_targeting_a` — default `"random"`, and `reach_targeting_b` — default `"random"`
+
+When a side's `reach` is below `1.0`, this chooses *which* of its audience the limited reach keeps (it has
+no effect at `reach = 1.0`, where everyone is kept). Per side, one of:
+
+- `"random"` — a uniform random slice (the classic behaviour).
+- `"persuadable"` — the most undecided members (closest to the neutral midpoint of their real opinion),
+  modelling a campaign that spends its reach on swing citizens.
+- `"degree"` — the most-connected members of the peer network (the "influencers").
+- `"betweenness"` — the members that bridge otherwise-separate clusters (the "brokers").
+
+`reach_targeting_a` is the pro-climate side, `reach_targeting_b` the anti-climate side. The two centrality
+modes need the peer network, which the simulation now builds before applying reach. *Safe to change.*
+
 #### `audience_cap` — default `None`
 
 An optional hard limit on how many citizens each politician can reach, applied (at random) before
@@ -643,6 +658,7 @@ with a clear error if something is wrong:
 |---|---|
 | `day0_anchor` isn't one of the three valid options | the value is invalid |
 | `reach_a` or `reach_b` isn't a number between 0 and 1 | the value is out of range |
+| `reach_targeting_a` or `reach_targeting_b` isn't one of `random` / `persuadable` / `degree` / `betweenness` | unknown targeting mode |
 | `audience_cap` is negative, a boolean, or not a whole number (and not `None`) | the value is invalid |
 | `political_message_source` isn't `"offline"` or `"llm"` | the value is invalid |
 | the message source is `"offline"` but a needed message is missing | the message file is incomplete |

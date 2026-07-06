@@ -38,7 +38,7 @@ CHECKPOINT_SCHEMA_VERSION = 1
 _RESUME_HARD_KEYS = (
     "n_citizens", "random_seed", "network_type",
     "communication_mode", "package_policies", "day0_anchor",
-    "reach_a", "reach_b", "audience_cap",
+    "reach_a", "reach_b", "reach_targeting_a", "reach_targeting_b", "audience_cap",
     "political_exposure_mode", "political_exposure_targets",
     "affinity_weights",
     "political_message_source", "political_message_set",

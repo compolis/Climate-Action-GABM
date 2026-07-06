@@ -1,0 +1,12 @@
+# Draft-45 bite 4/4 — ISO-IMPRESSION reach<->frequency exchange rate (SBM, green side). 2 x 3 = 6 runs.
+# Green's total impressions (reach_a x broadcasts_a x days) are held EQUAL to the reach baseline
+# (1.0 x 1): depth2 = 0.5 x 2, depth4 = 0.25 x 4. Reform fixed at full breadth (1.0 x 1). If depth
+# differs from the baseline's breadth, breadth vs depth matters -> the exchange-rate signal.
+# Compare against bite-1 d45_reach_baseline (1.0 x 1) at matched seeds.
+# Submit: bash scripts/aire/sweep.sh scripts/aire/sweeps/draft_45_4_iso.txt --time=15:00:00
+LABEL=d45_iso_depth2_s42 --preset tier1 --days 7 --reach-a 0.5 --reach-b 1.0 --broadcasts-a 2 --broadcasts-b 1 --seed 42
+LABEL=d45_iso_depth2_s43 --preset tier1 --days 7 --reach-a 0.5 --reach-b 1.0 --broadcasts-a 2 --broadcasts-b 1 --seed 43
+LABEL=d45_iso_depth2_s44 --preset tier1 --days 7 --reach-a 0.5 --reach-b 1.0 --broadcasts-a 2 --broadcasts-b 1 --seed 44
+LABEL=d45_iso_depth4_s42 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --broadcasts-a 4 --broadcasts-b 1 --seed 42
+LABEL=d45_iso_depth4_s43 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --broadcasts-a 4 --broadcasts-b 1 --seed 43
+LABEL=d45_iso_depth4_s44 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --broadcasts-a 4 --broadcasts-b 1 --seed 44

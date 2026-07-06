@@ -455,6 +455,20 @@ def parse_args(argv=None):
                    dest="reach_b",
                    help="Fraction of agent_b's natural audience reached "
                         "per broadcast (0.0-1.0).")
+    p.add_argument("--reach-targeting-a",
+                   choices=["random", "persuadable", "degree", "betweenness"],
+                   default=argparse.SUPPRESS, dest="reach_targeting_a",
+                   help="How agent_a selects its reached audience when "
+                        "reach_a<1.0: 'random' (default), 'persuadable' (keep "
+                        "the most undecided by |ground-truth package index|), "
+                        "or 'degree'/'betweenness' (keep the most central on "
+                        "the peer graph). No-op at reach_a=1.0.")
+    p.add_argument("--reach-targeting-b",
+                   choices=["random", "persuadable", "degree", "betweenness"],
+                   default=argparse.SUPPRESS, dest="reach_targeting_b",
+                   help="How agent_b selects its reached audience when "
+                        "reach_b<1.0: 'random' (default), 'persuadable', "
+                        "'degree', or 'betweenness'. No-op at reach_b=1.0.")
     p.add_argument("--audience-cap", type=_int_or_none,
                    default=argparse.SUPPRESS, dest="audience_cap",
                    help="Hard cap on each political agent's audience size "

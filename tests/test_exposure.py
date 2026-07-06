@@ -359,6 +359,8 @@ class TestPresetResolution(unittest.TestCase):
     def test_target_presets_dict(self):
         self.assertEqual(set(TARGET_PRESETS),
                          {"committed_minority_symmetric",
+                          "committed_minority_10",
+                          "committed_minority_15",
                           "committed_minority_uk_2024",
                           "legacy_v05",
                           "split50",

@@ -777,22 +777,43 @@ class SurveyedNation(Nation):
                 f"{len(agent.connected_citizens)}/{len(full)} (cap={cap})"
             )
 
-    def apply_reach_subsample(self, reach_a=1.0, reach_b=1.0, seed=42):
+    def apply_reach_subsample(
+        self, reach_a=1.0, reach_b=1.0, seed=42,
+        targeting_a="random", targeting_b="random",
+    ):
         """
         Subsample each political agent's audience to model broadcast reach
         asymmetry.
 
         Must be called *after* :meth:`assign_political_exposure`. Replaces
         ``political_agent_{a,b}.connected_citizens`` with a deterministic
-        subset of size ``floor(reach * len(connected))``. Citizens are
-        chosen uniformly without replacement using NumPy's
-        ``default_rng`` seeded by ``seed`` (agent A) and ``seed + 1``
-        (agent B), so the two sides draw independently and the result
-        is reproducible.
+        subset of size ``floor(reach * len(connected))``.
 
-        ``political_exposure`` labels on citizens are *not* changed; only
-        the broadcast audience that each political agent will address is
-        narrowed. Peer-messaging is unaffected.
+        The ``targeting_{a,b}`` mode controls *which* subset is kept when
+        ``reach < 1.0``:
+
+        - ``"random"`` (default): citizens are chosen uniformly without
+          replacement using NumPy's ``default_rng`` seeded by ``seed``
+          (agent A) and ``seed + 1`` (agent B), so the two sides draw
+          independently and the result is reproducible.
+        - ``"persuadable"``: hard-rank the audience by persuadability --
+          closeness to the neutral midpoint of the package index
+          (``|get_real_package_index()|`` smallest = most undecided) -- and
+          keep the ``floor(reach * n)`` most-undecided citizens.
+        - ``"degree"`` / ``"betweenness"``: hard-rank the audience by network
+          centrality on the peer graph (``self.network``) and keep the
+          ``floor(reach * n)`` most-central citizens -- degree = most direct
+          neighbours, betweenness = most bridging between clusters. Requires
+          :meth:`create_network` to have been called first.
+
+        For every non-random mode, ties are broken by a seeded permutation
+        (the *same* seed as the random arm) so the result is reproducible
+        and the modes differ only by the selection criterion, not by a
+        different random draw. All modes are a **no-op at ``reach = 1.0``**
+        (the whole audience is kept regardless of mode). ``political_exposure``
+        labels on citizens are *not* changed; only the broadcast audience
+        that each political agent will address is narrowed. Peer-messaging is
+        unaffected.
 
         Args:
             reach_a: fraction in [0.0, 1.0] of A-audience reached by
@@ -801,40 +822,95 @@ class SurveyedNation(Nation):
                 anti-climate political agent broadcasts.
             seed: base random seed; agent A uses ``seed``, agent B uses
                 ``seed + 1``.
+            targeting_a: audience-selection mode for agent A, one of
+                ``"random"``, ``"persuadable"``, ``"degree"``, or
+                ``"betweenness"``.
+            targeting_b: audience-selection mode for agent B, one of
+                ``"random"``, ``"persuadable"``, ``"degree"``, or
+                ``"betweenness"``.
         """
         for name, val in (("reach_a", reach_a), ("reach_b", reach_b)):
             if not (0.0 <= float(val) <= 1.0):
                 raise ValueError(
                     f"{name} must be in [0.0, 1.0], got {val!r}"
                 )
+        valid_modes = ("random", "persuadable", "degree", "betweenness")
+        for name, mode in (("targeting_a", targeting_a), ("targeting_b", targeting_b)):
+            if mode not in valid_modes:
+                raise ValueError(
+                    f"{name} must be one of {valid_modes}, got {mode!r}"
+                )
 
         import numpy as _np
 
-        if self.political_agent_a is not None:
-            full_a = list(self.political_agent_a.connected_citizens)
-            n_a = int(len(full_a) * float(reach_a))
-            if reach_a < 1.0 and n_a < len(full_a):
-                rng_a = _np.random.default_rng(int(seed))
-                idx = rng_a.choice(len(full_a), size=n_a, replace=False)
-                self.political_agent_a.connected_citizens = [full_a[i] for i in sorted(idx)]
+        # Precompute any requested centrality maps ONCE (shared by both
+        # sides). Centrality is a property of the full peer graph, so the
+        # network must already be built (run_simulation builds it before
+        # this call). Only computed when a centrality mode is requested.
+        centrality_maps = {}
+        needed = {
+            m for m in (targeting_a, targeting_b) if m in ("degree", "betweenness")
+        }
+        if needed:
+            if getattr(self, "network", None) is None:
+                raise RuntimeError(
+                    "centrality targeting (degree/betweenness) requires "
+                    "create_network() to have been called first"
+                )
+            import networkx as _nx
+            if "degree" in needed:
+                centrality_maps["degree"] = _nx.degree_centrality(self.network)
+            if "betweenness" in needed:
+                centrality_maps["betweenness"] = _nx.betweenness_centrality(self.network)
+
+        def _subsample(agent, reach, mode, side_seed):
+            full = list(agent.connected_citizens)
+            n = int(len(full) * float(reach))
+            if not (reach < 1.0 and n < len(full)):
+                logging.info(
+                    f"Reach subsample: {agent.id} audience "
+                    f"{len(full)}/{len(full)} (reach={reach}, targeting={mode})"
+                )
+                return
+            rng = _np.random.default_rng(int(side_seed))
+            extra = ""
+            if mode == "random":
+                idx = rng.choice(len(full), size=n, replace=False)
+            else:
+                # All non-random modes hard-rank the audience by a score and
+                # keep the top n; a seeded permutation breaks ties.
+                if mode == "persuadable":
+                    # persuadability = closeness to the neutral midpoint of
+                    # the package index (|GT| smallest = most undecided).
+                    scores = [abs(c.get_real_package_index()) for c in full]
+                    ascending = True   # keep smallest |GT|
+                    label = "|GT|"
+                else:  # "degree" / "betweenness"
+                    cmap = centrality_maps[mode]
+                    scores = [float(cmap[c.id]) for c in full]
+                    ascending = False  # keep highest centrality
+                    label = mode
+                tiebreak = rng.permutation(len(full))
+                if ascending:
+                    order = sorted(range(len(full)), key=lambda i: (scores[i], tiebreak[i]))
+                else:
+                    order = sorted(range(len(full)), key=lambda i: (-scores[i], tiebreak[i]))
+                idx = order[:n]
+                if n > 0:
+                    kept_mean = sum(scores[i] for i in idx) / n
+                    dropped_mean = sum(scores[i] for i in order[n:]) / (len(full) - n)
+                    extra = f"  {label} kept={kept_mean:.3f} dropped={dropped_mean:.3f}"
+            agent.connected_citizens = [full[i] for i in sorted(idx)]
             logging.info(
-                f"Reach subsample: agent_a audience "
-                f"{len(self.political_agent_a.connected_citizens)}/{len(full_a)} "
-                f"(reach_a={reach_a})"
+                f"Reach subsample: {agent.id} audience "
+                f"{len(agent.connected_citizens)}/{len(full)} "
+                f"(reach={reach}, targeting={mode}){extra}"
             )
 
+        if self.political_agent_a is not None:
+            _subsample(self.political_agent_a, reach_a, targeting_a, int(seed))
         if self.political_agent_b is not None:
-            full_b = list(self.political_agent_b.connected_citizens)
-            n_b = int(len(full_b) * float(reach_b))
-            if reach_b < 1.0 and n_b < len(full_b):
-                rng_b = _np.random.default_rng(int(seed) + 1)
-                idx = rng_b.choice(len(full_b), size=n_b, replace=False)
-                self.political_agent_b.connected_citizens = [full_b[i] for i in sorted(idx)]
-            logging.info(
-                f"Reach subsample: agent_b audience "
-                f"{len(self.political_agent_b.connected_citizens)}/{len(full_b)} "
-                f"(reach_b={reach_b})"
-            )
+            _subsample(self.political_agent_b, reach_b, targeting_b, int(seed) + 1)
 
     def apply_persona_mode(self, mode="real", seed=42):
         """
