@@ -1,0 +1,813 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Supplementary Information for:
+%% GABM Tipping Point and Competing Persuasion
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}% Numbered references
+
+%%%% Standard Packages
+\usepackage{graphicx}%
+\usepackage{multirow}%
+\usepackage{amsmath,amssymb,amsfonts}%
+\usepackage{amsthm}%
+\usepackage{mathrsfs}%
+\usepackage[title]{appendix}%
+\usepackage{xcolor}%
+\usepackage{textcomp}%
+\usepackage{manyfoot}%
+\usepackage{booktabs}%
+\usepackage{algorithm}%
+\usepackage{algorithmicx}%
+\usepackage{algpseudocode}%
+\usepackage{listings}%
+
+\theoremstyle{thmstyleone}%
+\newtheorem{theorem}{Theorem}%
+\newtheorem{proposition}[theorem]{Proposition}%
+
+\theoremstyle{thmstyletwo}%
+\newtheorem{example}{Example}%
+\newtheorem{remark}{Remark}%
+
+\theoremstyle{thmstylethree}%
+\newtheorem{definition}{Definition}%
+
+\raggedbottom
+
+% Supplementary-information numbering
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thesubsection}{S\arabic{section}.\arabic{subsection}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\theequation}{S\arabic{equation}}
+
+\begin{document}
+
+\title[Supplementary Information]{
+Supplementary Information: Understanding the dynamics of social tipping with two competing
+committed minority groups using a Generative-AI Agent-Based Model Approach}
+
+%%==================== AUTHORS ====================%%
+\author*[1]{\fnm{Ajaykumar} \sur{Manivannan}}
+\email{a.manivannan@leeds.ac.uk}
+
+\author*[1]{\fnm{Viktoria} \sur{Spaiser}}
+\email{V.Spaiser@leeds.ac.uk}
+
+\author[1]{\fnm{Andy} \sur{Turner}}
+
+\author[1]{\fnm{Charlie} \sur{Pilgrim}}
+
+\affil*[1]{
+\orgname{University of Leeds},
+\orgaddress{\city{Leeds}, \country{United Kingdom}}}
+
+\maketitle
+
+% =====================================================================
+% SI SKELETON (2026-07-09). Structure is driven by the main-text callouts in
+% sn-article.tex ("Additional information" paragraph + inline pointers):
+%   Table S1  <- analytic subset (N=1,483)                       [Sec S1]
+%   Table S2  <- six climate-policy items + Day-0 support shares  [Sec S1]
+%   Sec S2 / S2.2 / S2.3 <- personas / message pool / prompt templates
+%   Sec S3.2 + Table S3  <- affinity audience assignment (calibrated targets)
+%   Tables S4-S7 <- four-experiment configs / Day-0 baselines / outcomes
+%   Sec S4 / S4.1 / S4.2 <- estimand + ceiling rulers / persona signal + bias
+%   Sec S5 <- extension paths
+% Numbering is AUTOMATIC (preamble \thesection=S..., \thetable=S...); keep the
+% sections and tables IN THIS ORDER so the plain-text "Table S1".."Table S7" and
+% "Section S1".."S5" in the main text line up. Figures are DEFERRED this pass:
+% placeholder comments only, NO \includegraphics (main-vs-SI figure split still
+% open). Prior (outdated) content preserved verbatim in paper/sn-si_old.tex --
+% mine it when filling each section.
+% =====================================================================
+
+\section*{NOTE: SKELETON --- CONTENT IS BEING REWRITTEN TO THE CURRENT (draft-45) MODEL.}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% S1. SURVEY AND MEASUREMENT SETUP
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Survey and measurement setup}\label{sec:si-survey}
+% Main-text anchors: L180 (Table S1, N=1,483 model-ready), L202/L721 (Table S2).
+% All numbers below verified against data/yougov_survey_data/YouGovProcessedData.csv
+% via cag.io.survey.load (2026-07-10): N=1,483; age 48.0/17.6 (18-91); male 49.6;
+% parent 57.0; White 81.7; GE2019 Con29.0/Lab26.0/LD9.8/Grn3.8/Brx0.9/Oth3.3/DNV27.2;
+% EURef Rem43.0/Leave31.7/none25.4; policy baselines as tabulated.
+
+The model is anchored to a YouGov study commissioned by the University of Leeds
+and fielded in late April 2024 among UK respondents, with Northern Ireland
+excluded from sampling. The source study was an online survey experiment, but the
+present model does not use the original treatment assignment as a simulation
+lever; instead it uses respondent-level records as anchor data for simulated
+citizens. Following the source study, we work with the unweighted
+respondent-level data. The source dataset contains $1{,}967$ respondent records.
+For agent construction we apply a project-level filter that retains only the rows
+with the complete and mappable fields needed for simulation, yielding an analytic
+subset of $N=1{,}483$.
+
+\subsection{Analytic subset}\label{subsec:si-analytic-subset}
+
+Each retained respondent row anchors one simulated citizen. The fields used to
+build agents include demographic background (age, gender, region, education,
+household income, ethnicity, parental status), political history and orientation
+(2019 general-election vote, EU referendum vote, left--right self-placement), and
+value or ideology measures including self-transcendence, self-enhancement,
+openness, conformity--tradition, social dominance orientation, ecological
+dominance orientation, and right-wing authoritarianism. These value and political
+fields are the same signals that drive the affinity-based audience assignment
+described in Section~\ref{subsec:si-structure}.
+Table~\ref{tab:si-survey-sample} summarises the filtered subset actually used to
+construct agents.
+
+\begin{table}[t]
+	\centering
+	\footnotesize
+	\caption{Analytic subset used to construct citizen agents. Percentages are computed on the filtered model-ready subset ($N=1{,}483$).}
+	\label{tab:si-survey-sample}
+	\begin{tabular}{p{0.68\textwidth}r}
+		\toprule
+		Quantity & Value \\
+		\midrule
+		Source survey size & 1,967 \\
+		Filtered analytic subset used in the model & 1,483 \\
+		Age, mean (SD) & 48.0 (17.6) \\
+		Age range & 18--91 \\
+		Male & 49.6\% \\
+		Parent & 57.0\% \\
+		White & 81.7\% \\
+		2019 general election: Conservative & 29.0\% \\
+		2019 general election: Labour & 26.0\% \\
+		2019 general election: Liberal Democrat & 9.8\% \\
+		2019 general election: Green & 3.8\% \\
+		2019 general election: Brexit Party & 0.9\% \\
+		2019 general election: Other & 3.3\% \\
+		2019 general election: Did not vote / uncertain & 27.2\% \\
+		EU referendum recall: Remain & 43.0\% \\
+		EU referendum recall: Leave & 31.7\% \\
+		EU referendum recall: Non-vote / uncertain & 25.4\% \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\subsection{Policy measures and scale}\label{subsec:si-policy-measures}
+
+The main outcome variables are six climate-policy items: renewable energy
+expansion, a ban on new oil, gas, and coal licences, a 2030 ban on new petrol
+cars, stronger standards for new housing, a carbon tax with dividend, and
+compensation for people in other countries affected by climate change. The
+original survey records each item on a seven-point ordered support--opposition
+scale. In the model these seven positions are relabelled A--G, where A means
+strongly oppose, B somewhat oppose, C slightly oppose, D neutral, E slightly
+support, F somewhat support, and G strongly support, and are then mapped onto a
+centered numeric scale from $-3$ to $+3$ (with D~$\to 0$).
+
+Table~\ref{tab:si-policy-baselines} shows the six items in the filtered analytic
+subset. All reported runs use the full six-policy package in package mode; the
+package index is the arithmetic mean of the six centered policy scores. These
+survey responses play two roles in the model: they provide the Day~0
+ground-truth anchor for each citizen (Section~\ref{subsec:si-execution-loop}), and
+they remain the comparison target in the evaluation analyses
+(Section~\ref{sec:si-evaluation}).
+
+\begin{table}[t]
+	\centering
+	\footnotesize
+	\caption{Climate-policy items used in the model, shown for the filtered analytic subset. Policy labels reproduce the survey item wording. Means are on the model's centered $-3$ to $+3$ scale; support shares count responses E--G (a centered score above zero).}
+	\label{tab:si-policy-baselines}
+	\begin{tabular}{p{0.70\textwidth}rr}
+		\toprule
+		Policy item & Mean & Support \\
+		\midrule
+		Accelerate the roll-out of renewable energy production (e.g.\ more offshore and onshore wind parks) & $+1.74$ & 81.7\% \\
+		Ban new oil, gas, and coal licences & $+0.41$ & 45.0\% \\
+		Ban the sale of new petrol cars by no later than 2030 & $-0.04$ & 40.3\% \\
+		Mandate that all new housing developments have non-fossil-fuel heating, roof-top solar panels, and a high level of insulation & $+1.57$ & 77.5\% \\
+		Impose a carbon tax on fossil-fuel sales and distribute the revenue to the public (carbon fee and dividend) & $+0.49$ & 49.4\% \\
+		Compensate people in other countries who are impacted by climate change & $-0.08$ & 38.9\% \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% S2. PERSONAS AND PROMPTS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Personas and prompts}\label{sec:si-personas}
+% Main-text anchors: L188 (Section S2, persona samples), L723-727 (personas +
+% message pool + prompt templates incl two-step debiased survey + memory).
+% Sources: src/cag/abm/agent.py (get_persona + prompt templates), build_nation
+% (personas), data/political_messages/ (message pool), Prompts_and_Personas_Guide_v2.md.
+
+\subsection{Citizen personas}\label{subsec:si-citizen-personas}
+% Source: src/cag/abm/agent.py get_persona() (= _build_demographics_text +
+% _build_values_text). Examples regenerated via cag.__main__.build_nation on the
+% YouGov subset (2026-07-10); Example 1 also appears in Prompts_and_Personas_Guide_v2.md.
+
+Each citizen agent is given a first-person persona built directly from its
+anchored YouGov respondent record and placed at the opening of the system prompt.
+The persona is the concatenation of two paragraphs: a demographic paragraph (age,
+gender, region, ethnicity, education, household income, parental status,
+left--right self-placement, 2019 general-election vote, and EU referendum vote)
+and a values paragraph rendered from the Schwartz value battery together with the
+social-dominance and right-wing-authoritarianism scales. Any attribute recorded as
+``don't know'', ``prefer not to say'', or otherwise unmapped is dropped silently
+rather than voiced as a confident statement, so persona length varies with how
+complete a respondent's record is (typically six to ten sentences). The two
+examples below are reproduced verbatim from the persona builder for two
+contrasting respondents in the analytic subset.
+
+\paragraph{Example 1 (left-leaning, Remain, Green voter).}
+\begin{quote}\small
+I am a 32 year old female living in the Wales. My ethnicity is white. I have a
+University or CNAA higher degree (e.g.\ M.Sc, Ph.D). My gross household income is
+\pounds40,000 -- \pounds44,999 per year. I am not a parent. I position myself
+fairly left-wing of the political spectrum. I voted for the Green party candidate
+in the 2019 General Election. I voted to remain in the 2016 EU Referendum.
+
+When it comes to my core values and worldview: I care about the people close to me
+and have a basic respect for nature, but I do not actively champion global equality
+or make environmental protection a primary, driving life focus. I am not strongly
+driven by the need to get ahead of others, impress people, or hold leadership
+positions. I am highly curious, adventurous, and love trying out new things. I do
+not feel strictly bound by traditional values. I strongly believe that all groups
+should have an equal chance to succeed. I believe that all lifeforms on Earth
+should be treated equally. I am highly skeptical of leaders.
+\end{quote}
+
+\paragraph{Example 2 (centre, Leave, Brexit-party voter).}
+\begin{quote}\small
+I am a 58 year old female living in the Wales. My ethnicity is white. I have a GCE
+A level or Higher Certificate. My gross household income is under \pounds5,000 per
+year. I am a parent. I position myself centre of the political spectrum. I voted
+for the Brexit party candidate in the 2019 General Election. I voted to leave in
+the 2016 EU Referendum.
+
+When it comes to my core values and worldview: I am deeply committed to caring for
+nature, protecting the environment, and responding to the needs of others. I
+strongly believe in global harmony, equal opportunities for everyone, and actively
+helping those around me. I am not strongly driven by the need to get ahead of
+others, impress people, or hold leadership positions where I tell others what to
+do. I prefer routine and the familiar, showing little interest in taking risks,
+seeking out new adventures, or coming up with highly original ideas. I place a high
+value on obedience, showing deep respect for parents and older people. I strongly
+believe in maintaining traditional ways of thinking, keeping up customs, and always
+behaving properly according to expectations. I strongly believe that all groups
+should have an equal chance to succeed and that society should actively work to
+equalize conditions. I firmly reject the idea that any group is inferior or should
+dominate others. I believe that all lifeforms on Earth should be treated equally
+and that no single species, including humans, should dominate the planet. I have a
+healthy respect for leaders and traditions but maintain some skepticism; I
+generally believe force should be avoided unless dealing with highly specific,
+threatening situations.
+\end{quote}
+
+The second example illustrates that a persona reflects the respondent's recorded
+values, which need not align with their vote: a Leave, Brexit-party voter can still
+carry strongly pro-environment and egalitarian Schwartz-value scores.
+
+\subsection{Political-agent message pool}\label{subsec:si-political-briefs}
+% Composition verified from data/political_messages/messages_v1.csv +
+% sources_v1.csv (2026-07-10): 280 messages (A=140, B=140; policies 1-6 + PACKAGE);
+% 228 synthetic (grounded), 52 verbatim/broadcast-ready; 24 real cited source quotes
+% (12/side, ~2 per policy per side) from manifestos, Hansard, press, social media.
+% NOTE: no numbered table here on purpose -- a captioned table would take the S3
+% slot the main text reserves for the affinity-assignment table.
+
+Two committed-minority agents seed climate-policy opinions: a pro-climate side (A)
+and a climate-sceptic side (B). Neither updates its position during a run, and
+their broadcasts are not generated at run time. Instead each side draws from a
+fixed, pre-authored message pool that is held constant across every reported run.
+
+The pool contains 280 messages, split evenly between the two sides (140 each) and
+spanning the six individual policies and the six-policy package. The messages are
+synthetic --- composed to voice each side's platform in a recognisably partisan
+register --- but they are not free invention: each is grounded in real, cited party
+communications. The grounding material is a set of 24 real source quotes (twelve
+per side, roughly two per policy per side) drawn from party manifestos,
+parliamentary speeches recorded in Hansard, and press and social-media statements,
+each stored with its speaker, date, venue, and citation. Every synthetic broadcast
+records the specific source quotes it is built from, so the pool is auditable back
+to its real-world material; a small number of near-verbatim broadcast-ready
+messages (one per policy per side) are summarised directly from those sources.
+
+Because message content is held fixed across the reported runs, it is not one of
+the resource levers manipulated in the main text; systematically varying it --- its
+framing, its emotional intensity, and how much is verbatim-real rather than
+synthetic --- is left to future work. The full message pool and its source table
+are released as \texttt{messages\_v1.csv} and \texttt{sources\_v1.csv}.
+
+\subsection{Prompt templates used in the reported runs}\label{subsec:si-prompt-stack}
+% Verbatim from src/cag/abm/agent.py (2026-07-10), matching
+% docs/Prompts_and_Personas_Guide_v2.md. All first-person (v0.5 overhaul); the
+% third-person survey variant was tested and dropped.
+
+Citizens always receive a system prompt assembled from persona and memory
+(Section~\ref{subsec:si-execution-loop}); the user prompts below are the exact
+templates used in every reported run, with placeholders shown in square brackets.
+All are first-person. An earlier third-person wording of the survey step was tested
+and dropped for worse performance.
+
+\paragraph{Day-0 rationale.}
+Under ground-truth-with-rationale anchoring the Day~0 opinion is set directly from
+the respondent's survey answer, and the model is asked only to justify that pre-set
+position in character:
+\begin{quote}\small
+Your considered position on the following policy is ``[response label]'':
+
+[policy question]
+
+In 2-3 sentences, explain why, given your background and values, you genuinely hold
+this position.
+\end{quote}
+
+\paragraph{Reflection on a broadcast (package mode).}
+Each exposed citizen reads a broadcast and reflects without committing to a
+position:
+\begin{quote}\small
+You just received the following political message about a package of climate
+policies:
+
+``[message]''
+
+The package includes:
+
+[bulleted list of all six policy questions]
+
+In a few sentences, reflect on how this affects your thinking about the overall
+package. You may mention which parts feel more or less convincing. Do not state a
+final position --- just think out loud.
+\end{quote}
+
+\paragraph{Peer message (package mode).}
+Each citizen with at least one network neighbour writes a short conversational
+message:
+\begin{quote}\small
+Express your current thinking about the following climate-policy package in 2-3
+sentences. Be genuine and conversational, and feel free to mention if some parts
+appeal to you more than others:
+
+[bulleted list of all six policy questions]
+\end{quote}
+
+\paragraph{Reflection on received peer messages (package mode).}
+\begin{quote}\small
+You just received peer messages about a package of climate policies. The package
+includes:
+
+[bulleted list of all six policy questions]
+
+Here is what they said:
+
+1. ``[message 1]''
+2. ``[message 2]''
+\dots
+
+In a few sentences, reflect on how these peer messages affect your thinking about
+the overall package. Do not state a final position --- just think out loud.
+\end{quote}
+
+\paragraph{End-of-day survey: debiased two-step.}
+The reported runs use a two-step debiasing survey. Step~1 elicits reasoning behind
+an explicit anti-sycophancy preamble:
+\begin{quote}\small
+Your task is to faithfully simulate how you would respond as the person described
+above, NOT to give the 'correct' or socially desirable answer.
+
+Given your demographic profile, political history, and psychological values, what
+factors would shape your view on the following policy?
+
+[policy question]
+
+Consider factors that might lead you to SUPPORT this policy AND factors that might
+lead you to OPPOSE it. Think about your voting history, your values, your life
+circumstances, and the messages and reflections from today and previous days.
+
+Provide your reasoning in 2-3 sentences.
+\end{quote}
+Step~2 replays that reasoning into the system prompt and asks for the answer:
+\begin{quote}\small
+Based on the reasoning above, how would you respond to the following survey
+question?
+
+[policy question]
+
+A. Strongly oppose \quad B. Somewhat oppose \quad C. Slightly oppose \quad
+D. Neutral \quad E. Slightly support \quad F. Somewhat support \quad
+G. Strongly support
+
+Respond with a single letter A-G.
+\end{quote}
+The response letter maps to the centered $-3$ to $+3$ scale (A~$=-3$, D~$=0$,
+G~$=+3$).
+
+\paragraph{Memory compression.}
+On longer runs, once a day is older than the previous one, its full reflections and
+the agent's own survey reasoning are compressed into a short summary that replaces
+the full text in later prompts. The auxiliary call uses the system prompt ``You are
+a concise summariser.'' and:
+\begin{quote}\small
+Concisely summarise the following day in 4-5 first-person sentences. Cover: the
+positions you landed on and your key reasoning, which received messages you found
+compelling and which you pushed back on, and whether your thinking shifted on any
+aspect of the policy.
+
+Day's reflections and your own reasoning:
+[memories]
+\end{quote}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% S3. MODEL ARCHITECTURE AND EXECUTION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Model architecture and execution}\label{sec:si-architecture}
+% Main-text anchors: L728-730 (Section S3 runtime pipeline; Table S3;
+% Tables S4-S7), L275 (Sec S3.2 + Table S3, affinity assignment), L192
+% (decoding settings in the SI).
+
+\subsection{Population instantiation}\label{subsec:si-instantiation}
+% Source: src/cag/abm/sim.py (data.sample(n=n_citizens, random_state=seed));
+% src/cag/presets.py (tier1 preset). N=100, seeds 42/43/44.
+
+Each run instantiates its citizen cohort by drawing a random sample of $N=100$
+respondents from the $N=1{,}483$ model-ready subset (Section~\ref{sec:si-survey}),
+seeded by the run's random seed so that a given seed always yields the same cohort.
+Each sampled record becomes one citizen agent whose attributes (demographics,
+political history, and the value and ideology scales) are read directly from the
+record and whose persona text is built as in
+Section~\ref{subsec:si-citizen-personas}. Because the sample is taken before any
+experimental settings are applied, a given seed produces an identical starting
+cohort across all four experiments; the reported runs use seeds 42, 43, and 44.
+
+\subsection{Affinity audience assignment and peer network}\label{subsec:si-structure}
+% Source: src/cag/abm/config/exposure.py (target presets + affinity-weight tiers),
+% environment.py (_assign_affinity_rank, _green/_reform_affinity_score),
+% networks.py (_build_stochastic_block + Barabasi-Albert builder).
+
+Two structures connect the agents, and they are assigned separately: which
+committed minority each citizen hears (the broadcast audience), and which peers each
+citizen exchanges reflections with (the social network).
+
+\paragraph{Broadcast audience.}
+Each citizen receives an affinity score for each side, computed from its survey
+record as a weighted sum of three tiers of signals: political self-report
+(left--right placement, EU referendum vote, and 2019 general-election vote),
+psychological values (the Schwartz value battery together with right-wing
+authoritarianism and social dominance orientation), and demographics (age,
+education, region). The political tier carries the largest weight and demographics
+the smallest (Table~\ref{tab:si-exposure-rules}). Rather than let audience sizes
+fall out of the politically-engaged YouGov sample, we set them to calibrated target
+shares drawn from UK population-level evidence and fill each cell by ranking
+citizens on their affinity scores: the sceptic-only cell is locked first (its
+demographic signature is sharpest), then the pro-climate-only cell, then the
+cross-cutting ``both'' cell, with the remainder assigned to ``neither''. Under the
+symmetric default used in the reported runs the realised split is 5\%
+pro-climate-only, 5\% sceptic-only, 60\% both, and 30\% neither
+(Table~\ref{tab:si-exposure-rules}). The legacy voting-history assignment rule of
+earlier versions is retained in the code for reproducibility but is not used in the
+reported runs.
+
+\paragraph{Peer network.}
+Citizens are additionally linked in a social network, by default a two-block
+stochastic block model with denser within-block than between-block ties
+($p_{\mathrm{intra}}=0.15$, $p_{\mathrm{inter}}=0.05$). The two blocks are keyed on
+the broadcast-exposure structure, but because the cross-cutting ``both'' and
+disengaged ``neither'' citizens (together about 90\% of the population) are split
+across both blocks, the graph is only weakly sorted by exposure rather than a
+strict echo chamber. On each simulated day every citizen relays its reflection to a
+fixed number of randomly chosen neighbours ($k=2$), regardless of how well
+connected it is. The targeting experiment (Section~\ref{subsec:si-reported-runs})
+replaces the stochastic block model with a scale-free Barab\'asi--Albert graph
+($m=5$) so that degree-based targeting has hubs to aim at.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{Affinity-based audience assignment. Top: the calibrated target shares
+  for the four exposure cells under the symmetric default used in the reported
+  runs. Bottom: the weight tiers of the per-side affinity score; only the relative
+  ordering of the tiers matters for the rank-based assignment.}
+  \label{tab:si-exposure-rules}
+  % Source: src/cag/abm/config/exposure.py (TARGETS_COMMITTED_MINORITY_SYMMETRIC,
+  % DEFAULT_AFFINITY_WEIGHTS).
+  \begin{tabular}{@{}lr@{}}
+    \toprule
+    \multicolumn{2}{@{}l}{\textit{Exposure-cell target shares}} \\
+    \midrule
+    Pro-climate side only (A-only) & 5\% \\
+    Sceptic side only (B-only) & 5\% \\
+    Both sides (cross-cutting) & 60\% \\
+    Neither (no broadcast) & 30\% \\
+    \midrule
+    \multicolumn{2}{@{}l}{\textit{Affinity-score weight tiers}} \\
+    \midrule
+    Political self-report (left--right, EU referendum, 2019 vote) & 2.0 \\
+    Psychological values (Schwartz battery, RWA, SDO) & 1.0 \\
+    Demographics (age, education, region) & 0.5 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Day~0 anchoring and the daily execution loop}\label{subsec:si-execution-loop}
+% Source: src/cag/abm/sim.py (day loop), config/memory.py (day0_anchor.ttl_days=1),
+% agent.py (seed_opinion_with_rationale, two-step administer_survey).
+
+At Day~0 each citizen's opinion on every policy is pinned directly to its
+respondent's observed survey answer (ground-truth-with-rationale anchoring), and the
+agent generates a short first-person rationale for each seeded answer
+(Section~\ref{subsec:si-prompt-stack}); no end-of-day survey is run on Day~0. This
+makes the Day~0 cohort mean equal to the YouGov mean by construction, so any later
+movement is attributable to the simulated interactions rather than to the model's
+own prior.
+
+Each subsequent simulated day runs a fixed sequence of phases: the exposed citizens
+receive one or more broadcasts from the committed minorities and write a private
+reflection after each, then exchange peer messages with their $k$ neighbours and
+reflect again, and finally answer the six-policy end-of-day survey through the
+two-step debiased prompt (Section~\ref{subsec:si-prompt-stack}). Citizens who hear
+both sides receive the two broadcasts in a randomised order that varies day to day.
+The Day~0 rationale is carried in the prompt only briefly: under the memory
+configuration used in the reported runs its time-to-live is one day
+($\texttt{day0\_anchor.ttl\_days}=1$), so from roughly the second simulated day
+onward the anchor drops out of context and an agent's answers are driven by its
+recent reflections and daily summaries rather than by a standing reminder of its
+starting position.
+
+\subsection{Outputs, persistence, reproducibility, and decoding settings}\label{subsec:si-outputs}
+% Source: src/cag/abm/sim.py SIM_CONFIG (llm_temperature=0.5, thinking=False),
+% scripts/aire/run.sh (vLLM serve Qwen/Qwen3-14B), io/results.py + io/checkpoint.py.
+
+Every generative step is produced by a single local open-weight language model,
+Qwen3-14B, served locally (through vLLM on the HPC backend) and shared by all
+citizen roles --- reflections, peer messages, Day-0 rationales, and end-of-day
+survey answers. Decoding uses a temperature of $0.5$ with the model's optional
+extended-thinking mode disabled; committed-minority broadcasts are not generated at
+run time but drawn from the fixed pool of
+Section~\ref{subsec:si-political-briefs}. Because model outputs are stochastic,
+every condition is run under three random seeds (42, 43, 44), which also fix the
+cohort sample and all network and exposure draws, so a run is reproducible from its
+seed and configuration.
+
+Each run writes a set of machine-readable outputs: per-agent Day-0 and end-of-day
+opinions, the full reflection and message logs, the assigned exposure cell and
+affinity scores per agent, and the fully resolved run configuration. Long runs
+support checkpoint-and-resume. The provenance notebooks that recompute every number
+in the main text and in Tables~\ref{tab:si-outcomes-reach-freq}
+and~\ref{tab:si-outcomes-target-iso} read directly from these per-run outputs.
+
+\subsection{Experiment configurations and outcomes}\label{subsec:si-reported-runs}
+
+The four experiments share the base configuration above --- an $N=100$ cohort
+anchored to the YouGov subset, package mode, ground-truth-with-rationale Day~0
+anchoring with a one-day anchor time-to-live, active peer exchange ($k=2$), the
+committed-minority exposure structure, Qwen3-14B at temperature $0.5$, and three
+seeds --- and differ only in the lever each isolates.
+Table~\ref{tab:si-run-config} gives the per-experiment settings,
+Table~\ref{tab:si-run-baselines} the anchored Day~0 baselines, and
+Tables~\ref{tab:si-outcomes-reach-freq} and~\ref{tab:si-outcomes-target-iso} the
+per-condition outcomes. Every outcome is a within-person difference in the final
+package index (a positive value favours the pro-climate side), pooled over the
+three seeds and recomputed from the raw runs in the provenance notebooks.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{Configuration settings for the four resource-advantage experiments.
+  Reach and broadcast entries are pro-climate side (A) / sceptic side (B); a
+  reduced reach value throttles that side to the given fraction of its audience.
+  The reach effect reported in the main text is carried from the Tier-1--3
+  validation runs (five-day horizon, symmetric versus asymmetric reach); the graded
+  seven-day reach ladder shown here is still in progress.}
+  \label{tab:si-run-config}
+  % Source: src/cag/presets.py (tier1 preset) + scripts/aire/sweeps/draft_45_{1..4}_*.txt.
+  \begin{tabular}{@{}llllll@{}}
+    \toprule
+    Experiment & Network & Reach (A/B) & Broadcasts/day (A/B) & Targeting & Horizon \\
+    \midrule
+    Reach & SBM & $1.0$ vs $\{0.5, 0.25\}$, either side; $+$ placebo & $1$ / $1$ & --- & 7 days \\
+    Frequency & SBM & $1.0$ / $1.0$ & $\{2,3\}$ / $1$ and $1$ / $\{2,3\}$ & --- & 7 days \\
+    Targeting & BA ($m=5$) & $0.25$ / $1.0$ & $1$ / $1$ & random / persuadable / degree & 7 days \\
+    Breadth vs depth & SBM & $\{0.5, 0.25\}$ / $1.0$ & $\{2,4\}$ / $1$ & --- & 7 days \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{Anchored Day~0 baselines. Because Day~0 is pinned to the YouGov ground
+  truth and the cohort is sampled before any experimental setting is applied, the
+  three seed cohorts are shared across all four experiments. Package mean is on the
+  $-3$ to $+3$ scale; support is the share of citizens with a positive package
+  index.}
+  \label{tab:si-run-baselines}
+  % Source: computed from the YouGov subset via cag.io.survey.load +
+  % data.sample(random_state=seed) over the six policy items (.venv, 2026-07-10).
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    Seed & Day-0 package mean & Support (\%) & $N$ \\
+    \midrule
+    42 & $+0.57$ & 67.0 & 100 \\
+    43 & $+0.50$ & 63.0 & 100 \\
+    44 & $+0.92$ & 78.0 & 100 \\
+    \midrule
+    Pooled & $+0.66$ & 69.3 & 300 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{Per-condition outcomes: reach and frequency. Each effect is the
+  within-person difference in the final package index, pooled over three seeds; a
+  positive value favours the pro-climate side. ``Both sides'' restricts the same
+  difference to the cross-cutting majority who hear both broadcast streams.}
+  \label{tab:si-outcomes-reach-freq}
+  % Source: paper/tables/audit_experiments.csv + table1_experiments.csv (NB 46);
+  % 95% CIs per main-text Table 1.
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    Condition & Whole-pop $\Delta$ (95\% CI) & Both-sides $\Delta$ & Reliability & $n$ \\
+    \midrule
+    Reach (pro- vs sceptic-dominant) & $+0.42\ [+0.34, +0.51]$ & $+0.50$ & same sign, 3/3 seeds & 12 \\
+    Frequency, 2:1 & $+0.16\ [+0.09, +0.23]$ & $+0.15$ & same sign, 3/3 seeds & 6 \\
+    Frequency, 3:1 & $+0.28\ [+0.20, +0.36]$ & $+0.34$ & same sign, 3/3 seeds & 6 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{Per-condition outcomes: targeting and breadth-vs-depth. Each effect is
+  the within-person difference in the final package index, pooled over three seeds.
+  Targeting compares each mode against a random quarter-reach baseline on a
+  scale-free graph (nine runs in total); n.s., not significant.}
+  \label{tab:si-outcomes-target-iso}
+  % Source: paper/tables/audit_experiments.csv + table1_experiments.csv (NB 46).
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    Condition & Whole-pop $\Delta$ (95\% CI) & Both-sides $\Delta$ & Reliability & $n$ \\
+    \midrule
+    Targeting, persuadable vs random & $+0.04$ (n.s., $p=0.23$) & $\approx 0$ & mixed sign & 9 \\
+    Targeting, degree (hubs) vs random & $+0.03$ (n.s., $p=0.52$) & $\approx 0$ & mixed sign & 9 \\
+    Breadth vs depth & $+0.12\ [+0.03, +0.21]$ & $+0.20$ & same sign, 3/3 seeds & 6 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% S4. EVALUATION AND ESTIMAND
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Evaluation and estimand}\label{sec:si-evaluation}
+% Main-text anchors: L467/L498 ("the SI" home for estimand + effect sizes +
+% ceiling rulers), L240 (Sec S4.2 level-bias detail), L734 (Section S4
+% evaluation of the survey path), L485/L531 (bare (SI) pointers).
+% Data source: paper/tables/audit_evaluation.csv (NB 45).
+
+\subsection{Estimand, effect sizes, and ceiling-robust rulers}\label{subsec:si-estimand}
+
+Because every condition pins each agent's Day~0 opinion to the same observed survey
+value, the quantity we report for a manipulation is a within-person paired
+difference: the change in a citizen's final package index under one condition minus
+its change under the comparison condition. With a common anchored starting point the
+difference-in-differences reduces to this paired endpoint difference, so the paired
+statistic is the natural estimand and its common-mode component (including the
+model's level bias, Section~\ref{sec:grounding}) cancels. We summarise it by its
+mean, a 95\% confidence interval, and a paired/permutation test; standardised effect
+sizes (Cohen's $d_z$) accompany each contrast in the provenance notebooks. The reach
+contrast, for example, is $+0.42$ package-index points (95\% CI $[+0.34, +0.51]$,
+$p\approx1\times10^{-19}$, $n=300$ over three seeds), and is positive in all three
+seed cohorts ($+0.53$, $+0.42$, $+0.31$).
+
+A bounded $-3$ to $+3$ scale could in principle manufacture an apparent asymmetry:
+agents already near the ceiling cannot move further up. To rule this out we re-express
+the same final opinions on rulers that do not share the raw scale's fixed ceiling and
+re-measure the reach effect (Table~\ref{tab:si-rulers}). Every ruler returns a
+positive effect, so the result is not an artefact of the bounded scale. The
+transformed magnitudes are not comparable across rulers --- each transform carries
+its own units --- so only their common sign is interpretable; the pure-ordinal rank
+ruler is the most conservative and remains positive.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{The reach effect re-expressed on ceiling-robust rulers. The raw ruler is
+  the $-3$ to $+3$ package index used throughout; the headroom, logit, and rank
+  rulers remove the fixed scale ceiling in different ways. Magnitudes are not
+  comparable across rulers (each has its own units); the point is that all are
+  positive, so the effect is not a scale-ceiling artefact. Values follow the
+  canonical re-analysis in the provenance notebooks.}
+  \label{tab:si-rulers}
+  % Source: paper/tables/audit_evaluation.csv (Tier 2, NB 40 canonical re-analysis).
+  \begin{tabular}{@{}lc@{}}
+    \toprule
+    Ruler & Reach effect \\
+    \midrule
+    Raw scale ($-3$ to $+3$) & $+0.42$ \\
+    Headroom (ceiling-free) & $+0.20$ \\
+    Logit & $+0.70$ \\
+    Rank (pure ordinal) & $+0.09$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Persona signal and residual bias}\label{sec:grounding}
+
+\paragraph{Does the model read the persona?}
+We test this with a permutation design at Day~0, before any messages, across three
+persona arms (three seeds each). With the real persona the model orders citizens
+close to their actual survey answers (Spearman $\rho\approx0.62$ on the package
+index, $\approx0.42$ averaged over the six policies). When each agent is instead
+given another respondent's persona (a derangement), the correlation with its own
+respondent's answers collapses to near zero ($\rho\approx-0.10$): the agent adopts
+the stranger's leanings rather than its own. With an information-free neutral
+persona the ordering collapses entirely ($\rho\approx0.02$), leaving Day~0 opinion a
+near-flat function of the policy question alone. The model is therefore genuinely
+reading the persona it is handed.
+
+\paragraph{Residual level bias.}
+Reading the persona is not the same as reading it without bias. Without anchoring,
+the model sits about $+0.64$ package-index points above the true survey mean, and
+the inflation is uneven across policies (Table~\ref{tab:si-bias}): largest on the
+cost-framed and behaviour-change items (Ban petrol cars $+1.64$, Carbon tax $+0.96$,
+Climate compensation $+0.68$) and small on Renewable energy ($+0.33$), Ban fossil
+fuels ($+0.36$), and Green housing (slightly negative). This is exactly why the
+reported runs anchor each agent's Day~0 answer to its observed survey value: the
+anchor removes this level bias by construction, and the within-person paired
+differences of Section~\ref{subsec:si-estimand} cancel whatever common-mode bias
+remains, so no result rests on an absolute level.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \caption{Residual pro-climate level bias by policy: the signed gap between the
+  model's un-anchored Day-0 answer and the observed survey value, in package-index
+  points (positive $=$ model reads more pro-climate than the respondent). The
+  package-level bias is $+0.64$.}
+  \label{tab:si-bias}
+  % Source: paper/tables/audit_evaluation.csv per-policy signed bias (Tier P, NB 36/37).
+  \begin{tabular}{@{}lr@{}}
+    \toprule
+    Policy item & Signed bias (points) \\
+    \midrule
+    Renewable energy & $+0.33$ \\
+    Ban fossil fuels & $+0.36$ \\
+    Ban petrol cars & $+1.64$ \\
+    Green housing & $-0.15$ \\
+    Carbon tax & $+0.96$ \\
+    Climate compensation & $+0.68$ \\
+    \midrule
+    Package (mean) & $+0.64$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+% FIGURE (TODO): persona-null shuffle distribution (real vs shuffled vs neutral).
+% FIGURE (TODO): signed residual bias by policy.
+
+\subsection{Reliability across graph and model}\label{subsec:si-reliability}
+
+Finally, we check that the reach effect is not specific to arbitrary modelling
+choices. Across three social-network topologies the effect is same-signed and
+strongly significant, replicated over three seeds (pooled $n=300$; all
+$p<10^{-10}$): $+0.42$ on the stochastic block model, $+0.34$ on a scale-free
+Barab\'asi--Albert graph, and $+0.36$ on a small-world Watts--Strogatz graph; the
+confidence intervals overlap, so the effect is topology-robust. It also survives a
+change of language model: re-running the contrast on Llama-3.1-8B reproduces a
+same-signed, strongly significant difference ($+1.48$, single seed). That second
+model is a demonstrably poorer simulator --- it holds the persona ordering only
+weakly ($\rho\approx0.46$) and reads systematically low rather than high --- yet the
+contrast persists, because the within-person difference cancels each model's
+common-mode error. The difference-engine design is credible precisely because the
+effect survives on a model that gets absolute opinions wrong; the single-seed
+cross-model run supports a directional claim only, not a cross-draw magnitude.
+% FIGURE (TODO): reach effect by topology and by model.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% S5. USEFUL EXTENSION PATHS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Useful extension paths}\label{sec:si-extensions}
+% Main-text anchor: L734-736 (Section S5). Light-touch; mostly reusable from
+% sn-si_old.tex L973-1020.
+
+\subsection{Parallelization}\label{subsec:si-ext-parallel}
+% TODO: intra-phase parallel LLM calls to cut wall-clock per simulated day.
+
+\subsection{Stronger cognitive architecture}\label{subsec:si-ext-cognition}
+% TODO: richer memory / reflection modules.
+
+\subsection{Persona-faithfulness improvements}\label{subsec:si-ext-persona}
+% TODO: reducing residual level bias; better persona conditioning.
+
+\subsection{Local-model and HPC options}\label{subsec:si-ext-local}
+% TODO: local open-weight deployment (Qwen3-14B on vLLM / AIRE), model breadth.
+
+\subsection{Next mechanism experiments}\label{subsec:si-ext-mechanisms}
+% TODO: 30-day horizon / tipping; graded reach ladder; degree-proportional relay;
+% committed-minority size; message-content lever.
+
+
+\end{document}

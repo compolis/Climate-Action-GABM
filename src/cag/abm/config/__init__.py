@@ -20,3 +20,5 @@ Modules:
     exposure -- political-exposure target marginals + affinity weights.
     memory   -- agent memory / prompt-assembly configuration.
 """
+
+__version__ = "0.9.0"

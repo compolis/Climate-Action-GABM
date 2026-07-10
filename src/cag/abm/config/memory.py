@@ -50,6 +50,8 @@ Stages (``MEMORY_STAGES``): ``peer_message`` (generating a peer message),
 stage's overrides onto the global sections.
 """
 
+__version__ = "0.9.0"
+
 from copy import deepcopy
 
 

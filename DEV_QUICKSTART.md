@@ -65,14 +65,26 @@ git remote add upstream https://github.com/compolis/Climate-Action-GABM.git
 ```
 
 ## 2. Install Dependencies
-Change into the GABM directory. From the project root, install all runtime, development, and documentation dependencies:
+Change into the project directory. From the project root, install the runtime and development/documentation dependencies together:
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+`requirements.txt` provides the runtime stack (numpy, pandas, networkx, the LLM clients, …); `requirements-dev.txt` adds the test, docs, and packaging tools.
+
+To run fully offline against a local LLM, also install a local runtime for your hardware and serve a model — see [docs/Local_LLM_Setup_Guide.md](docs/Local_LLM_Setup_Guide.md):
+
+```bash
+pip install -r requirements-local.txt
 ```
 
 
-## 3. Run Tests and Build Documentation
+## 3. Set Up LLM API Keys
+The simulation talks to an LLM provider. For cloud providers (OpenAI, Anthropic, Google GenAI), create an API-key file as described in [API_KEYS.md](API_KEYS.md). If you are running fully local (previous step), no API key is needed.
+
+
+## 4. Run Tests and Build Documentation
 
 - Run tests:
 

@@ -41,8 +41,8 @@ read out the resulting bucket-level opinion trajectories.
 |---|---:|---|
 | A-only | **5%** | Pro-climate broadcasts only (Green-style) |
 | B-only | **5%** | Anti-climate broadcasts only (Reform-style) |
-| both | **50%** | Both broadcast streams |
-| neither | **40%** | No political broadcasts (peers only) |
+| both | **60%** | Both broadcast streams |
+| neither | **30%** | No political broadcasts (peers only) |
 
 The small A-only and B-only cells are the **dedicated audiences** of each
 minority party — the citizens whose values align strongly enough with one
@@ -118,7 +118,277 @@ re-measurement under the patched code before any model claim is final.
 
 ## Notes
 
-### 2026-07-06 — Tier 3 (network arm), seed sweep: the finding replicates across seeds, and the "SBM is stronger" hint goes away
+### 2026-07-09 — Metric contract for the paper: keep every main-text number legible to a general (Nature-sub) audience
+
+Companion to the Results-section framework note below. The test we are holding ourselves to:
+*if a metric needs overexplaining to a quantitative social scientist, it has failed.* The target
+venue is a general high-impact journal (Nature-family), so the main text must use only measures a
+Likert-literate reader already owns. Our internal analysis harness stays fully rigorous
+(difference-in-differences, Cohen's dz, ANCOVA, ceiling-robust rulers) — but the paper *translates*
+every one of those into a scale-point difference, a percentage, or a rank correlation. Nothing exotic
+survives into the main text. This note fixes the vocabulary so every bite write-up is consistent.
+
+**Primary outcome (LOCKED): the mean package index on the −3…+3 scale.** Plain definition: each
+citizen answers six climate-policy questions on the −3 (strongly oppose) to +3 (strongly support)
+scale; the package index is simply the *average of those six answers*, and the population figure is
+the mean across citizens. One-sentence explainer, no jargon. Companion display: **support / oppose
+shares (%)** — the fraction supporting (index > 0) vs opposing (index < 0) — used in figures because
+it is the single most legible view. The index is the headline number; shares are the intuitive picture.
+
+**Effect measure (LOCKED): a within-person difference in final opinion, in scale points, with a 95%
+confidence interval.** The elegant simplification we will lean on: because Day 0 is pinned to the same
+real survey value in every condition (`ground_truth_with_rationale`), each citizen's starting point is
+identical across conditions. So the difference-in-differences ("change in condition A minus change in
+condition B") reduces *exactly* to "endpoint in A minus endpoint in B for the same person." We
+therefore report the hero number in plain words:
+
+> "The same person ends up X points more pro-climate when the Green side is louder than when the
+> Reform side is louder (−3 to +3 scale, 95% CI …)."
+
+No DiD machinery in the main text — it is just a paired difference in final opinion, the same simple
+number for every bite (frequency, targeting, iso). The formal DiD equivalence is stated once in
+Methods/SI for the reviewer who wants it (same number, reassuring rather than confusing). A 95%
+*confidence interval* is the range the true average is very likely to sit in; we lead with it instead
+of a bare p-value.
+
+**Three jargon fixes (main text → plain; technical name → SI only).**
+- *Difference-in-differences* as a named method → drop from main text; present as the paired
+  within-person difference above. Formal name lives in Methods/SI.
+- *"Both-bucket TOT" / "treatment on the treated"* → say **"among the majority who hear both sides"**
+  (the ~60% exposed to both broadcast streams — the genuinely contested audience). The concept is a
+  standard subgroup analysis; only the acronym was the problem.
+- *Cohen's dz* (standardised paired effect size) → **SI only**. Lead with raw scale points, which are
+  concrete on a familiar 7-point scale and sidestep the paired-d interpretation debates. Keep a
+  standardised effect in SI for completeness.
+
+**Validation section uses only two legible numbers.** Rank fidelity = **Spearman ρ** (a rank
+correlation, 1.0 = perfect ordering, 0 = none: "do we keep people in the same order as the real
+survey?"); and **signed bias in scale points** ("how much higher the model reads than the real
+answer"). One plain sentence each. Everything else technical in the validation battery — ANCOVA
+homogeneity-of-slopes, the ceiling-robust rulers (headroom / logit), the bias-invariance regression
+slope — is robustness scaffolding for reviewers and lives in the SI, not the main text.
+
+**Reliability reporting stays plain.** All three seeds are shown, and the reliability statement is the
+plain-English "same sign in every seed" rather than any meta-analysis vocabulary.
+
+**One pre-empt on the composite.** The package index averages six ordinal Likert items into one
+continuous score. That is standard practice and general-audience-safe, and it is *back-stopped* by the
+rank-based (Spearman) checks — so if a quantitative reviewer raises the ordinal-vs-interval point, the
+answer is already on record. We keep the index as-is rather than complicating it.
+
+**Net main-text vocabulary (the whole contract in one line):** mean package index (−3…+3);
+support/oppose shares (%); within-person difference in scale points with 95% CI; Spearman ρ and signed
+bias for validation; "same sign in every seed" for reliability. Nothing else.
+
+### 2026-07-09 — Results-section research framework for the draft-45 reach-asymmetry paper (Craft-of-Research spine)
+
+This note fixes the framing of the paper's Results section before we touch the new
+draft-45 experiment data. It is a *framing* note (per this document's remit); the exact
+numbers live in [result_report.md](result_report.md) and the run directories cited below.
+The spine follows Booth et al., *The Craft of Research*: Context -> Problem -> Question ->
+Claim -> Reasons -> Evidence -> Warrants -> Acknowledgment/Response. The Results section
+replaces the old N=30 / 4-day / GPT-5-mini reach probe with the draft-45 program (N=100,
+Qwen3-14B, 7-day, package mode, four "bites" x 3 seeds), fronted by a fit-for-purpose
+evaluation.
+
+**0. What the model *is* (the honest identity — governs every sentence).**
+A generative in-silico laboratory for competing committed-minority dynamics. It supports
+trustworthy *relative, within-model, directional* comparisons. It makes *no claim* that
+absolute opinions or trajectories mirror the real UK public. Our evidence establishes
+*internal validity* (the causal contrast within the study is real and not an artefact) and
+*algorithmic fidelity* (the machinery does what we intend), not *external validity* (that it
+generalises to the real world) — and external validity for GABMs is, we argue, an open problem
+the field has not solved. We deliberately avoid the phrase "validated GABM", which smuggles in
+a real-world-replication claim we do not make.
+
+Plain-language definitions used here, first-appearance:
+- *Internal validity*: is the difference we measure between two conditions really caused by the
+  lever we changed, and not by some artefact? (Campbell & Stanley.)
+- *External validity*: would the same result hold in the real world outside the model?
+- *Construct validity*: does the instrument actually measure what we feed it — e.g. does the
+  survey path read the persona it is handed?
+- *Algorithmic fidelity*: does the simulation machinery behave as designed (verification: "did we
+  build the model right"), as distinct from validation ("did we build the right model")?
+- *Difference-in-differences (DiD)*: compare the *change* in one condition to the *change* in
+  another, so any common-mode offset (like the model's pro-climate bias) cancels out.
+- *Placebo*: a silent no-broadcast condition that should move ~0; if it does, movement in the
+  treated conditions is not an artefact of the passage of simulated time.
+
+Positioning sentence (most-conservative register, locked):
+"We make no claim that the model reproduces real-world opinion dynamics. Our evaluation targets
+internal validity and algorithmic fidelity: the framework reads the personas it is given,
+responds to the manipulated levers, and does so robustly across social graphs and language
+models. Whether its dynamics correspond to real populations is beyond what our evidence — or, we
+would argue, any current GABM's — can establish."
+
+This disclaimer appears three times, escalating: one sentence in the Introduction, a framing line
+at the Results opening, and the strongest statement in Limitations.
+
+**A. The problem frame (opens the Results argument).**
+- Stable context (what readers accept): a single committed minority can move a majority (Centola,
+  Granovetter, Galam); but real minorities rarely act alone, and rarely with equal resources.
+- Destabilising gap: with *two competing* minorities, we do not know how a resource *asymmetry*
+  decides who moves the majority — nor whether the *form* of the advantage (reach vs frequency vs
+  targeting) matters, or only total persuasion volume.
+- Cost / so-what: real advocacy budgets buy *different things* (ad reach, posting frequency,
+  micro-targeting). If these are not interchangeable, "who has more resources" is the wrong
+  question; "what the resources buy" is the right one.
+- Overarching research question: when two committed minorities compete with unequal resources,
+  does the *form* of the advantage determine which side shifts the majority — and are the forms
+  interchangeable?
+
+**B. Main claim + the four bites as reasons.**
+Main claim (hypothesis): a resource advantage produces a directional majority shift toward that
+side; the *form* of the advantage shapes its size; reach and frequency are *not* freely
+interchangeable.
+
+Each bite is a *reason* answering one sub-question — and each doubles as a *capability proof*.
+Classical committed-minority models collapse reach, frequency, targeting, and message content
+into one abstract influence weight; a GABM holds them apart because agents process natural-language
+messages against personas. That separability is itself the methodological payoff.
+
+- Bite 1 — Reach (SBM; queued, use Tier-1 reach runs as a labelled placeholder until the 18 runs
+  land). Sub-question: reach *more* people? Claim: wider reach gap -> larger pro-side shift;
+  symmetric ~ 0; placebo ~ 0. Evidence form: monotone dose-response in package-index DiD across
+  the reach ladder. Warrant: more exposure -> more net movement.
+- Bite 2 — Frequency (SBM). Sub-question: speak *more often*? Claim: frequency asymmetry ->
+  same-signed shift. Evidence form: DiD across 2:1 / 3:1 / 1:2 / 1:3. Warrant: repetition
+  accumulates persuasion without new audience.
+- Bite 3 — Targeting (BA, hub network). Sub-question: at fixed reach, *whom*? Claim: persuadable
+  / degree targeting > random. Evidence form: DiD random vs persuadable vs degree. Warrant: not
+  all contacts are equal; needs persona-conditioned receptivity, which only a GABM has.
+- Bite 4 — Iso-impression (SBM). Sub-question: are reach and frequency interchangeable? Claim: if
+  breadth = depth, the matched-impression arms coincide; if not, the distribution matters.
+  Evidence form: DiD for reach 0.5 x 2 broadcasts vs reach 0.25 x 4 broadcasts (equal total
+  impressions). Warrant: total exposure may or may not be the sufficient statistic — this tests it.
+
+Bites 1-2 are the two "more resources" levers; Bite 3 asks whether *placement* substitutes for
+volume; Bite 4 is the control that ties them together.
+
+**C. Fit-for-purpose evaluation — the *first* Results subsection.**
+This is the relabelled Tier P/1/2/3 battery. It does double duty: internally it defends the shared
+warrant ("a shift inside the GABM = a real directional persuasion effect, not an artefact");
+externally it *is* the act of vetting a new modelling approach. The protocol itself is an explicit,
+reusable contribution: paired within-agent DiD + silent placebo + persona-signal permutation test +
+scale-ceiling check + cross-topology and cross-model replication.
+
+- Tier P — construct validity / input fidelity. Instrument question: does it *read* what we feed
+  it? Evidence: NB 36/37 persona-null + calibration; Spearman ~0.62.
+- Tier 1 — sensitivity. Does it *respond* to the lever? Evidence: 12 Tier-1 runs, Qwen3-14B, N=100;
+  DiD positive and significant.
+- Tier 2 — artefact control. Real, not a scale-ceiling artefact? Evidence: scale-aware
+  re-measurement; the ceiling was the culprit.
+- Tier 3 — reliability / robustness. Stable across graph and LLM? Evidence: network arm
+  ([NB 41](../notebooks/41_tier3_network_robustness.ipynb), 27-run 3-topology seed sweep: pooled
+  DiD SBM +0.42 / BA +0.34 / WS +0.36, all p<1e-10) plus the Llama-3.1-8B model arm (paired
+  DiD +1.477).
+
+Key framing line: the difference-engine design is credible *precisely because* the effect survives
+a model that gets absolute opinions wrong (Llama deflates, rank rho ~0.46) — the paired DiD recovers
+the treatment response even when levels and rank are off.
+
+**D. Acknowledgment & Response (limits, stated up front, not buried).**
+- Pro-climate LLM bias -> answered by within-agent paired DiD (common-mode bias cancels) + silent
+  placebo; never an absolute-level claim.
+- Single-seed arms (Bites 3/4, Llama) -> direction + within-sample significance only, not
+  cross-draw magnitude.
+- Package vs single-policy -> package index primary; per-policy to SI.
+- N=100, 7 days -> medium cohort, short horizon; not a tipping claim.
+- LLM stochasticity -> three seeds where available; sign-stability reported alongside the pooled
+  effect.
+- External validity unestablished -> bounds every substantive reading of the bites.
+
+**E. The exact result shapes we go looking for (fill with numbers on analysis).**
+1. Bite 1: monotone DiD ordering across the reach ladder; symmetric and placebo ~ 0; all seeds
+   same sign.
+2. Bite 2: DiD sign follows the louder side; compare magnitude-per-"dominance-unit" against Bite 1.
+3. Bite 3: DiD(persuadable), DiD(degree) > DiD(random) at identical reach.
+4. Bite 4: overlap vs separation of the two matched-impression arms -> total-impressions
+   sufficiency test.
+
+**How this threads into the rest of the paper.**
+- Introduction: dual contribution stated — (a) a GABM framework + fit-for-purpose evaluation
+  protocol for competing committed minorities; (b) a first demonstration that the *form* of
+  resource asymmetry matters, a question the framework uniquely enables. Sharpen the existing
+  "classical models use binary states / fixed rules" line into the explicit "levers collapse in
+  classical models, separate in a GABM" claim. One-sentence external-validity disclaimer.
+- Results: opens with the fit-for-purpose evaluation (C), then Bites 1-4 (B), each carrying its
+  one-line "only-in-GABM" note.
+- Discussion: the honest methods "so what" — what the instrument now licenses, what it still
+  cannot (bias on cost-framed policies, single-seed magnitude, short horizon, external validity),
+  GABM as complementary/enabling (not superior; a head-to-head vs classical ABM is explicitly out
+  of scope), and the 30-day / tipping roadmap as the next thing the instrument enables.
+
+**Locked decisions.**
+1. Results organised by bite (maps 1:1 to the sweep files). 2. Fit-for-purpose evaluation is the
+first Results subsection. 3. Bite 1 = labelled placeholder (Tier-1 reach runs) until the 18 runs
+land. 4. Methods-primary, explicit-but-bounded lean-in. 5. Evaluation protocol named as an
+explicit contribution. 6. GABM framed as complementary, no bake-off. 7. No "validated GABM"
+language — internal validity / algorithmic fidelity only, most-conservative register.
+
+### 2026-07-07 — Tier 3 (model arm): the finding survives a *second AI model* — even one that's bad at the simulation
+
+This closes the last open gate of Tier 3. The network arm (below) already showed the reach-asymmetry
+isn't an artefact of the social graph; this note shows it isn't an artefact of the particular AI model
+either. We re-ran the exact same experiment — same 100 people, same real opinions, same broadcasts, same
+network, same seed — swapping **only the AI** from our primary model (Qwen3-14B) to a different family,
+**Llama-3.1-8B**. Three conditions: a symmetric baseline, a "Green side louder" run, and a "Reform side
+louder" run. See [result_report.md](result_report.md) (2026-07-07 Tier-3 model-arm section) for the
+tables; this is the plain reading. With this passed, **Tier 3 is done**.
+
+**A reminder of what the headline number is.** The core result is a *difference-in-differences* (DiD):
+we measure how much each person moved when the Green side was loud, subtract how much the *same person*
+moved when the Reform side was loud, and average that per-person difference across everyone. Because it
+compares a person to themselves, it cancels out anything about that person that stays fixed between the
+two runs — including, crucially, any systematic quirk in how the AI portrays them.
+
+**Finding 1 — the effect reproduces, and it's big.** On Llama the DiD is **+1.48** on the package-opinion
+scale (95% CI +1.18 to +1.77, p ≈ 10⁻¹⁶) — a louder Green side beats a louder Reform side by a wide,
+clearly-significant margin, in the same direction as Qwen. Both halves behave: turning the Green side up
+pushes opinion **up** (+0.70), turning the Reform side up pushes it **down** (−0.78). Among the ~60% who
+hear *both* broadcast streams — the genuinely contested audience — the gap is even larger (+2.24). So the
+reach-asymmetry is not something only Qwen produces.
+
+**Finding 2 — and this is the interesting part — Llama is *bad* at the simulation, yet the result still
+holds.** For a model to be a trustworthy "difference engine" we've been asking it to keep people in the
+right *order* relative to the real survey — the greenest real person should stay among the greenest
+simulated people (we measure this with Spearman ρ, a rank-agreement score where +1 = perfect ordering).
+Qwen does this well (ρ ≈ 0.8). **Llama largely doesn't**: once its Day-0 memory anchor expires, the
+ordering falls apart (ρ ≈ 0.46, and as low as 0.20 in the Reform-loud run), and its overall opinion
+levels *drift the wrong way* (Llama makes people slightly *more sceptical* on average, the mirror image
+of Qwen's pro-climate lean). By our usual bar, Llama is a **poor simulator of individuals**.
+
+So why does the headline still come out clean? **Because the DiD is built to survive exactly this.** All
+of Llama's problems — wrong average level, scrambled ordering — are things that are *the same in the
+Green-loud run and the Reform-loud run*, so they cancel when we subtract one from the other. What's left
+is only the part that *differs between the two conditions*: the response to which side was louder. This
+is the clearest demonstration yet of *why* the difference-engine design matters — the effect we care
+about is recoverable even from a model that gets the absolute opinions wrong, as long as it responds to
+the treatment in a sensible direction. The right way to read this arm is **"does the *contrast*
+replicate?" — yes**, not "is Llama a good simulator?" — no.
+
+**Finding 3 — the housekeeping checks pass too.** Llama followed the survey format almost perfectly
+(99.5–99.7% of answers were clean single-letter responses), its reasoning was coherent and in-character
+(the same person argued the Green case in one run and the sceptic case in the other, appropriately), and
+because we reused the same seed the underlying social network was identical to Qwen's (same size, same
+structure) — so the model really was the only thing that changed. The one blemish is that the
+Reform-loud run was a bit jumpier day-to-day (12% of people made a large single jump vs ~6% elsewhere),
+which fits the picture of Llama being noisier but not broken.
+
+**The one honest caveat.** This is a **single random draw** (one seed). As with the network *pilot*, we
+read the *direction* and *significance* within that draw, not a precise claim about the effect's *size*
+across many draws. A Llama seed sweep (three seeds, as we did for the network arm) would be needed before
+quoting +1.48 as a stable magnitude — but the *replication* claim (the effect exists on another model,
+correctly signed) doesn't need it.
+
+**Where this leaves the whole validation programme.** Both arms of Tier 3 have now passed: the finding is
+robust to the **social network** (network arm, seed-replicated) *and* to the **AI model** (this note).
+Combined with Tier P (the model reads personas), Tier 1 (the effect exists), and Tier 2 (it's not a
+scale-ceiling artefact), the reach-asymmetry result is now validated end-to-end. The remaining Tier-3
+item — Apertus as a *third* model family — is a nice-to-have breadth check, not a gate: two model
+families agreeing is already replication.
+
+
 
 This is the follow-up to the 2026-07-05 network note below. That earlier note ran on a **single random
 seed** and flagged two loose ends: (1) it could only speak to the *direction* of the effect, not its

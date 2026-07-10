@@ -27,7 +27,7 @@ Determinism:
 
 # Metadata
 __author__ = ["Ajaykumar Manivannan <ashwamanivannan@gmail.com>"]
-__version__ = "0.7.0"
+__version__ = "0.9.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 # Standard library imports

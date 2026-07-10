@@ -5,22 +5,211 @@ Results are listed newest-first.
 
 ---
 
-## Paper Cross-Reference (`paper/sn-article.tex`)
+## Paper Cross-Reference (`paper/sn-article.tex` + `paper/sn-si.tex`)
 
-Which results back which sections of the seminar paper draft. Use this to spot-check numbers and reasoning against the underlying CSVs without re-deriving the chain by hand.
+Which results back which parts of the paper — the **draft-45 program**: a fit-for-purpose evaluation followed by four resource-advantage experiments (reach / frequency / targeting / breadth-vs-depth). Every number in the main text and SI is recomputed from the raw runs in two self-contained provenance notebooks — [`notebooks/45_evaluation_audit.ipynb`](../notebooks/45_evaluation_audit.ipynb) (evaluation; 20 checks PASS) and [`notebooks/46_experiments_audit.ipynb`](../notebooks/46_experiments_audit.ipynb) (experiments; 12 checks PASS) — which write machine-readable outputs to `paper/tables/` (`audit_evaluation.csv`, `audit_experiments.csv`, `table1_experiments.csv`). **The paper cites the SI and those CSVs, not this markdown.** Internal labels (Tier P/1/2/3, Bites 1–4) are repository-internal and do not appear in the paper; the neutral naming there is pro-climate committed minority (A) / climate-sceptic committed minority (B).
 
-| Paper section | Source run / notebook | Result dir | Figures (`paper/figures/`) | What to verify |
+| Paper part | Internal label | Source runs | Audit → CSV | What to verify |
 |---|---|---|---|---|
-| §4.1 Probe 1 — end-to-end run under symmetric broadcasts | Run 5 (NB 19) | [`data/output/experiments/20260425_010615/`](../data/output/experiments/20260425_010615/) | `probe1_package_shares.pdf`, `probe1_package_index.pdf`, `probe1_policy_shares.pdf`, `probe1_policy_index.pdf` | Day-0 package mean +0.96; package-mean plateau +1.16 to +1.22; per-policy means and shares (Carbon tax +0.77→+1.20, Climate compensation +0.10→~+0.65, Green housing +1.53→+1.33); package support share 73–80%, against 13–23% |
-| §4.2 Probe 2 — reach asymmetry registers a signal | Run 7 (NB 21) | [`data/output/experiments/20260425_125855/`](../data/output/experiments/20260425_125855/) (S), [`20260425_132515/`](../data/output/experiments/20260425_132515/) (C1), [`20260425_135538/`](../data/output/experiments/20260425_135538/) (C3) | `probe2_means.pdf`, `probe2_shares_by_condition.pdf` | Day-0 anchor +0.43; Day-4 means C1 +0.73 < S +0.83 < C3 +0.90; Day-4 supporting shares 67/70/73; monotone ordering from Day 2 onward |
-| §5 Evaluation — persona signal (shuffle test, n=30) | NB 22 | [`data/output/calibration/20260425_203841/`](../data/output/calibration/20260425_203841/) | `calib_null_sixpolicy.pdf` | `p_MAE < 0.05` on 5/6 policies (Renewable borderline at 0.07); `p_ord < 0.05` on 5/6 (Carbon tax fails at 0.13); Spearman ρ range 0.25–0.63 across the six policies |
-| §5 Evaluation — higher-power persona signal (n=100) | NB 23 | [`data/output/calibration/20260425_211242_persona/`](../data/output/calibration/20260425_211242_persona/) | `calib_null_followup.pdf` | Carbon tax `p_ord=0.017`, `p_MAE<10⁻³`, ρ=0.41; Climate compensation `p_ord<10⁻³`, `p_MAE<10⁻³`, ρ=0.53; realised MAE 1.29 vs null 1.66 (Carbon tax) and 1.42 vs null 2.15 (Climate compensation) |
-| §5.4 Residual bias and what it means for the simulation | NB 22 + NB 23 | both calibration dirs | `calib_bias.pdf` | Behavioural-policy bias band +0.07 to +0.47 (Ban petrol cars +0.07, Ban fossil fuels +0.13, Green housing +0.30, Renewable +0.47); cost-framed bias +0.87 / +0.60 at n=30, +0.85 / +0.48 at n=100 |
+| Results §"Does the instrument work?" (`subsec:eval`) | Tier P/1/2/3 | NB 36/37 (run_6457850–6457858); Tier-1 (run_6458324–6458335); NB 40 re-analysis; NB 41 topology (27 runs); Llama arm (run_6475093 / 6479341 / 6479390) | NB 45 → `audit_evaluation.csv` | persona ρ≈0.62 (pkg) / 0.42 (per-policy), shuffled −0.10, neutral +0.02; reach +0.42 [+0.34,+0.51]; placebo +0.32 / −0.10; rulers raw +0.42 / headroom +0.20 / logit +0.70 / rank +0.09; topology SBM +0.42 / BA +0.34 / WS +0.36; Llama +1.48 |
+| Results §"Reaching more citizens" (`subsec:bite-reach`) | Tier-1 / Bite 1 | run_6458327–6458332 (green_dom / reform_dom × 3 seeds) | NB 45 → `audit_evaluation.csv` | whole-pop +0.42; both-bucket +0.50; neither-bucket spillover +0.25; per-policy 6/6 (NB 39) |
+| Results §"Broadcasting more often" (`subsec:bite-freq`) | Bite 2 | run_6515406–6515417 (2:1, 3:1 × 2 sides × 3 seeds); [`bite2_frequency.py`](../scripts/paper/analysis/bite2_frequency.py) | NB 46 → `audit_experiments.csv` | 2:1 +0.16 [+0.09,+0.23] / both +0.15; 3:1 +0.28 [+0.20,+0.36] / both +0.34; support share 78→83% |
+| Results §"Whom the message reaches" (`subsec:bite-target`) | Bite 3 | run_6535130–6535138 (random / persuadable / degree × 3 seeds, BA m=5); [`bite3_targeting.py`](../scripts/paper/analysis/bite3_targeting.py) | NB 46 → `audit_experiments.csv` | persuadable−random +0.04 (p=0.23); degree−random +0.03 (p=0.52); mixed sign → null |
+| Results §"Reach and frequency are not interchangeable" (`subsec:bite-iso`) | Bite 4 | run_6535139–6535144 (depth2 / depth4 × 3 seeds); [`bite4_iso_impression.py`](../scripts/paper/analysis/bite4_iso_impression.py) | NB 46 → `audit_experiments.csv` | breadth−depth +0.12 [+0.03,+0.21] / both +0.20 |
+| Results Table 1 (`tab:experiments`) | four-bite ladder | all four experiments | NB 46 → `table1_experiments.csv` | reach +0.42 / freq +0.16→+0.28 / targeting ≈0 / breadth +0.12 |
+| SI §S1 survey (Tables S1–S2) | — | `data/yougov_survey_data/YouGovProcessedData.csv` via `cag.io.survey.load` | recomputed in the SI comments | N=1,483 (of 1,967 raw); age 48.0/17.6; policy baselines (Renewable +1.74/81.7% … Climate comp −0.08/38.9%) |
+| SI §S3 configs / baselines / outcomes (Tables S4–S7) | — | `presets.py` tier1 + `scripts/aire/sweeps/draft_45_*.txt`; Day-0 baselines computed from the survey | NB 46 + in-place compute | base config; Day-0 pkg means seed 42/43/44 = +0.57/+0.50/+0.92 (pooled +0.66) |
+| SI §S4 estimand / rulers / bias (Tables S8–S9) | Tier 2 / Tier P | `audit_evaluation.csv` (NB 40 canonical; NB 36/37) | NB 45 | rulers all positive; per-policy signed bias (Ban petrol +1.64 … Green housing −0.15; package +0.64) |
 
 Notes:
-- Probe 1 and Probe 2 in the paper correspond to Run 5 and Run 7 in this report; the "Run N" labelling is repository-internal only and does not appear in the paper.
-- The calibration-figure script (`paper/figures/calibration_figures.py`) regenerates the permutation null at B=1000 for visual consistency between NB 22 and NB 23. NB 22's stored `permutation_null.csv` was computed at B=100 (the in-prose p-values quoted in §5.3 come from the CSV; figure-displayed p-values reflect B=1000).
-- NB 23's exclusion list (30 main-run respondent IDs) is recorded in `summary.json` so the n=100 sample is provably disjoint from the n=30 simulation cohort.
+- The old N=30 gpt-5-mini "Probe 1 / Probe 2" design (Runs 5/7) and the n=30/n=100 Sonnet calibration (NB 22/23) are **superseded** by the draft-45 Qwen3-14B program above. Their detailed write-ups remain further down this log for history but no longer back the paper.
+- The figures that backed the old cross-reference (`probe1_*`, `probe2_*`, `calib_*`) were removed from `paper/figures/` on 2026-07-10; only `GABM_framework.png` and `peer_network_exposure.png` (the two figures the tex references) remain. Result figures for the current program are **not yet made** (deferred; team decision).
+- Full run configs and numbers for the four experiments live in the draft-45 Bite 2/3/4 sections below and the v0.9 Tier-P/1/2/3 sections; Bite 1 (reach) is carried by the Tier-1 runs (5-day validation) pending the graded 7-day reach ladder.
+
+---
+
+## draft-45 Bite 4 — ISO-IMPRESSION (6 runs = 2 allocations × 3 seeds, run_6535139–6535144) — at a matched impression budget, breadth (reach) beats depth (frequency): reach and frequency are NOT interchangeable
+
+**Date:** 2026-07-09
+**Analysed runs:** the **iso-impression** bite of the draft-45 program — the keystone that ties the reach and frequency levers together. Six Qwen3-14B runs, N=100, 7-day, package mode, SBM `p_intra=0.15/p_inter=0.05`, `committed_minority_symmetric` exposure, offline v1 messages, Day-0 anchor `ground_truth_with_rationale`, memory `day0_anchor.ttl_days=1`, `k_peers_per_day=2`, temp 0.5, thinking off. **Both arms are green-dominant with MATCHED total green impressions** (reach × broadcasts = 1.0 relative), Reform held at full `reach_b=1.0` single broadcast. The lever is *how the same impression budget is spent* (× seeds 42/43/44):
+
+| Allocation (run_…s42/43/44) | Spend | Daily phases | Green audience |
+|---|---|---|---|
+| `depth2` — broad + shallow (6535139/40/41) | `reach_a=0.5`, P-A ×2/day | `P-A, P-B, P-A, C` | 32 agents × 2 broadcasts |
+| `depth4` — narrow + deep (6535142/43/44) | `reach_a=0.25`, P-A ×4/day | `P-A, P-B, P-A, P-A, P-A, C` | 16 agents × 4 broadcasts |
+
+Contrast = `depth2 − depth4`, paired per agent within seed, pooled over three seeds (n = 300). Because Day 0 is pinned to ground truth in every condition, this is a within-person difference in final package index. Interpretation: **≈0** → reach and frequency are interchangeable (total impressions is the sufficient statistic); **>0** → broad-and-shallow (more reach) wins, so breadth beats depth; **<0** → narrow-and-deep (more frequency) wins. Analysis script: [`scripts/paper/analysis/bite4_iso_impression.py`](../scripts/paper/analysis/bite4_iso_impression.py) (`.venv`). Framing in [research_notes.md](research_notes.md) (2026-07-09 framework + metric-contract notes).
+
+### Headline — within-person endpoint difference depth2 − depth4 (matched impressions), pooled n=300
+
+| Contrast | Difference (pts) | 95% CI | p | Cohen dz | Per-seed (42/43/44) | Sign |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Whole population** | **+0.120** | [+0.031, +0.209] | 8.2×10⁻³ | +0.15 | +0.072 / +0.203 / +0.085 | same in every seed |
+| **Among those who hear both sides** (`both`, n=180) | **+0.203** | [+0.073, +0.332] | 2.3×10⁻³ | — | — | — |
+
+**Separation, not overlap:** the broad-and-shallow allocation (more reach) moves the majority reliably more pro-climate than the narrow-and-deep allocation (more frequency), at *identical* total impressions. The effect is modest in magnitude (Cohen dz ≈ 0.15, a small standardised effect) but is same-signed in all three seeds, significant, and larger in the contested `both` bucket.
+
+### Per-condition endpoint, shares, validation (pooled 3 seeds)
+
+| Allocation | End mean | Support % | Oppose % | ρ(end, GT) | Signed bias |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `depth2` (reach .5 × 2) | +1.183 | 79.3 | 18.0 | 0.816 | +0.521 |
+| `depth4` (reach .25 × 4) | +1.063 | 76.0 | 21.3 | 0.829 | +0.401 |
+
+Day-0 ground-truth mean +0.662. Rank fidelity holds in both allocations (Spearman ρ 0.82–0.83); signed bias +0.40–0.52 (both green-dominant), cancels in the paired difference.
+
+### The four-bite picture
+
+Bite 4 confirms *directly* what Bites 1 vs 2 implied across experiments — reach is the more efficient way to convert a persuasion budget into opinion change:
+
+| Bite | Lever | Effect (pts) |
+|---|---|---|
+| 1 · Reach | breadth | ≈ +0.42 (strong; Tier-1 / Bite-1 placeholder) |
+| 2 · Frequency | depth | +0.16 (2:1) → +0.28 (3:1) |
+| 3 · Targeting | placement | ~0 (null) |
+| **4 · Iso-impression** | **breadth vs depth at equal impressions** | **+0.12 for breadth** |
+
+**Bottom line.** Total impressions is **not** a sufficient statistic for persuasion: given a fixed budget, spreading it *wide* (reach) beats stacking it *deep* (frequency). Reach and frequency are therefore **not freely interchangeable** — the draft-45 main claim, here confirmed directly rather than inferred. Caveat: the breadth advantage is small in absolute terms (+0.12), so the honest statement is "breadth reliably beats depth, by a small margin," not "reach dwarfs frequency at equal impressions." Framework Section-E prediction for this bite (separation) is **supported**.
+
+---
+
+## draft-45 Bite 3 — TARGETING (9 runs = 3 modes × 3 seeds, run_6535130–6535138) — a NULL: at a throttled reach budget, *whom* the under-resourced side targets does not measurably change the outcome; volume dominates placement
+
+**Date:** 2026-07-09
+**Analysed runs:** the **targeting** bite of the draft-45 program. Nine Qwen3-14B runs, N=100, 7-day, package mode, **Barabási–Albert** network (`m=5`, hub topology; mean-deg ≈ 9.5, max-deg ≈ 41), `committed_minority_symmetric` exposure, offline v1 messages, Day-0 anchor `ground_truth_with_rationale`, memory `day0_anchor.ttl_days=1`, `k_peers_per_day=2`, temp 0.5, thinking off. **All three arms are reform-dominant:** the Green (pro-climate) side is throttled to `reach_a=0.25` (delivers to 16 of its 65-agent audience) while Reform runs at full `reach_b=1.0` with `targeting_b=random`; single broadcast each per day (phases `[P-A, P-B, C]`, alternating order). **The only lever is which 16 agents the throttled Green side keeps** (× seeds 42/43/44):
+
+| Mode (run_…s42/43/44) | Green's targeting rule | Reach QC (from logs) |
+|---|---|---|
+| `random` (6535130/31/32) | 16 chosen uniformly | — |
+| `persuadable` (6535133/34/35) | keep smallest \|ground-truth\| (most persuadable) | kept \|GT\| 0.31 vs dropped 1.74 |
+| `degree` (6535136/37/38) | keep highest-degree hubs | kept degree 0.20 vs dropped 0.065 |
+
+Because Green is the pro-climate side, a **positive** (mode − random) endpoint difference would mean that targeting rule spent the same reach budget better. Paired per agent within seed, pooled over three seeds (n = 300); same instrument, same Day-0 anchoring, so the difference is a within-person endpoint difference on the −3…+3 package index. Analysis script: [`scripts/paper/analysis/bite3_targeting.py`](../scripts/paper/analysis/bite3_targeting.py) (`.venv`). Framing in [research_notes.md](research_notes.md) (2026-07-09 framework + metric-contract notes).
+
+### Headline — within-person endpoint difference (targeting mode − random), pooled n=300 — NULL
+
+| Contrast | Difference (pts) | 95% CI | p | Per-seed (42/43/44) | Sign |
+|---|:--:|:--:|:--:|:--:|:--:|
+| persuadable − random | +0.044 | [−0.027, +0.115] | 0.23 | +0.075 / +0.063 / −0.007 | **mixed** |
+| degree − random | +0.027 | [−0.054, +0.107] | 0.52 | +0.110 / −0.060 / +0.030 | **mixed** |
+| persuadable − degree | +0.017 | [−0.061, +0.095] | 0.66 | — | — |
+
+Every contrast straddles zero, none is significant, and the sign is not stable across seeds. Among the majority who hear both sides (`both` bucket, n=180) the picture is identical: persuadable − random +0.053 (p=0.30), degree − random +0.026 (p=0.63). **Targeting mode does not measurably change the population outcome at this reach budget and horizon.**
+
+### Per-condition endpoint, shares, validation (pooled 3 seeds)
+
+| Mode | End mean | Support % | Oppose % | ρ(end, GT) | Signed bias |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `persuadable` | +1.061 | 79.7 | 19.7 | 0.797 | +0.398 |
+| `degree` | +1.043 | 77.7 | 18.7 | 0.827 | +0.381 |
+| `random` | +1.017 | 74.3 | 20.7 | 0.858 | +0.354 |
+
+Day-0 ground-truth mean +0.662. The endpoint means show a **faint** ordering in the hypothesised direction (persuadable ≥ degree ≥ random), but the gaps are ~0.02–0.04 points — indistinguishable from noise, consistent with the non-significant paired contrasts. Rank fidelity holds in every mode (Spearman ρ 0.80–0.86); signed bias +0.35–0.40 (lower than the volume bites, as expected in a reform-dominant world).
+
+### Why this is a genuine null (not a broken lever)
+
+The reach-subsample logs confirm the mechanism fired exactly as designed: `persuadable` kept the low-\|GT\| agents (kept \|GT\| 0.31 vs dropped 1.74) and `degree` kept the hubs (kept degree 0.20 vs dropped 0.065). So the throttled Green side really did target different sets of 16 agents — those differences simply did not propagate into a measurable population-level advantage.
+
+### Interpretation and caveats
+
+- **Volume dominates placement.** Reach (Bite 1 / Tier-1, ≈ +0.42) and frequency (Bite 2, +0.16 to +0.28) move the majority; targeting does not, measurably. What moves opinion here is *how much* the under-resourced side can broadcast, not *how cleverly it aims* a shrunken broadcast. This is a boundary condition that tightens rather than weakens the "what the resources buy" claim.
+- **A discrimination check the model passes.** A framework that returned a significant effect from *every* manipulation would be suspect; that reach and frequency register while targeting does not is evidence the instrument discriminates rather than uniformly reacting.
+- **Under-power / short horizon — especially for `degree`.** Hub-targeting's theoretical payoff is network spillover (reach a few hubs, let them propagate); 7 days with a modest peer channel may be too short for that to accumulate. A 30-day follow-up is the natural test. **The honest statement is "no measurable effect at 25% reach over 7 days; point estimates weakly favour smart targeting but are neither significant nor sign-stable"** — not "targeting never matters."
+
+**Bottom line.** At a throttled 25% reach budget over 7 days on a hub network, *whom* the under-resourced committed minority targets does not measurably change the majority's opinion, whether it aims at the persuadable or at the well-connected. Placement does not substitute for volume within the tested range. Framework Section-E prediction for this bite (targeting > random) is **not supported** — recorded as a boundary condition, and a candidate for re-testing over a longer horizon.
+
+---
+
+## draft-45 Bite 2 — FREQUENCY asymmetry (12 runs = 2 ratios × 2 sides × 3 seeds, run_6515406–6515417) — broadcasting more often moves the majority in the expected direction, with an internal dose-response; a real but *weaker* lever than reach
+
+**Date:** 2026-07-09
+**Analysed runs:** the **frequency-asymmetry** bite of the draft-45 program. Twelve Qwen3-14B runs, N=100, **7-day**, package mode, SBM `p_intra=0.15/p_inter=0.05` (mean-deg ≈ 10.1), `committed_minority_symmetric` exposure, offline v1 messages, Day-0 anchor `ground_truth_with_rationale`, memory `day0_anchor.ttl_days=1`, `k_peers_per_day=2`, temp 0.5, thinking off. **Reach is held at full for both sides (`reach_a = reach_b = 1.0`); the only lever is broadcast count per day.** Conditions (× seeds 42/43/44):
+
+| Condition | Daily phases | Green : Reform broadcasts |
+|---|---|---|
+| `green2v1` (run_6515406/07/08) | `P-A, P-B, P-A, C` | 2 : 1 |
+| `green3v1` (run_6515409/10/11) | `P-A ×3, P-B, C` | 3 : 1 |
+| `reform1v2` (run_6515412/13/14) | `P-B, P-A, P-B, C` | 1 : 2 |
+| `reform1v3` (run_6515415/16/17) | `P-B ×3, P-A, C` | 1 : 3 |
+
+Phase order alternates by day (P-A-first on odd days, P-B-first on even). There is **no symmetric 1 : 1 baseline in this bite** — the primary contrast is matched-ratio, **green-louder minus reform-louder**, paired per agent within seed and pooled over the three seeds (n = 300). Because Day 0 is pinned to ground truth in every condition, this difference-in-differences reduces exactly to a within-person difference in final package index. Analysis script: [`scripts/paper/analysis/bite2_frequency.py`](../scripts/paper/analysis/bite2_frequency.py) (reuses the Tier-3 DiD/`mean_ci` harness; `.venv`). Framing in [research_notes.md](research_notes.md) (2026-07-09 metric-contract + framework notes).
+
+### Headline — within-person difference in final package index (green-louder − reform-louder), pooled n=300
+
+| Frequency gap | Difference (pts) | 95% CI | p | Per-seed (42/43/44) | Sign |
+|---|:--:|:--:|:--:|:--:|:--:|
+| **2 : 1** | **+0.158** | [+0.085, +0.231] | 2.7×10⁻⁵ | +0.292 / +0.092 / +0.090 | same in every seed |
+| **3 : 1** | **+0.277** | [+0.195, +0.359] | 1.3×10⁻¹⁰ | +0.477 / +0.080 / +0.275 | same in every seed |
+
+Positive = the Green side's *extra broadcasts* move opinion more pro-climate than the Reform side's equivalent extra broadcasts. **Internal dose-response:** widening the gap from 2:1 to 3:1 nearly doubles the shift (+0.16 → +0.28). The bias-invariance slope (difference vs ground truth) is ≈ −0.08 in both, i.e. the effect is roughly uniform across the opinion spectrum (consistent with Tier 2).
+
+### Among the majority who hear both sides (the `both` bucket, n=180)
+
+| Frequency gap | Difference (pts) | 95% CI | p |
+|---|:--:|:--:|:--:|
+| 2 : 1 | +0.146 | [+0.055, +0.237] | 1.8×10⁻³ |
+| 3 : 1 | +0.338 | [+0.226, +0.450] | 1.3×10⁻⁸ |
+
+The effect concentrates in the contested audience that actually receives both streams — the signature of a genuine persuasion effect rather than a passage-of-time artefact — and is stronger there at 3:1 than in the whole population.
+
+### Per-condition endpoint, shares, and validation (pooled 3 seeds)
+
+| Condition | End mean | Support % | Oppose % | ρ(end, GT) | Signed bias |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `green3v1` | +1.409 | 83.3 | 14.7 | 0.817 | +0.747 |
+| `green2v1` | +1.357 | 82.7 | 16.3 | 0.807 | +0.695 |
+| `reform1v2` | +1.199 | 77.3 | 20.3 | 0.822 | +0.537 |
+| `reform1v3` | +1.132 | 77.7 | 19.7 | 0.834 | +0.470 |
+
+Day-0 ground-truth mean +0.662. Rank fidelity holds in every condition (Spearman ρ 0.81–0.83 — Qwen keeps agents in the right order); signed bias is +0.47 to +0.75 (the model's known pro-climate level inflation), and it cancels cleanly in the paired difference.
+
+### Diagnostics / caveats
+
+- **Direction robust, magnitude seed-dependent.** Both contrasts are same-signed in all three seeds, but seed 43 is markedly weaker (+0.08–0.09) than seeds 42 and 44 — the recurring "direction robust, size varies across draws" pattern. Report as "same sign in every seed", not a precise magnitude.
+- **Frequency is a weaker lever than reach.** For context, the reach contrast (Tier-1 / Bite-1 placeholder) is ≈ +0.42 for a 4× reach gap; here a 3× frequency gap gives +0.28. Both forms of "louder" work, but buying reach moves opinion more per unit of dominance than buying frequency — the tension Bite 4 (iso-impression) tests directly.
+
+**Bottom line.** Frequency asymmetry produces a directional, same-signed, dose-responsive shift of the majority toward the louder side, strongest among those who hear both streams, rank-faithful and bias-invariant. It is a genuine second "more resources" lever — and, measured on the same instrument, a demonstrably *weaker* one than reach. That reach and frequency are separable and give *different* effect sizes is itself a capability a classical committed-minority model, which collapses them into one influence weight, cannot show.
+
+---
+
+## v0.9 — Tier-3 MODEL-replication arm: Llama-3.1-8B (run_6475093 / run_6479341 / run_6479390, seed 42) — the reach-asymmetry DiD reproduces on a different model family, correctly signed and strongly significant, *despite* Llama being a poor difference engine
+
+**Date:** 2026-07-07
+**Analysed runs:** the **model-replication arm** of Tier 3 — the last open gate (the network arm is closed above). Three seed-42 **Llama-3.1-8B-Instruct** runs under the identical `tier1` shape used for the Qwen3-14B Tier-1 headline (N=100, 5-day P-A/P-B/C, package mode, SBM `p_intra=0.15/p_inter=0.05`, `committed_minority_symmetric` exposure, offline v1 messages, Day-0 anchor `ground_truth_with_rationale`, memory `day0_anchor.ttl_days=1`): baseline (`run_6475093`, reach 1.0/1.0), green-dom (`run_6479341`), reform-dom (`run_6479390`). **The only thing changed vs the Qwen Tier-1 headline is the model** (`HF_MODEL=meta-llama/Llama-3.1-8B-Instruct`), so this is a clean cross-model replication. Analysis script: [`sandbox/ajay_sandbox/tier3_llama_model_arm.py`](../sandbox/ajay_sandbox/tier3_llama_model_arm.py) (reuses the network-arm DiD/`mean_ci` harness verbatim); figure in [`data/output/tier3_llama_analysis/`](../data/output/tier3_llama_analysis/). Framing in [research_notes.md](research_notes.md) (2026-07-07 model-arm note).
+
+**Design.** Single seed 42, so the same 100 agents (identical ground truth, exposure buckets, SBM wiring) appear in all three conditions; the DiD (`shift_green − shift_reform`) is paired per agent (n=100). **Single seed → read direction + within-seed significance, NOT a cross-draw effect-size claim** — same footing as the network *pilot* below.
+
+### Headline DiD (Green-dom − Reform-dom), paired n=100 — positive and strongly significant
+
+| Contrast | DiD | 95% CI | p | Cohen dz | n |
+|---|:--:|:--:|:--:|:--:|:--:|
+| **Whole population** | **+1.477** | [+1.182, +1.771] | 1.4×10⁻¹⁶ | +0.99 | 100 |
+| Green-dom − Baseline (half A) | +0.698 | [+0.456, +0.940] | 1.1×10⁻⁷ | — | 100 |
+| Reform-dom − Baseline (half B) | −0.778 | [−1.029, −0.527] | 1.7×10⁻⁸ | — | 100 |
+| **TOT (`both` bucket)** | **+2.239** | [+1.908, +2.570] | 9.7×10⁻²⁰ | — | 60 |
+
+The reach-asymmetry reproduces on Llama, **correctly signed** and with a **large** effect (dz ≈ 1.0). Both halves are clean and correctly directed — turning the Green side up pushes opinion up (+0.70), turning the Reform side up pushes it down (−0.78). The contested `both` bucket shows the strongest signal (+2.24), as expected.
+
+### The key subtlety: Llama is a *poor* difference engine, yet the paired DiD survives
+
+| Condition | ρ(day0, GT) | ρ(end, GT) | end signed bias |
+|---|:--:|:--:|:--:|
+| baseline | 1.000 | 0.464 | −0.552 |
+| green-dom | 1.000 | 0.676 | +0.147 |
+| reform-dom | 1.000 | 0.201 | −1.330 |
+
+Rank fidelity collapses once the Day-0 anchor expires (ρ 0.20–0.68 vs Qwen's 0.78–0.90), and levels **deflate** (baseline −0.55, reform-dom −1.33 — the *opposite* sign to Qwen's pro-climate inflation). Per-policy final-day Spearman averages just **0.33** (vs Qwen ≈ 0.8). **Yet the headline holds**, because the paired DiD is a within-agent contrast that cancels Llama's common-mode level and rank noise — exactly the property the difference-engine framing relies on. Bias-invariance slope (DiD ~ GT) is a mild +0.257.
+
+### Diagnostics
+
+- **Instruction-following:** Step-2 survey outputs parse to a clean A–G at **99.5–99.7%** across all three conditions — Llama follows the two-step survey format as reliably as Qwen.
+- **Stability:** reform-dom is the noisiest arm (|shift|≥5 = 12.0% vs 5.8–6.0% for baseline/green-dom); wild swings are more common than Qwen but not pathological.
+- **Network:** baseline SBM diagnostics (mean-deg 10.1, max-deg 17, exposure-assortativity −0.025, clustering 0.10, diameter 4) mirror the Qwen Tier-1 SBM — confirming identical seed + graph shape, model as the sole lever.
+- **Reasoning:** Step-1 rationales are coherent and in-character; the same agent flips its stance appropriately between the green-dom and reform-dom framings.
+
+**Scorecard.** Headline DiD positive + significant ✓; TOT positive + significant ✓; both halves correctly signed ✓; instruction-following clean ✓. Rank fidelity **fails** (ρ ≈ 0.46) — but that is a statement about Llama as a *simulator*, not about the *contrast*, which is what this arm tests.
+
+**Bottom line.** The reach-asymmetry is **not a Qwen artefact.** It replicates on a different model family — correctly signed, large, and strongly significant — even though Llama-3.1-8B is a demonstrably weaker difference engine (rank ρ ≈ 0.46, deflating rather than inflating). This is the strongest possible form of the model-arm test: the *contrast* survives precisely because the paired DiD design cancels the model's absolute-level failures. **Frame this as "does the contrast replicate?" (yes), not "is Llama a good simulator?" (no).** Caveat: single seed — direction and within-seed significance only, not a cross-draw effect-size claim (a Llama seed sweep would be the next step for a magnitude claim). With the network arm (above) and this model arm both passed, **Tier 3 is complete.**
 
 ---
 

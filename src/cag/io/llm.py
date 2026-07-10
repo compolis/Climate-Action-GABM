@@ -14,6 +14,8 @@ Server location and per-call quirks are configured via :func:`configure_local`
 or environment variables — see that function's docstring for details.
 """
 
+__version__ = "0.9.0"
+
 import csv
 import logging
 import os

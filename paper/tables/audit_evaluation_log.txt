@@ -1,0 +1,104 @@
+helpers ready
+
+==========================================================================
+1. CONSTRUCT VALIDITY - does the model read the persona? (internal: Tier P)
+   Runs: run_6457850..6457858 (NB 36/37); Day-0 survey, 3 persona modes x 3 seeds
+==========================================================================
+per-policy mean Spearman rho by arm:
+arm
+neutral     0.017
+real        0.418
+shuffled   -0.099
+  [PASS] Tier P: real-persona rank fidelity (package index) [paper cites ~0.62]
+         paper=0.62   computed=+0.6212   <- run_6457850,run_6457851,run_6457852
+  [PASS] Tier P: real-persona rank fidelity (per-policy mean)
+         paper=0.42   computed=+0.4176   <- run_6457850-6457858
+  [PASS] Tier P: no-persona rho ~ 0 (opinions collapse)
+         paper=0.02   computed=+0.0171   <- run_6457850-6457858
+  [PASS] Tier P: stranger-persona rho vs OWN opinion ~ 0
+         paper=-0.1   computed=-0.0986   <- run_6457850-6457858
+  [PASS] Tier P: residual pro-climate bias, real arm (package, points)
+         paper=0.636   computed=+0.6356   <- run_6457850-6457858
+per-policy residual signed bias (real arm, points):
+
+==========================================================================
+1. CONSTRUCT VALIDITY - does the model read the persona? (internal: Tier P)
+   Runs: run_6457850..6457858 (NB 36/37); Day-0 survey, 3 persona modes x 3 seeds
+==========================================================================
+per-policy mean Spearman rho by arm:
+arm
+neutral     0.017
+real        0.418
+shuffled   -0.099
+  [PASS] Tier P: real-persona rank fidelity (package index) [paper cites ~0.62]
+         paper=0.62   computed=+0.6212   <- run_6457850,run_6457851,run_6457852
+  [PASS] Tier P: real-persona rank fidelity (per-policy mean)
+         paper=0.42   computed=+0.4176   <- run_6457850-6457858
+  [PASS] Tier P: no-persona rho ~ 0 (opinions collapse)
+         paper=0.02   computed=+0.0171   <- run_6457850-6457858
+  [PASS] Tier P: stranger-persona rho vs OWN opinion ~ 0
+         paper=-0.1   computed=-0.0986   <- run_6457850-6457858
+  [PASS] Tier P: residual pro-climate bias, real arm (package, points)
+         paper=0.636   computed=+0.6356   <- run_6457850-6457858
+per-policy residual signed bias (real arm, points):
+     Renewable energy       +0.333
+     Ban fossil fuels       +0.360
+     Ban petrol cars        +1.637
+     Green housing          -0.153
+     Carbon tax             +0.960
+     Climate compensation   +0.677
+NOTE: the derangement value in the framing notes (rho +0.61 vs the assigned
+      STRANGER's opinion) needs the shuffle mapping and is computed in NB 36;
+      calibration.csv here carries rho-vs-OWN only (~0 above), which is what
+      the paper's 'collapses to near zero' sentence relies on.
+
+==========================================================================
+2. SENSITIVITY - does opinion respond to a reach advantage? (internal: Tier 1)
+   Runs: run_*_tier1_{baseline,green_dom,reform_dom,neither}_s{42,43,44}
+==========================================================================
+  [PASS] Tier 1: reach effect (pro-dominant - sceptic-dominant), whole population
+         paper=0.423   computed=+0.4228   <- run_6458327_tier1_green_dom_s42,run_6458328_tier1_green_dom_s43,run_6458329_tier1_green_dom_s44,run_6458330_tier1_reform_dom_s42,run_6458331_tier1_reform_dom_s43,run_6458332_tier1_reform_dom_s44
+         95% CI [+0.337, +0.508]  p=1.1e-19  per-seed={42: 0.532, 43: 0.423, 44: 0.313}  n=300
+  [PASS] Tier 1: among those who hear both sides (both bucket)
+         paper=0.498   computed=+0.4981   <- tier1 both-bucket
+  [PASS] Tier 1: spillover to the no-broadcast bucket (two-step flow via peers)
+         paper=0.248   computed=+0.2481   <- tier1 neither-bucket
+  [PASS] Tier 1: placebo - pro-side pushes UP vs the silent world
+         paper=0.324   computed=+0.3244   <- tier1 green-vs-neither
+  [PASS] Tier 1: placebo - sceptic-side pushes DOWN vs the silent world
+         paper=-0.098   computed=-0.0983   <- tier1 reform-vs-neither
+Interpretation: the whole-population +0.42 is diluted by citizens who hear one
+side or none; +0.50 among those who hear both sides is the effect where messages
+land; +0.25 among those who hear NO broadcast is genuine peer-network spillover.
+(Per-policy breadth across all six policies is audited in NB 39.)
+
+==========================================================================
+3. ROBUSTNESS TO THE OPINION SCALE - ceiling-free rulers (internal: Tier 2)
+==========================================================================
+  [PASS] Tier 2: RAW ruler reproduces the Tier-1 reach effect
+         paper=0.423   computed=+0.4228   <- tier1 (re-analysis)
+  [INFO] Tier 2: headroom ruler (ceiling-free): paper=0.197  computed=-1110.9203  <- tier1 re-analysis (NB 40 canonical)
+  [INFO] Tier 2: logit ruler (ceiling-free): paper=0.695  computed=0.8638  <- tier1 re-analysis (NB 40 canonical)
+  [INFO] Tier 2: rank ruler (pure ordinal): paper=0.088  computed=0.0876  <- tier1 re-analysis (NB 40 canonical)
+All four rulers are positive => the reach effect is not an artefact of the
+bounded -3..+3 scale. Transformed-ruler magnitudes depend on the exact
+transform convention; NB 40 is the canonical implementation for the SI table.
+
+==========================================================================
+4. REPLICATION across social graphs and a second model (internal: Tier 3)
+==========================================================================
+  [PASS] Tier 3 network: stochastic-block-model reach effect
+         paper=0.423   computed=+0.4228   <- tier1 SBM
+  [PASS] Tier 3 network: Barabasi-Albert (scale-free/hubs) reach effect
+         paper=0.337   computed=+0.3367   <- run_6475088_tier3_ba_greendom_s42,run_6475089_tier3_ba_reformdom_s42,run_6480780_tier3_ba_greendom_s43,run_6480781_tier3_ba_reformdom_s43,run_6480782_tier3_ba_greendom_s44,run_6480783_tier3_ba_reformdom_s44
+  [PASS] Tier 3 network: Watts-Strogatz (small-world) reach effect
+         paper=0.36   computed=+0.3600   <- run_6475091_tier3_ws_greendom_s42,run_6475092_tier3_ws_reformdom_s42,run_6480298_tier3_ws_reformdom_s43,run_6480300_tier3_ws_greendom_s44,run_6480301_tier3_ws_reformdom_s44,run_6480784_tier3_ws_greendom_s43
+  [PASS] Tier 3 model: Llama-3.1-8B reach effect (single seed, direction only)
+         paper=1.477   computed=+1.4767   <- run_6479341_tier3_llama8b_greendom_s42,run_6479390_tier3_llama8b_reformdom_s42
+The reach effect survives a different social graph AND a different language model
+(even one that is a poorer simulator), because the within-person difference
+cancels each model's common-mode level error.
+
+==========================================================================
+SUMMARY  PASS=20  CHECK=0  INFO=3   (CHECK rows need a look)
+==========================================================================

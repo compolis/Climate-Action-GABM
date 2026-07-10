@@ -5,6 +5,9 @@ Pure DataFrame transforms over the dict returned by ``_collect_results``.
 Extracted from ``cag.abm.sim`` in the 2026-06-22 refactor. All names are
 re-exported from ``cag.abm.sim`` for backwards compatibility.
 """
+
+__version__ = "0.9.0"
+
 import json
 
 import numpy as np
