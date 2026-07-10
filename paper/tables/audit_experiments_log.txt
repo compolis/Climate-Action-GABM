@@ -1,13 +1,26 @@
 helpers ready
 
 ==========================================================================
-EXPERIMENT 1 - Reach advantage (internal: Bite 1; from Tier-1 reach runs)
+EXPERIMENT 1 - Reach advantage (internal: Bite 1; 7-day reach ladder)
 ==========================================================================
-  [PASS] Reach: whole-population effect (points)
-         paper=0.42   computed=+0.4228   <- run_6458327_tier1_green_dom_s42,run_6458328_tier1_green_dom_s43,run_6458329_tier1_green_dom_s44,run_6458330_tier1_reform_dom_s42,run_6458331_tier1_reform_dom_s43,run_6458332_tier1_reform_dom_s44
+  [PASS] Reach: extreme asymmetry green25 - reform25, whole population (points)
+         paper=0.354   computed=+0.3544   <- run_6544103_d45_reach_reform25_s42,run_6544104_d45_reach_reform25_s43,run_6544105_d45_reach_reform25_s44,run_6544115_d45_reach_green25_s42,run_6544116_d45_reach_green25_s43,run_6544117_d45_reach_green25_s44
   [PASS] Reach: among those who hear both sides
-         paper=0.5   computed=+0.4981   <- tier1 both-bucket
-         95% CI [+0.337, +0.508]  same sign every seed: True  per-seed={42: 0.532, 43: 0.423, 44: 0.313}
+         paper=0.449   computed=+0.4491   <- reach both-bucket
+  [PASS] Reach: milder asymmetry green50 - reform50 (points)
+         paper=0.286   computed=+0.2856   <- run_6544106_d45_reach_reform50_s42,run_6544107_d45_reach_reform50_s43,run_6544108_d45_reach_reform50_s44,run_6544112_d45_reach_green50_s42,run_6544113_d45_reach_green50_s43,run_6544114_d45_reach_green50_s44
+  [PASS] Reach: green edge vs baseline (green50 - baseline, up)
+         paper=0.15   computed=+0.1500   <- reach vs baseline
+  [PASS] Reach: reform edge vs baseline (reform25 - baseline, down)
+         paper=-0.213   computed=-0.2133   <- reach vs baseline
+  dose-response (end-of-run mean opinion; x = reach_green - reach_reform):
+    reform25  x=-0.75  end_mean=+1.051
+    reform50  x=-0.50  end_mean=+1.128
+    baseline  x=+0.00  end_mean=+1.264
+    green50   x=+0.50  end_mean=+1.414
+    green25   x=+0.75  end_mean=+1.405
+  monotone reform25<=reform50<=baseline<=green50: True  (green end plateaus at the pro-climate ceiling)
+         extreme 95% CI [+0.270, +0.439]  same sign every seed: True  per-seed={42: 0.46, 43: 0.24, 44: 0.363}
 
 ==========================================================================
 EXPERIMENT 2 - Frequency advantage (internal: Bite 2)
@@ -54,22 +67,23 @@ EXPERIMENT 4 - Breadth vs depth at equal impressions (internal: Bite 4)
 ==========================================================================
 TABLE 1 - the four experiments
 ==========================================================================
-    Experiment              What the advantage buys                   Whole-population effect (95% CI) Among those who hear both sides             Reliability  n runs                                                 note
-         Reach                  reach more citizens                               +0.42 [+0.34, +0.51]                           +0.50     same sign 3/3 seeds      12 validated backbone (Tier 1-3); graded ladder pending
-     Frequency                 broadcast more often 2:1 +0.16 [+0.08, +0.23]; 3:1 +0.28 [+0.20, +0.36]                   +0.15 / +0.34     same sign 3/3 seeds      12                     dose-response; weaker than reach
-     Targeting              aim a limited broadcast  persuadable +0.04 (p=0.23); degree +0.03 (p=0.52)                       ~0 (n.s.) mixed sign across seeds       9                            null / boundary condition
-Iso-impression breadth vs depth (equal impressions)                               +0.12 [+0.03, +0.21]                           +0.20     same sign 3/3 seeds       6                   breadth beats depth (small margin)
+    Experiment              What the advantage buys                   Whole-population effect (95% CI) Among those who hear both sides             Reliability  n runs                                                                                           note
+         Reach                  reach more citizens                               +0.35 [+0.27, +0.44]                           +0.45     same sign 3/3 seeds      15 7-day dose-response ladder (monotone, plateaus at ceiling); Tier-1 5-day validation consistent
+     Frequency                 broadcast more often 2:1 +0.16 [+0.08, +0.23]; 3:1 +0.28 [+0.20, +0.36]                   +0.15 / +0.34     same sign 3/3 seeds      12                                                               dose-response; weaker than reach
+     Targeting              aim a limited broadcast  persuadable +0.04 (p=0.23); degree +0.03 (p=0.52)                       ~0 (n.s.) mixed sign across seeds       9                                                                      null / boundary condition
+Iso-impression breadth vs depth (equal impressions)                               +0.12 [+0.03, +0.21]                           +0.20     same sign 3/3 seeds       6                                                             breadth beats depth (small margin)
 
 ==========================================================================
 PROGRAM TALLY - landed simulations on disk
 ==========================================================================
-   Tier P (persona)                         9
-   Tier 1 (reach)                          12
-   Tier 3 network (BA+WS)                  18
-   Tier 3 model (Llama, seed 42)            3
-   draft-45 experiments (freq+tgt+iso)     27
-   TOTAL landed                            69
-   (Tier 3 SBM arm reuses the Tier-1 runs; the dedicated draft-45 reach-ladder
-    runs are pending and not counted here.)
+   Tier P (persona)                             9
+   Tier 1 (reach, 5-day validation)            12
+   Tier 3 network (BA+WS)                      18
+   Tier 3 model (Llama, seed 42)                3
+   draft-45 experiments (reach+freq+tgt+iso)   42
+   TOTAL landed                                84
+   (Tier 3 SBM arm reuses the Tier-1 runs and is not double-counted. The draft-45
+    reach ladder has now landed: 15 of 18 runs; the 3 no-broadcast placebo runs are
+    still pending.)
 
-SUMMARY  PASS=12  CHECK=0   (CHECK rows need a look)
+SUMMARY  PASS=15  CHECK=0   (CHECK rows need a look)

@@ -7,16 +7,16 @@ Results are listed newest-first.
 
 ## Paper Cross-Reference (`paper/sn-article.tex` + `paper/sn-si.tex`)
 
-Which results back which parts of the paper — the **draft-45 program**: a fit-for-purpose evaluation followed by four resource-advantage experiments (reach / frequency / targeting / breadth-vs-depth). Every number in the main text and SI is recomputed from the raw runs in two self-contained provenance notebooks — [`notebooks/45_evaluation_audit.ipynb`](../notebooks/45_evaluation_audit.ipynb) (evaluation; 20 checks PASS) and [`notebooks/46_experiments_audit.ipynb`](../notebooks/46_experiments_audit.ipynb) (experiments; 12 checks PASS) — which write machine-readable outputs to `paper/tables/` (`audit_evaluation.csv`, `audit_experiments.csv`, `table1_experiments.csv`). **The paper cites the SI and those CSVs, not this markdown.** Internal labels (Tier P/1/2/3, Bites 1–4) are repository-internal and do not appear in the paper; the neutral naming there is pro-climate committed minority (A) / climate-sceptic committed minority (B).
+Which results back which parts of the paper — the **draft-45 program**: a fit-for-purpose evaluation followed by four resource-advantage experiments (reach / frequency / targeting / breadth-vs-depth). Every number in the main text and SI is recomputed from the raw runs in two self-contained provenance notebooks — [`notebooks/45_evaluation_audit.ipynb`](../notebooks/45_evaluation_audit.ipynb) (evaluation; 20 checks PASS) and [`notebooks/46_experiments_audit.ipynb`](../notebooks/46_experiments_audit.ipynb) (experiments; 15 checks PASS) — which write machine-readable outputs to `paper/tables/` (`audit_evaluation.csv`, `audit_experiments.csv`, `table1_experiments.csv`). **The paper cites the SI and those CSVs, not this markdown.** Internal labels (Tier P/1/2/3, Bites 1–4) are repository-internal and do not appear in the paper; the neutral naming there is pro-climate committed minority (A) / climate-sceptic committed minority (B).
 
 | Paper part | Internal label | Source runs | Audit → CSV | What to verify |
 |---|---|---|---|---|
 | Results §"Does the instrument work?" (`subsec:eval`) | Tier P/1/2/3 | NB 36/37 (run_6457850–6457858); Tier-1 (run_6458324–6458335); NB 40 re-analysis; NB 41 topology (27 runs); Llama arm (run_6475093 / 6479341 / 6479390) | NB 45 → `audit_evaluation.csv` | persona ρ≈0.62 (pkg) / 0.42 (per-policy), shuffled −0.10, neutral +0.02; reach +0.42 [+0.34,+0.51]; placebo +0.32 / −0.10; rulers raw +0.42 / headroom +0.20 / logit +0.70 / rank +0.09; topology SBM +0.42 / BA +0.34 / WS +0.36; Llama +1.48 |
-| Results §"Reaching more citizens" (`subsec:bite-reach`) | Tier-1 / Bite 1 | run_6458327–6458332 (green_dom / reform_dom × 3 seeds) | NB 45 → `audit_evaluation.csv` | whole-pop +0.42; both-bucket +0.50; neither-bucket spillover +0.25; per-policy 6/6 (NB 39) |
+| Results §"Reaching more citizens" (`subsec:bite-reach`) | Bite 1 (7-day ladder) | run_6544103–6544117 (reform25/50 · baseline · green50/25 × 3 seeds; 3 placebo pending) | NB 46 → `audit_experiments.csv` | extreme green25−reform25 +0.35 [+0.27,+0.44]; both-bucket +0.45; milder green50−reform50 +0.29; vs baseline green +0.15 / reform −0.21; monotone dose-response, plateaus at ceiling; consistent with Tier-1 5-day +0.42 |
 | Results §"Broadcasting more often" (`subsec:bite-freq`) | Bite 2 | run_6515406–6515417 (2:1, 3:1 × 2 sides × 3 seeds); [`bite2_frequency.py`](../scripts/paper/analysis/bite2_frequency.py) | NB 46 → `audit_experiments.csv` | 2:1 +0.16 [+0.09,+0.23] / both +0.15; 3:1 +0.28 [+0.20,+0.36] / both +0.34; support share 78→83% |
 | Results §"Whom the message reaches" (`subsec:bite-target`) | Bite 3 | run_6535130–6535138 (random / persuadable / degree × 3 seeds, BA m=5); [`bite3_targeting.py`](../scripts/paper/analysis/bite3_targeting.py) | NB 46 → `audit_experiments.csv` | persuadable−random +0.04 (p=0.23); degree−random +0.03 (p=0.52); mixed sign → null |
 | Results §"Reach and frequency are not interchangeable" (`subsec:bite-iso`) | Bite 4 | run_6535139–6535144 (depth2 / depth4 × 3 seeds); [`bite4_iso_impression.py`](../scripts/paper/analysis/bite4_iso_impression.py) | NB 46 → `audit_experiments.csv` | breadth−depth +0.12 [+0.03,+0.21] / both +0.20 |
-| Results Table 1 (`tab:experiments`) | four-bite ladder | all four experiments | NB 46 → `table1_experiments.csv` | reach +0.42 / freq +0.16→+0.28 / targeting ≈0 / breadth +0.12 |
+| Results Table 1 (`tab:experiments`) | four-bite ladder | all four experiments | NB 46 → `table1_experiments.csv` | reach +0.35 / freq +0.16→+0.28 / targeting ≈0 / breadth +0.12 |
 | SI §S1 survey (Tables S1–S2) | — | `data/yougov_survey_data/YouGovProcessedData.csv` via `cag.io.survey.load` | recomputed in the SI comments | N=1,483 (of 1,967 raw); age 48.0/17.6; policy baselines (Renewable +1.74/81.7% … Climate comp −0.08/38.9%) |
 | SI §S3 configs / baselines / outcomes (Tables S4–S7) | — | `presets.py` tier1 + `scripts/aire/sweeps/draft_45_*.txt`; Day-0 baselines computed from the survey | NB 46 + in-place compute | base config; Day-0 pkg means seed 42/43/44 = +0.57/+0.50/+0.92 (pooled +0.66) |
 | SI §S4 estimand / rulers / bias (Tables S8–S9) | Tier 2 / Tier P | `audit_evaluation.csv` (NB 40 canonical; NB 36/37) | NB 45 | rulers all positive; per-policy signed bias (Ban petrol +1.64 … Green housing −0.15; package +0.64) |
@@ -24,7 +24,50 @@ Which results back which parts of the paper — the **draft-45 program**: a fit-
 Notes:
 - The old N=30 gpt-5-mini "Probe 1 / Probe 2" design (Runs 5/7) and the n=30/n=100 Sonnet calibration (NB 22/23) are **superseded** by the draft-45 Qwen3-14B program above. Their detailed write-ups remain further down this log for history but no longer back the paper.
 - The figures that backed the old cross-reference (`probe1_*`, `probe2_*`, `calib_*`) were removed from `paper/figures/` on 2026-07-10; only `GABM_framework.png` and `peer_network_exposure.png` (the two figures the tex references) remain. Result figures for the current program are **not yet made** (deferred; team decision).
-- Full run configs and numbers for the four experiments live in the draft-45 Bite 2/3/4 sections below and the v0.9 Tier-P/1/2/3 sections; Bite 1 (reach) is carried by the Tier-1 runs (5-day validation) pending the graded 7-day reach ladder.
+- Full run configs and numbers for the four experiments live in the draft-45 Bite 1/2/3/4 sections below and the v0.9 Tier-P/1/2/3 sections. Bite 1 (reach) is now the landed 7-day dose-response ladder (`run_6544103`–`run_6544117`, 15 of 18 runs; the 3 no-broadcast placebo runs are still pending), audited in NB 46; the Tier-1 5-day runs remain as cross-topology/model validation.
+
+---
+
+## draft-45 Bite 1 — REACH dose-response ladder (15 runs = 5 conditions × 3 seeds, run_6544103–6544117; 3 placebo pending) — widening one side's reach moves the majority in a graded, monotone, correctly-signed dose-response; the strongest lever
+
+**Date:** 2026-07-10
+**Analysed runs:** the **reach** bite of the draft-45 program, now landed as a graded 7-day ladder (upgrading the earlier Tier-1 five-day binary reach contrast to a full dose-response). Fifteen Qwen3-14B runs, N=100, 7-day, package mode, SBM `p_intra=0.15/p_inter=0.05`, `committed_minority_symmetric` exposure (5/5/60/30), offline v1 messages, Day-0 anchor `ground_truth_with_rationale`, memory `day0_anchor.ttl_days=1`, `k_peers_per_day=2`, temp 0.5, thinking off. The lever is **one side's broadcast reach** (the fraction of its audience it actually reaches per broadcast), swept over five rungs × seeds 42/43/44. The 3 no-broadcast placebo (`neither`) runs did not land in time and are pending.
+
+**A/B mapping (locked from [`src/cag/abm/political_messages.py`](../src/cag/abm/political_messages.py)):** agent **A = pro-climate (Green)**, agent **B = sceptic (Reform)** — matching the SI convention. The sweep labels are *winner-named*: `reform25` throttles Green (`reach_a=0.25`) so Reform wins; `green25` throttles Reform (`reach_b=0.25`) so Green wins.
+
+| Condition (run_…s42/43/44) | reach_a (Green) | reach_b (Reform) | Signed reach gap (green−reform) |
+|---|:--:|:--:|:--:|
+| `reform25` (6544103/04/05) | 0.25 | 1.0 | −0.75 |
+| `reform50` (6544106/07/08) | 0.50 | 1.0 | −0.50 |
+| `baseline` (6544109/10/11) | 1.0 | 1.0 | 0.00 |
+| `green50` (6544112/13/14) | 1.0 | 0.50 | +0.50 |
+| `green25` (6544115/16/17) | 1.0 | 0.25 | +0.75 |
+
+Contrast = within-person endpoint difference in final package index, paired per agent within seed, pooled over three seeds (n = 300 for a two-condition contrast). Analysis script: [`scripts/paper/analysis/bite1_reach.py`](../scripts/paper/analysis/bite1_reach.py) (`.venv`); audited in [`notebooks/46_experiments_audit.ipynb`](../notebooks/46_experiments_audit.ipynb).
+
+### Headline — within-person endpoint difference, pooled 3 seeds
+
+| Contrast | Difference (pts) | 95% CI | p | Cohen dz | Per-seed (42/43/44) | Sign |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Extreme asymmetry** `green25 − reform25` (whole pop) | **+0.354** | [+0.270, +0.439] | 4×10⁻¹⁵ | +0.48 | +0.46 / +0.24 / +0.36 | same in every seed |
+| **Among those who hear both sides** (`both`) | **+0.449** | [+0.339, +0.559] | — | — | — | — |
+| **Milder asymmetry** `green50 − reform50` (whole pop) | **+0.286** | [+0.210, +0.361] | — | — | — | same in every seed |
+| vs symmetric baseline — green edge `green50 − baseline` | **+0.15** (up) | — | — | — | — | — |
+| vs symmetric baseline — sceptic edge `reform25 − baseline` | **−0.21** (down) | — | — | — | — | — |
+
+### Dose-response (end-of-run mean opinion vs reach gap), pooled 3 seeds
+
+| Condition | Reach gap (green−reform) | End mean |
+|---|:--:|:--:|
+| `reform25` | −0.75 | +1.051 |
+| `reform50` | −0.50 | +1.128 |
+| `baseline` | 0.00 | +1.264 |
+| `green50` | +0.50 | +1.414 |
+| `green25` | +0.75 | +1.405 |
+
+**Monotone** (`reform25 ≤ reform50 ≤ baseline ≤ green50`), plateauing at `green25` as the pro-climate side saturates the ceiling; slope ≈ +0.25 opinion pts per unit reach gap. Rank fidelity Spearman ρ 0.81–0.86 in every condition.
+
+**Bottom line.** Reach is a graded, correctly-signed, monotone dose-response — the strongest of the four levers. The extreme 7-day contrast (+0.35) sits a touch below the Tier-1 five-day binary contrast (+0.42 [+0.34, +0.51]) but well within its CI, and both sides contribute (green +0.15 up, reform −0.21 down vs symmetric). Tier-1/2/3 remain as the cross-topology / cross-model validation of this lever; this ladder is the reach *experiment* proper. Placebo (no-broadcast) drift control still pending.
 
 ---
 
@@ -64,7 +107,7 @@ Bite 4 confirms *directly* what Bites 1 vs 2 implied across experiments — reac
 
 | Bite | Lever | Effect (pts) |
 |---|---|---|
-| 1 · Reach | breadth | ≈ +0.42 (strong; Tier-1 / Bite-1 placeholder) |
+| 1 · Reach | breadth | +0.35 (strong; 7-day ladder, Tier-1 5-day +0.42 validation) |
 | 2 · Frequency | depth | +0.16 (2:1) → +0.28 (3:1) |
 | 3 · Targeting | placement | ~0 (null) |
 | **4 · Iso-impression** | **breadth vs depth at equal impressions** | **+0.12 for breadth** |

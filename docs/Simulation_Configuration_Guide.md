@@ -86,6 +86,7 @@ These are the knobs designed for experiments. Changing them is normal and expect
 | How many citizens are in the run | `n_citizens` |
 | How many days, and what happens each day | `days` |
 | How many peers each citizen messages per day | `k_peers_per_day` |
+| How widely each citizen passes messages on (scaled by how connected they are) | `peer_fanout_mode`, `peer_fanout_budget` |
 | The shape of the social network | `network_type`, `network_params` |
 | Who hears which politician, and in what proportions | `political_exposure_targets`, `affinity_weights`, `political_exposure_mode` |
 | How far each politician's broadcasts reach | `reach_a`, `reach_b`, `audience_cap` |
@@ -121,7 +122,7 @@ core.
 
 ## 4. Every setting explained
 
-This section covers all 34 settings, grouped by what they control. Each entry says what the setting
+This section covers all 37 settings, grouped by what they control. Each entry says what the setting
 does, its default, and whether it's something you'd normally change.
 
 ### Who is in the simulation
@@ -188,11 +189,56 @@ which means "three pro broadcasts, one anti broadcast, then peer chat." Use eith
 > `{"phases": ["P-A", "P-B", "C"], "policy": ClimatePolicyID.CARBON_TAX}`. In the default package
 > mode, any `policy` you add is simply ignored. *Safe to change.*
 
-#### `k_peers_per_day` — default `3`
+#### `k_peers_per_day` — default `2`
 
 How many network neighbours each citizen sends a message to during a peer-chat (`C`) phase. Higher
 numbers mean more AI calls (and more cost) per peer phase. If a citizen has fewer neighbours than this
 number, they simply message all of them. *Safe to change.*
+
+#### Peer fan-out — letting well-connected people spread messages further
+
+By default every citizen passes their view to the *same* small number of neighbours each day
+(`k_peers_per_day`, above), whether they are a lone voice with two friends or a hub with forty. That
+keeps the peer step simple, but it also means a highly-connected "opinion leader" has no more sway in
+conversation than anyone else. **Peer fan-out** lets you change that: a citizen's number of relay
+partners can scale with how central they are in the network, so the well-connected spread their
+messages further. This is the social-science idea of *influentials* and the *two-step flow* of
+communication — a few well-placed connectors carry ideas out to the many.
+
+It is controlled by three settings. The default (`peer_fanout_mode = "constant"`) reproduces the old
+everyone-relays-equally behaviour exactly, so your runs do not change unless you opt in.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `peer_fanout_mode` | `"constant"` | `"constant"` = everyone relays to the same `k_peers_per_day` (the original behaviour). `"degree"` = a citizen's relay count grows with how many neighbours they have. `"betweenness"` = it grows with how much of a *bridge* they are between otherwise-separate groups. |
+| `peer_fanout_budget` | `"additive"` | Only used for `"degree"` / `"betweenness"`. `"additive"` (the default) lets the well-connected simply relay to more people, so the *total* amount of peer talk grows — the realistic picture of a posting network, where better-connected accounts reach more followers. `"preserve"` instead keeps the total the same as a constant run and just redistributes it (hubs relay more, isolated people fewer, the average stays at `k_peers_per_day`), which is useful when you want to change *who* talks without changing *how much*. |
+| `peer_fanout_kmax` | `10` | A safety cap on the most anyone relays to, even a huge hub. Without it, a very well-connected agent in a large network could message dozens of neighbours a day and run up AI cost and time. |
+
+(Two further internal knobs — a `scale` multiplier and a floor of `1` — are baked to sensible values so
+nobody is ever silenced; they are not run settings.)
+
+**When to use it.** Reach for the default `"additive"` when you want the realistic reading, where
+better-connected people simply reach more others (like followers on a social platform). Switch to
+`"preserve"` when you instead want to ask *whether it matters who does the talking* without also
+changing *how much* talking happens — for example, re-testing whether aiming a campaign at network hubs
+pays off once those hubs can pass their shifted views on to more people. Leave `peer_fanout_mode` at
+`"constant"` for the standard, comparable runs.
+
+A quick example — a standard run, then the same run with well-connected citizens relaying wider:
+
+```bash
+# Standard run: everyone relays to the same 2 neighbours (this is the default).
+python -m cag --preset r14_canonical --exposure-targets split50 --k-peers 2
+
+# Influentials: well-connected citizens relay to more people (total peer talk grows),
+# capped so no single hub messages more than 10 neighbours a day.
+python -m cag --preset r14_canonical --exposure-targets split50 \
+    --k-peers 2 --peer-fanout-mode degree --peer-fanout-budget additive --peer-fanout-kmax 10
+```
+
+From the command line the three flags are `--peer-fanout-mode {constant,degree,betweenness}`,
+`--peer-fanout-budget {additive,preserve}`, and `--peer-fanout-kmax`. They have no effect when
+`--k-peers 0` (peer chat is switched off entirely). *Safe to change.*
 
 #### Broadcast-frequency asymmetry from the command line
 

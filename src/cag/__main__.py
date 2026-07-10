@@ -385,6 +385,28 @@ def parse_args(argv=None):
                    dest="k_peers",
                    help="Peers each citizen messages per day in the C phase. "
                         "0 disables peer messaging entirely (broadcast-only).")
+    p.add_argument("--peer-fanout-mode", default=argparse.SUPPRESS,
+                   dest="peer_fanout_mode",
+                   choices=("constant", "degree", "betweenness"),
+                   help="How many peers each citizen relays to in the C phase. "
+                        "'constant' (default) = a flat --k-peers for everyone; "
+                        "'degree'/'betweenness' scale each citizen's fan-out by "
+                        "a peer-graph measure so well-connected nodes relay "
+                        "wider (degree-proportional relay). No-op at "
+                        "--k-peers 0.")
+    p.add_argument("--peer-fanout-budget", default=argparse.SUPPRESS,
+                   dest="peer_fanout_budget",
+                   choices=("additive", "preserve"),
+                   help="Budget policy for degree/betweenness fan-out. "
+                        "'additive' (default) lets well-connected citizens "
+                        "relay to more people so total peer talk grows (the "
+                        "realistic posting-network model); 'preserve' instead "
+                        "holds the mean fan-out at --k-peers and redistributes "
+                        "it by the measure (isolates who-talks from how-much).")
+    p.add_argument("--peer-fanout-kmax", type=int, default=argparse.SUPPRESS,
+                   dest="peer_fanout_kmax",
+                   help="Ceiling on per-citizen fan-out for non-constant "
+                        "modes; caps hub blow-ups (default 10).")
 
     # LLM.
     p.add_argument("--provider", default=argparse.SUPPRESS,

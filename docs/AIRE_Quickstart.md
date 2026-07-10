@@ -674,6 +674,9 @@ How long and how big the run is.
 | `--n-citizens N` | int | (required) | Change the agent pool size. R14 used 50; smoke uses 10 |
 | `--days D` | int | (required) | Change the number of simulated days. Expands to alternating P-A/P-B/C |
 | `--k-peers K` | int | SIM_CONFIG (`3`) | Set peer-messaging count per agent per day. `0` disables peer messaging (broadcast-only research mode) |
+| `--peer-fanout-mode M` | enum | SIM_CONFIG (`constant`) | Scale each citizen's peer relay count by a network measure: `constant` (flat `--k-peers` for all), `degree`, or `betweenness`. No-op at `--k-peers 0` |
+| `--peer-fanout-budget B` | enum | SIM_CONFIG (`additive`) | For degree/betweenness: `additive` (default) lets the well-connected relay to more people so total peer talk grows (realistic posting-network model); `preserve` holds mean fan-out at `--k-peers` and redistributes it by the measure |
+| `--peer-fanout-kmax N` | int | SIM_CONFIG (`10`) | Ceiling on per-citizen fan-out; caps hub blow-ups on high-degree nodes |
 | `--seed N` | int | SIM_CONFIG (`42`) | Vary the random seed (different agent sample + RNG paths) |
 
 ### A.2 LLM
@@ -785,6 +788,14 @@ sbatch scripts/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50 \
     --memory '{"verbatim_window_days":3,"stages":{"survey":{"day0_anchor":{"enabled":false}}}}'
+
+# Peer fan-out — let well-connected citizens relay wider ("influentials"). The
+# default additive budget grows total peer talk as connectivity rises (realistic
+# posting-network model); --peer-fanout-kmax caps how far even the biggest hub goes:
+sbatch scripts/aire/run.sh \
+    --preset r14_canonical \
+    --exposure-targets split50 \
+    --k-peers 2 --peer-fanout-mode degree --peer-fanout-budget additive --peer-fanout-kmax 10
 ```
 
 The exact memory config each job used is printed on the startup `[memory]` line in `run.log` and stored in `config.json → memory_resolved`, so ablation variants are always auditable after the fact. **Composing a new experiment is just a new `sbatch` line — no script edit, no commit.**
