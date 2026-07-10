@@ -575,16 +575,17 @@ three seeds and recomputed from the raw runs in the provenance notebooks.
   \caption{Configuration settings for the four resource-advantage experiments.
   Reach and broadcast entries are pro-climate side (A) / sceptic side (B); a
   reduced reach value throttles that side to the given fraction of its audience.
-  The reach effect reported in the main text is carried from the Tier-1--3
-  validation runs (five-day horizon, symmetric versus asymmetric reach); the graded
-  seven-day reach ladder shown here is still in progress.}
+  The seven-day reach ladder has now landed (15 of 18 runs; the three no-broadcast
+  placebo runs remain pending) and supplies the reach effect in the main text; the
+  five-day Tier-1--3 runs additionally validate that effect across network topology
+  and language model.}
   \label{tab:si-run-config}
   % Source: src/cag/presets.py (tier1 preset) + scripts/aire/sweeps/draft_45_{1..4}_*.txt.
   \begin{tabular}{@{}llllll@{}}
     \toprule
     Experiment & Network & Reach (A/B) & Broadcasts/day (A/B) & Targeting & Horizon \\
     \midrule
-    Reach & SBM & $1.0$ vs $\{0.5, 0.25\}$, either side; $+$ placebo & $1$ / $1$ & --- & 7 days \\
+    Reach & SBM & $1.0$ vs $\{0.5, 0.25\}$, either side ($+$ placebo, pending) & $1$ / $1$ & --- & 7 days \\
     Frequency & SBM & $1.0$ / $1.0$ & $\{2,3\}$ / $1$ and $1$ / $\{2,3\}$ & --- & 7 days \\
     Targeting & BA ($m=5$) & $0.25$ / $1.0$ & $1$ / $1$ & random / persuadable / degree & 7 days \\
     Breadth vs depth & SBM & $\{0.5, 0.25\}$ / $1.0$ & $\{2,4\}$ / $1$ & --- & 7 days \\
@@ -630,7 +631,7 @@ three seeds and recomputed from the raw runs in the provenance notebooks.
     \toprule
     Condition & Whole-pop $\Delta$ (95\% CI) & Both-sides $\Delta$ & Reliability & $n$ \\
     \midrule
-    Reach (pro- vs sceptic-dominant) & $+0.42\ [+0.34, +0.51]$ & $+0.50$ & same sign, 3/3 seeds & 12 \\
+    Reach (pro- vs sceptic-dominant) & $+0.35\ [+0.27, +0.44]$ & $+0.45$ & same sign, 3/3 seeds & 15 \\
     Frequency, 2:1 & $+0.16\ [+0.09, +0.23]$ & $+0.15$ & same sign, 3/3 seeds & 6 \\
     Frequency, 3:1 & $+0.28\ [+0.20, +0.36]$ & $+0.34$ & same sign, 3/3 seeds & 6 \\
     \bottomrule
@@ -677,10 +678,11 @@ difference-in-differences reduces to this paired endpoint difference, so the pai
 statistic is the natural estimand and its common-mode component (including the
 model's level bias, Section~\ref{sec:grounding}) cancels. We summarise it by its
 mean, a 95\% confidence interval, and a paired/permutation test; standardised effect
-sizes (Cohen's $d_z$) accompany each contrast in the provenance notebooks. The reach
-contrast, for example, is $+0.42$ package-index points (95\% CI $[+0.34, +0.51]$,
-$p\approx1\times10^{-19}$, $n=300$ over three seeds), and is positive in all three
-seed cohorts ($+0.53$, $+0.42$, $+0.31$).
+sizes (Cohen's $d_z$) accompany each contrast in the provenance notebooks. The
+five-day reach validation contrast, for example, is $+0.42$ package-index points (95\%
+CI $[+0.34, +0.51]$, $p\approx1\times10^{-19}$, $n=300$ over three seeds), and is
+positive in all three seed cohorts ($+0.53$, $+0.42$, $+0.31$); the seven-day reach
+experiment (Table~\ref{tab:si-outcomes-reach-freq}) gives a consistent $+0.35$.
 
 A bounded $-3$ to $+3$ scale could in principle manufacture an apparent asymmetry:
 agents already near the ceiling cannot move further up. To rule this out we re-express

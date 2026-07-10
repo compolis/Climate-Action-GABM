@@ -411,5 +411,132 @@ class TestPeerMessagingKPeersZeroShortCircuits(unittest.TestCase):
         mock_send.assert_not_called()
 
 
+# ===================================================================
+# Tests: SurveyedNation._compute_peer_fanout() and fan-out plumbing
+# ===================================================================
+
+def _make_star_nation(k_hub_leaves=6):
+    """A 7-citizen nation rewired into a star: agent 0 is the hub, the rest
+    are leaves connected only to the hub. Gives a clean high-degree hub for
+    testing degree/centrality-proportional fan-out."""
+    import networkx as nx
+    sn = _make_nation()
+    agents = [sn.agents_active[i] for i in sorted(sn.agents_active)]
+    hub, leaves = agents[0], agents[1:1 + k_hub_leaves]
+    G = nx.Graph()
+    G.add_nodes_from(a.id for a in agents)
+    for leaf in leaves:
+        G.add_edge(hub.id, leaf.id)
+    sn.network = G
+    hub.network_neighbors = list(leaves)
+    for leaf in leaves:
+        leaf.network_neighbors = [hub]
+    # any citizens beyond the star have no neighbours
+    for a in agents[1 + k_hub_leaves:]:
+        a.network_neighbors = []
+    return sn, hub, leaves
+
+
+class TestPeerFanout(unittest.TestCase):
+
+    def test_constant_matches_historical_rule(self):
+        """constant mode reproduces min(k_peers, degree) exactly."""
+        sn, hub, leaves = _make_star_nation()
+        fanout = sn._compute_peer_fanout(2, mode="constant")
+        self.assertEqual(fanout[hub.id], 2)          # min(2, 6)
+        for leaf in leaves:
+            self.assertEqual(fanout[leaf.id], 1)     # min(2, 1)
+
+    def test_degree_hub_relays_wider_than_leaf(self):
+        """Under degree mode the hub gets a strictly larger fan-out."""
+        sn, hub, leaves = _make_star_nation()
+        fanout = sn._compute_peer_fanout(2, mode="degree", budget="preserve")
+        for leaf in leaves:
+            self.assertGreater(fanout[hub.id], fanout[leaf.id])
+
+    def test_never_exceeds_own_degree(self):
+        """k_i never exceeds a node's number of neighbours, in any mode."""
+        sn, hub, leaves = _make_star_nation()
+        for mode, budget in (("degree", "preserve"), ("degree", "additive"),
+                             ("betweenness", "preserve")):
+            fanout = sn._compute_peer_fanout(
+                2, mode=mode, budget=budget, scale=10.0, kmax=99)
+            for cid, k in fanout.items():
+                deg = len(sn.agents_active[cid].network_neighbors)
+                self.assertLessEqual(k, deg, f"{mode}/{budget}: {cid} k>{deg}")
+
+    def test_kmax_caps_hub_fanout(self):
+        """kmax caps the hub even when the measure would give it more."""
+        sn, hub, leaves = _make_star_nation()
+        fanout = sn._compute_peer_fanout(
+            2, mode="degree", budget="additive", scale=10.0, kmax=3)
+        for k in fanout.values():
+            self.assertLessEqual(k, 3)
+
+    def test_additive_grows_total_volume(self):
+        """additive fan-out sends strictly more messages than constant."""
+        sn, hub, leaves = _make_star_nation()
+        const = sn._compute_peer_fanout(2, mode="constant")
+        add = sn._compute_peer_fanout(
+            2, mode="degree", budget="additive", scale=1.0)
+        self.assertGreater(sum(add.values()), sum(const.values()))
+
+    def test_preserve_keeps_mean_near_kpeers(self):
+        """preserve redistributes a fixed budget: mean fan-out stays ~k_peers
+        on a regular graph (all equal degree -> everyone gets k_peers)."""
+        import networkx as nx
+        sn = _make_nation()
+        agents = [sn.agents_active[i] for i in sorted(sn.agents_active)]
+        G = nx.cycle_graph([a.id for a in agents])      # every node degree 2
+        sn.network = G
+        by_id = {a.id: a for a in agents}
+        for a in agents:
+            a.network_neighbors = [by_id[n] for n in G.neighbors(a.id)]
+        fanout = sn._compute_peer_fanout(2, mode="degree", budget="preserve")
+        self.assertTrue(all(k == 2 for k in fanout.values()))
+
+    def test_betweenness_requires_network(self):
+        sn = _make_nation()
+        sn.network = None
+        with self.assertRaises(RuntimeError):
+            sn._compute_peer_fanout(2, mode="betweenness")
+
+    def test_invalid_mode_raises(self):
+        sn, _, _ = _make_star_nation()
+        with self.assertRaises(ValueError):
+            sn._compute_peer_fanout(2, mode="eigenvector")
+
+    def test_invalid_budget_raises(self):
+        sn, _, _ = _make_star_nation()
+        with self.assertRaises(ValueError):
+            sn._compute_peer_fanout(2, mode="degree", budget="nonsense")
+
+    def test_result_is_memoised(self):
+        sn, _, _ = _make_star_nation()
+        a = sn._compute_peer_fanout(2, mode="degree")
+        b = sn._compute_peer_fanout(2, mode="degree")
+        self.assertIs(a, b)
+
+    @patch("cag.abm.agent.SurveyedCitizen.get_system_prompt", return_value="Test persona.")
+    @patch("cag.abm.agent.send_chat", return_value=_MOCK_PEER_MESSAGE)
+    def test_degree_mode_runs_end_to_end(self, mock_send, mock_prompt):
+        """run_peer_messaging accepts fan-out kwargs and completes."""
+        sn, hub, leaves = _make_star_nation()
+        result = sn.run_peer_messaging(
+            ClimatePolicyID.CARBON_TAX, day=1, k_peers=2,
+            fanout_mode="degree", fanout_budget="preserve",
+        )
+        self.assertGreater(result["messages_generated"], 0)
+
+    @patch("cag.abm.agent.send_chat")
+    def test_fanout_noop_when_k_peers_zero(self, mock_send):
+        """k_peers=0 disables peer messaging regardless of fan-out mode."""
+        sn, _, _ = _make_star_nation()
+        result = sn.run_peer_messaging(
+            ClimatePolicyID.CARBON_TAX, day=1, k_peers=0, fanout_mode="degree")
+        self.assertEqual(result["messages_generated"], 0)
+        mock_send.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

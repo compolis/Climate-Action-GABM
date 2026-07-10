@@ -34,6 +34,20 @@ SIM_CONFIG = {
         {"phases": ["P-B", "P-A", "C"]},
     ],
     "k_peers_per_day": 2,
+    # Peer fan-out: how many neighbours each citizen relays its reflection to
+    # in the C phase. "constant" (default) = a flat k_peers_per_day for
+    # everyone (historical behaviour; runs unchanged). "degree" / "betweenness"
+    # scale each citizen's fan-out by a peer-graph measure so well-connected
+    # nodes relay wider. Budget "additive" (default when enabled) grows total
+    # relay volume as connectivity rises -- the realistic posting-network
+    # model; "preserve" instead holds the mean fan-out at k_peers_per_day and
+    # redistributes it by the measure (isolates placement from volume). k_i is
+    # clipped at peer_fanout_kmax and never exceeds a node's own degree.
+    # (scale=1.0 and kmin=1 are baked internal defaults.) No-op when
+    # k_peers_per_day == 0.
+    "peer_fanout_mode": "constant",
+    "peer_fanout_budget": "additive",
+    "peer_fanout_kmax": 10,
     "network_type": "stochastic_block",
     # Per-type parameters for the pluggable network factory
     # (see cag.abm.networks). When None, builder defaults are used.
@@ -360,6 +374,9 @@ def _resolve_runtime(cfg):
         "temperature": cfg["llm_temperature"],
         "thinking": cfg["thinking"],
         "k_peers": cfg["k_peers_per_day"],
+        "peer_fanout_mode": cfg.get("peer_fanout_mode", "constant"),
+        "peer_fanout_budget": cfg.get("peer_fanout_budget", "additive"),
+        "peer_fanout_kmax": cfg.get("peer_fanout_kmax", 10),
         "survey_api_key": survey_api_key,
         "survey_model": cfg.get("survey_model") or cfg["llm_model"],
         "survey_provider": survey_provider,
@@ -401,6 +418,9 @@ def _run_one_day(nation, day, day_config, n_days, rt):
                     package_policies, day, k_peers=rt["k_peers"],
                     api_key=rt["api_key"], model=rt["model"],
                     provider=rt["provider"], temperature=rt["temperature"],
+                    fanout_mode=rt["peer_fanout_mode"],
+                    fanout_budget=rt["peer_fanout_budget"],
+                    fanout_kmax=rt["peer_fanout_kmax"],
                 )
             else:
                 logging.warning(f"Unknown phase '{phase}' on day {day}, skipping.")
@@ -417,6 +437,9 @@ def _run_one_day(nation, day, day_config, n_days, rt):
                     policy, day, k_peers=rt["k_peers"],
                     api_key=rt["api_key"], model=rt["model"],
                     provider=rt["provider"], temperature=rt["temperature"],
+                    fanout_mode=rt["peer_fanout_mode"],
+                    fanout_budget=rt["peer_fanout_budget"],
+                    fanout_kmax=rt["peer_fanout_kmax"],
                 )
             else:
                 logging.warning(f"Unknown phase '{phase}' on day {day}, skipping.")

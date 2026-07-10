@@ -1222,24 +1222,140 @@ class SurveyedNation(Nation):
             "sample_reflections": reflections[:2],
         }
 
+    def _compute_peer_fanout(self, k_peers, mode="constant", budget="additive",
+                             scale=1.0, kmin=1, kmax=10):
+        """Compute each citizen's peer fan-out ``k_i`` for the C phase.
+
+        ``k_i`` is how many neighbours a citizen relays its reflection to.
+
+        - ``mode="constant"`` (default) reproduces the historical flat rule
+          ``k_i = min(k_peers, degree_i)`` exactly, so runs are unchanged.
+        - ``mode="degree"`` / ``"betweenness"`` scale ``k_i`` by a peer-graph
+          measure so well-connected citizens relay to more peers (the
+          degree-proportional relay rule). Two budget policies:
+
+          * ``budget="additive"`` (default) sets ``k_i = scale * measure_i``,
+            so total relay volume grows with connectivity -- the realistic
+            "well-connected accounts reach more people" model of a posting
+            network.
+          * ``budget="preserve"`` instead redistributes a fixed total budget
+            so the *mean* fan-out stays ``~k_peers`` (hubs more, leaves
+            fewer); it isolates placement from volume for controlled
+            comparisons.
+
+        Non-constant modes clip ``k_i`` into ``[kmin, kmax]`` (``kmax`` caps
+        runaway fan-out on high-degree hubs) and never exceed a node's own
+        degree. ``scale`` and ``kmin`` are baked internal defaults (``1.0``
+        and ``1``); only ``mode`` / ``budget`` / ``kmax`` are exposed as run
+        settings. Betweenness scores are normalised to ``[0, 1]``, so an
+        ``additive`` betweenness rule is weak at ``scale=1``; ``preserve`` is
+        the natural choice for betweenness.
+
+        The result depends only on the static peer graph, so it is memoised
+        per parameter set.
+
+        Args:
+            k_peers: baseline per-day fan-out (the mean target under
+                ``preserve``; the flat value under ``constant``).
+            mode: ``"constant"``, ``"degree"``, or ``"betweenness"``.
+            budget: ``"additive"`` (default) or ``"preserve"`` (ignored when
+                ``mode="constant"``).
+            scale: multiplier on the measure for ``additive`` (baked at 1.0).
+            kmin: floor on ``k_i`` for non-constant modes (baked at 1).
+            kmax: ceiling on ``k_i`` for non-constant modes.
+
+        Returns:
+            dict mapping ``citizen_id`` -> integer fan-out, for every active
+            citizen that has at least one neighbour.
+        """
+        valid_modes = ("constant", "degree", "betweenness")
+        if mode not in valid_modes:
+            raise ValueError(
+                f"peer_fanout_mode must be one of {valid_modes}, got {mode!r}"
+            )
+        valid_budgets = ("preserve", "additive")
+        if mode != "constant" and budget not in valid_budgets:
+            raise ValueError(
+                f"peer_fanout_budget must be one of {valid_budgets}, "
+                f"got {budget!r}"
+            )
+
+        cache_key = (int(k_peers), mode, budget, float(scale),
+                     int(kmin), int(kmax))
+        cache = getattr(self, "_peer_fanout_cache", None)
+        if cache is None:
+            cache = self._peer_fanout_cache = {}
+        if cache_key in cache:
+            return cache[cache_key]
+
+        # degree_i = number of peer-graph neighbours (matches what is sampled).
+        degree = {c.id: len(c.network_neighbors)
+                  for c in self.agents_active.values() if c.network_neighbors}
+
+        if mode == "constant":
+            fanout = {cid: min(int(k_peers), d) for cid, d in degree.items()}
+            cache[cache_key] = fanout
+            return fanout
+
+        # Weight each node by the requested measure.
+        if mode == "degree":
+            weights = {cid: float(d) for cid, d in degree.items()}
+        else:  # "betweenness"
+            if getattr(self, "network", None) is None:
+                raise RuntimeError(
+                    "peer_fanout_mode='betweenness' requires "
+                    "create_network() to have been called first"
+                )
+            import networkx as _nx
+            bc = _nx.betweenness_centrality(self.network)
+            weights = {cid: float(bc.get(cid, 0.0)) for cid in degree}
+
+        kmin = int(kmin)
+        kmax = int(kmax)
+        fanout = {}
+        if budget == "preserve":
+            total_w = sum(weights.values())
+            budget_total = int(k_peers) * len(degree)
+            for cid, d in degree.items():
+                raw = (budget_total * weights[cid] / total_w
+                       if total_w > 0 else float(k_peers))
+                k = max(kmin, min(kmax, int(round(raw))))
+                fanout[cid] = min(k, d)
+        else:  # "additive"
+            for cid, d in degree.items():
+                k = max(kmin, min(kmax, int(round(float(scale) * weights[cid]))))
+                fanout[cid] = min(k, d)
+
+        cache[cache_key] = fanout
+        return fanout
+
     def run_peer_messaging(self, policy_id, day, k_peers=3, api_key=None,
                            model="gpt-5-mini", provider="openai",
-                           temperature=0.5, thinking=False):
+                           temperature=0.5, thinking=False,
+                           fanout_mode="constant", fanout_budget="additive",
+                           fanout_kmax=10):
         """
         Run the peer messaging phase (C) with simultaneous update.
 
-        Step 1: Select random neighbors for each citizen.
+        Step 1: Select neighbors for each citizen (fan-out ``k_i`` per
+            :meth:`_compute_peer_fanout`).
         Step 2: ALL citizens generate their messages BEFORE any reflections.
         Step 3: Deliver messages and have each recipient reflect.
 
         Args:
             policy_id: The target ClimatePolicyID.
             day: Current simulation day number.
-            k_peers: Max number of peers each citizen exchanges messages with.
+            k_peers: Baseline number of peers each citizen relays to.
             api_key: LLM API key.
             model: LLM model identifier.
             provider: LLM provider.
             temperature: Sampling temperature.
+            fanout_mode: peer fan-out rule ``"constant"`` (default),
+                ``"degree"``, or ``"betweenness"`` (see
+                :meth:`_compute_peer_fanout`).
+            fanout_budget: ``"additive"`` (default) or ``"preserve"`` for
+                non-constant modes.
+            fanout_kmax: ceiling on per-citizen fan-out (non-constant modes).
 
         Returns:
             dict with keys "messages_generated", "reflections_count",
@@ -1250,12 +1366,19 @@ class SurveyedNation(Nation):
             return {"messages_generated": 0, "reflections_count": 0,
                     "sample_messages": [], "sample_reflections": []}
 
-        # Step 1: Select neighbors for each citizen
+        # Step 1: Select neighbors for each citizen. The per-citizen fan-out
+        # k_i is a flat k_peers by default, or scaled by a network measure
+        # when fanout_mode != "constant" (degree-proportional relay rule).
+        fanout = self._compute_peer_fanout(
+            k_peers, mode=fanout_mode, budget=fanout_budget, kmax=fanout_kmax,
+        )
         selections = {}  # citizen_id -> list of neighbor citizen objects
         for citizen in self.agents_active.values():
             if not citizen.network_neighbors:
                 continue
-            k = min(k_peers, len(citizen.network_neighbors))
+            k = fanout.get(citizen.id, 0)
+            if k <= 0:
+                continue
             selections[citizen.id] = random.sample(citizen.network_neighbors, k)
 
         # Step 2: Generate ALL messages first (simultaneous update)
@@ -1319,18 +1442,31 @@ class SurveyedNation(Nation):
     def run_package_peer_messaging(self, policy_ids, day, k_peers=3,
                                    api_key=None, model="gpt-5-mini",
                                    provider="openai", temperature=0.5,
-                                   thinking=False):
-        """Run simultaneous peer messaging about a bundled policy package."""
+                                   thinking=False,
+                                   fanout_mode="constant",
+                                   fanout_budget="additive",
+                                   fanout_kmax=10):
+        """Run simultaneous peer messaging about a bundled policy package.
+
+        Peer fan-out is controlled by ``fanout_mode`` / ``fanout_budget`` /
+        ``fanout_kmax`` exactly as in :meth:`run_peer_messaging`
+        (see :meth:`_compute_peer_fanout`).
+        """
         if k_peers == 0:
             logging.info(f"[C] Day {day}: peer messaging disabled (k_peers=0), skipping.")
             return {"messages_generated": 0, "reflections_count": 0,
                     "sample_messages": [], "sample_reflections": []}
 
+        fanout = self._compute_peer_fanout(
+            k_peers, mode=fanout_mode, budget=fanout_budget, kmax=fanout_kmax,
+        )
         selections = {}
         for citizen in self.agents_active.values():
             if not citizen.network_neighbors:
                 continue
-            k = min(k_peers, len(citizen.network_neighbors))
+            k = fanout.get(citizen.id, 0)
+            if k <= 0:
+                continue
             selections[citizen.id] = random.sample(citizen.network_neighbors, k)
 
         generated_messages = {}

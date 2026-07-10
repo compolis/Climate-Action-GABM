@@ -1,6 +1,9 @@
 claim,paper,computed,source_runs,status
-Reach: whole-population effect (points),0.42,0.4228,"run_6458327_tier1_green_dom_s42,run_6458328_tier1_green_dom_s43,run_6458329_tier1_green_dom_s44,run_6458330_tier1_reform_dom_s42,run_6458331_tier1_reform_dom_s43,run_6458332_tier1_reform_dom_s44",PASS
-Reach: among those who hear both sides,0.5,0.4981,tier1 both-bucket,PASS
+"Reach: extreme asymmetry green25 - reform25, whole population (points)",0.354,0.3544,"run_6544103_d45_reach_reform25_s42,run_6544104_d45_reach_reform25_s43,run_6544105_d45_reach_reform25_s44,run_6544115_d45_reach_green25_s42,run_6544116_d45_reach_green25_s43,run_6544117_d45_reach_green25_s44",PASS
+Reach: among those who hear both sides,0.449,0.4491,reach both-bucket,PASS
+Reach: milder asymmetry green50 - reform50 (points),0.286,0.2856,"run_6544106_d45_reach_reform50_s42,run_6544107_d45_reach_reform50_s43,run_6544108_d45_reach_reform50_s44,run_6544112_d45_reach_green50_s42,run_6544113_d45_reach_green50_s43,run_6544114_d45_reach_green50_s44",PASS
+"Reach: green edge vs baseline (green50 - baseline, up)",0.15,0.15,reach vs baseline,PASS
+"Reach: reform edge vs baseline (reform25 - baseline, down)",-0.213,-0.2133,reach vs baseline,PASS
 Frequency 2:1 - whole population (points),0.158,0.1578,"run_6515406_d45_freq_green2v1_s42,run_6515407_d45_freq_green2v1_s43,run_6515408_d45_freq_green2v1_s44,run_6515412_d45_freq_reform1v2_s42,run_6515413_d45_freq_reform1v2_s43,run_6515414_d45_freq_reform1v2_s44",PASS
 Frequency 3:1 - whole population (points),0.277,0.2772,"run_6515409_d45_freq_green3v1_s42,run_6515410_d45_freq_green3v1_s43,run_6515411_d45_freq_green3v1_s44,run_6515415_d45_freq_reform1v3_s42,run_6515416_d45_freq_reform1v3_s43,run_6515417_d45_freq_reform1v3_s44",PASS
 Frequency 2:1 - among those who hear both sides,0.146,0.1463,freq both-bucket,PASS
