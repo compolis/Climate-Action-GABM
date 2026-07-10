@@ -5,6 +5,9 @@ Extracted from ``cag.abm.sim`` in the 2026-06-22 refactor. All names are
 re-exported from ``cag.abm.sim`` for backwards compatibility — notebooks
 and tests can keep importing from either location.
 """
+
+__version__ = "0.9.0"
+
 import logging
 from pathlib import Path
 

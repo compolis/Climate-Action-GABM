@@ -43,6 +43,8 @@ Con 39 % / Reform 20 % / Lab 8 %) for Reform reach, and the comparable
 absence of any Green broadcast vehicle for the A side.
 """
 
+__version__ = "0.9.0"
+
 import math
 
 

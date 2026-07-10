@@ -19,6 +19,8 @@ Application order (lowest → highest precedence)::
             → individual --flag overrides
 """
 
+__version__ = "0.9.0"
+
 
 RUN_BUNDLE_PRESETS = {
     "smoke": {

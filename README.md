@@ -18,6 +18,7 @@
 
 ## Table of Contents
 - [Overview](#overview)
+- [Quick Start](#quick-start)
 - [Current Status](#current-status)
 - [Architecture](#architecture)
 - [Notebooks](#notebooks)
@@ -29,34 +30,74 @@
 
 
 ## Overview
-Climate-Action-GABM is based on [GABM](https://github.com/compolis/GABM/) - a generative agent-based modelling framework.
+**Climate-Action-GABM** is a generative-AI agent-based model (GABM) of UK climate-policy opinion dynamics, built on the [GABM](https://github.com/compolis/GABM/) framework. It is designed to study a question that classical opinion-dynamics models handle only crudely: how do two **competing committed minorities** — small, organised groups that press opposing messages — move the opinion of a larger majority, and under what conditions does one side gain ground?
 
-The framework is used herein to attempt to understand the dynamics of social tipping or polarization under the influence of competing persuasion from two competing committed minorities with opposing goals.
+In a GABM, agents are driven by Large Language Models (LLMs): each is given a human-like persona and generates natural-language messages, private reflections, and survey answers. Storing those prompts and responses and feeding them back as context lets the model represent how repeated exposure to persuasion — and to the reflections of network neighbours — reshapes an agent's stated position over time, and how those individual shifts cascade through a social network into collective change. Classical committed-minority models collapse a group's influence into a single abstract weight; because a GABM's agents process natural-language arguments against their own personas, it can pull those levers apart.
 
-GABM provides a framework for using Large Language Model (LLM) models to develop agent-based models. Agents can be endowed with human-like personas and engage in natural-language conversations using LLM models. By storing prompts and responses, processing these and providing them as context in prompts it is possible to effectively debate and influence the beliefs/desires/stances of agents.
+### The model
+This first model simulates opinion on **six UK climate policies** — renewable energy, banning fossil-fuel extraction, banning petrol cars, green housing, a carbon tax, and climate compensation. It has three kinds of agent:
 
-Changes in individual agents beliefs/desires/stances can cascade through their networks to shape collective attitudes.
+- **Citizen agents.** Each is anchored to a *real respondent* in a representative **YouGov survey** (UK, late April 2024), so the simulation **starts from observed opinions** rather than from a language model's typically over-optimistic prior. A model-ready subset of `N=1,483` respondents (from ~1,967 raw) is the sampling pool; reported runs draw a cohort of `N=100`. Each agent's persona — demographics, voting history, and a psychological value profile (Schwartz values, RWA/SDO) — is assembled into a prompt the LLM adopts for the whole run.
+- **Two committed-minority agents.** Loosely modelled on **Reform UK** (climate-sceptic) and the **Green Party** (pro-climate), they broadcast persuasive messages drawn from a fixed, curated pool for each side. The messages are synthetic but each is grounded in the parties' real online climate communications (manifestos, parliamentary speeches, press statements).
 
-The first model simulates how citizen opinions on six UK climate policies evolve over repeated "days" of competing political messaging and peer-to-peer deliberation. Two fixed political group agents — one pro-climate-action, one anti-climate-action — broadcast persuasive messages to citizen agents through a configurable network (default: stochastic block model). Between broadcasts, citizens converse with network neighbours and produce private reflections. At the end of each day, every citizen is re-administered the original survey instrument and their opinion is recorded on a 7-point scale (Strongly oppose → Strongly support).
+A simulated **day** runs as: one or both minority agents broadcast to citizens over a configurable social network (default: a weak-homophily stochastic block model) → citizens reflect privately → citizens exchange peer messages with network neighbours and reflect again → every citizen is re-administered the original survey instrument, recording opinion on a 7-point scale (*Strongly oppose → Strongly support*). Who hears each broadcast is set by an **affinity-ranked exposure** rule that weights political signals above values above demographics.
 
-Citizen agents are constructed from real **YouGov survey data** (UK, April 2024). Each agent's persona — demographics, voting history, and psychological value profile — is assembled into a natural-language prompt that the LLM adopts for the duration of the simulation. A **v2 six-section tiered memory architecture** ([docs/Model_Design.md](docs/Model_Design.md) §28) ranks context as persona + values → Day-0 anchor (verbatim from the agent's own Day-0 rationale, target-scoped) → daily summaries (older days) → recent reflections → own reasoning → today-so-far (package mode only). The split between **context scope** (`policy_id`) and **question scope** (`target_policy_id`) lets package-mode end-of-day surveys see cross-policy reflections while staying anchored to the specific policy being asked.
+### Memory and bias control
+Each citizen carries a **six-section tiered memory** ([docs/Model_Design.md](docs/Model_Design.md) §28) that ranks context as persona + values → Day-0 anchor (verbatim from the agent's own Day-0 rationale) → daily summaries (older days) → recent reflections → own reasoning → today-so-far. A split between **context scope** (`policy_id`) and **question scope** (`target_policy_id`) lets package-mode end-of-day surveys see cross-policy reflections while staying anchored to the specific policy being asked. Two mechanisms hold known LLM survey bias in check: a **Day-0 ground-truth anchor** that ties each agent to its real starting opinion, and a **two-step debiased survey** prompt (reason first, then answer).
+
+### What the experiments test
+A resource advantage can take **different forms**, and the framework holds them apart so their effects can be estimated separately:
+
+- **Reach** — how large a share of citizens a side can broadcast to (`reach_a` / `reach_b`);
+- **Frequency** — how often a side broadcasts across a run (`--broadcasts-a/-b`);
+- **Targeting** — how selectively a limited broadcast is aimed (`random` / `persuadable` / `degree` / `betweenness`).
+
+The central finding of the accompanying paper is that the **form** of a resource asymmetry, not merely its magnitude, shapes which side moves the majority. Alongside the simulation, the repo ships a **fit-for-purpose evaluation protocol** — including a persona-null ablation that checks whether the model actually conditions on each agent's assigned persona. We are careful about epistemic status: the evidence targets **internal validity and algorithmic fidelity**, not a claim that the model reproduces real-world opinion change.
+
+> The accompanying manuscript is in preparation in [paper/](paper/) (`sn-article.tex` + supplementary `sn-si.tex`). See [docs/result_report.md](docs/result_report.md) for experiment results and [docs/Model_Design.md](docs/Model_Design.md) for the full design specification.
+
+
+## Quick Start
+
+```bash
+# 1. Clone
+git clone https://github.com/compolis/Climate-Action-GABM.git
+cd Climate-Action-GABM
+
+# 2. Install the runtime dependencies (Python 3.12+)
+pip install -r requirements.txt
+
+# 3. Choose an LLM backend:
+#    3a. Cloud (OpenAI / Anthropic / Google) — add your API keys, see API_KEYS.md
+#    3b. Fully offline on a local LLM — install a local runtime and serve a
+#        model, see docs/Local_LLM_Setup_Guide.md (pip install -r requirements-local.txt)
+
+# 4. Preview the canonical smoke run (validates config, makes no LLM calls)
+PYTHONPATH=src python3 -m cag --preset smoke --dry-run
+
+# 5. See the available run presets and every configurable knob
+PYTHONPATH=src python3 -m cag --list-presets
+```
+
+Prefer notebooks? Open [notebooks/01_agent_profiles.ipynb](notebooks/01_agent_profiles.ipynb) and work upward — each notebook demonstrates one simulation component end to end (see the [Notebooks](#notebooks) table).
+
+- **Users** — full setup (Conda or pip), configuration paths, and run recipes: [User Guide](USER_GUIDE.md).
+- **Contributors** — fork / clone / test setup: [Developer Quickstart](DEV_QUICKSTART.md) and [Developer Guide](DEV_GUIDE.md).
+- **HPC (Leeds AIRE)** — clone-to-`sbatch` walkthrough: [AIRE Quickstart](docs/AIRE_Quickstart.md).
 
 
 ## Current Status
 
-**v0.8 — refactor track: `sim.py` modular split (2755 → 838 lines), v2 tiered-memory architecture (six-section ordering, `policy_id` vs `target_policy_id` scope split, Day-0 anchor compression removed), operational polish (network-type-aware `[peer]` config log, dead `output_dir` key removed, AIRE first-time-download callout), new [docs/Code_Tour.md](docs/Code_Tour.md) researcher onboarding doc, NB 34 v2-memory smoke. No `__version__` bump (refactor-only release).**
+**v0.9 — first behaviour-bearing release after the v0.8 refactor track.** Adds a persona-null ablation (a manipulation check on whether the model conditions on each agent's persona), a broadcast-frequency-asymmetry CLI (one side can out-broadcast the other across a whole run), per-side reach targeting (`persuadable` / `degree` / `betweenness`), a simplified three-tier affinity-weight ladder, and a full observability layer (per-agent prompt capture, reached-flags, bucket-summary + targeting-diagnostics tables, and eight new diagnostic figures). Default behaviour is unchanged — `persona_mode="real"`, 1-vs-1 broadcasting, and `reach_targeting="random"` reproduce prior canon bit-for-bit. All `src/cag/` modules now declare `__version__ = "0.9.0"`.
 
 | Metric | Value |
 |--------|-------|
-| Tests | 557 collected; **556 passing, 1 skipped, 21 subtests passed** |
-| Refactor track (v0.8) | [src/cag/abm/sim.py](src/cag/abm/sim.py) split from **2755 → 838 lines** (orchestration only); five new focused modules: [src/cag/abm/network_repair.py](src/cag/abm/network_repair.py), [src/cag/io/aggregators.py](src/cag/io/aggregators.py), [src/cag/io/plots.py](src/cag/io/plots.py), [src/cag/io/results.py](src/cag/io/results.py), [src/cag/io/checkpoint.py](src/cag/io/checkpoint.py). NB 32 bit-identical regression validation (deterministic outputs, 22 LLM-driven CSV schemas, distributional stats within `gpt-5-mini @ T=0.5` noise). |
-| Memory architecture (v0.8) | `assemble_context()` rewritten as ordered six-section build; new `target_policy_id` parameter; `compress_day0_anchor()` LLM call + `day0_anchors.csv` schema removed (§2 now verbatim from `survey_reasoning`). v0.7 checkpoints resume cleanly into v0.8. |
-| Operational (v0.8) | Dead `SIM_CONFIG["output_dir"]` key removed (now 33 keys); `[peer]` config-log line renders resolved `_resolve_network_params(cfg)` dict (Watts–Strogatz, Barabási–Albert, Erdős–Rényi, homophily-weighted now report actual params); [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) §6 first-time-model-download callout. |
-| New onboarding doc (v0.8) | [docs/Code_Tour.md](docs/Code_Tour.md) — ~25-page newcomer walkthrough of `src/cag/`: audience + conventions, 30-min skim sequence, 15 file walkthroughs (medium depth on `sim.py` + `agent.py`), 2 side-trips (political-exposure affinity-rank, v2 memory annotated example), 6-recipe cookbook, 11-term glossary, AIRE pre-flight checklist. |
-| Carried from v0.7 | AIRE / SLURM thin sbatch launchers + sweep submitter ([scripts/aire/](scripts/aire/)); preset-bundle CLI composition ([src/cag/presets.py](src/cag/presets.py), [src/cag/\_\_main\_\_.py](src/cag/__main__.py)); NB-31 package-mode survey-context fix; outputs expansion (29 saved artefacts, bucket-stratified CSVs, calibration table, network snapshot, per-agent timeline with 9 event types, full survey-prompt audit, monotonic `sim_step` counter); 3-layer network connectivity defence (literature-grounded SBM `p_inter=0.05`, adaptive small-N bump, deterministic auto-repair); `k_peers=0` short-circuit; per-day checkpointing CLI default-on. |
-| Carried from v0.6 | Canonical SIM defaults align with research runs (`n_citizens=100`, package-mode alternating phases, local Qwen3 default, `debias=True`, `day0_anchor=ground_truth_with_rationale`); offline political-message source first-class with strict startup validation and message-level provenance (`political_message_id`). |
-| Notebooks | 34 (01–34) |
-| Source files | 29 under `src/cag/` |
+| Tests | **668 passing, 1 skipped** |
+| Behaviour additions (v0.9) | persona-null ablation (`apply_persona_mode`: real / shuffled / neutral); broadcast-frequency CLI (`--broadcasts-a/-b`, `--interleave`); per-side reach targeting (`--reach-targeting-a/-b`: random / persuadable / degree / betweenness); three-tier affinity-weight ladder (political 2.0 / values 1.0 / demographics 0.5) |
+| Observability (v0.9) | `agent_prompts.csv` (stratified full prompt/response capture); `reached_by_a/_b` flags; `bucket_summary.csv` + `targeting_diagnostics.csv`; eight new diagnostic figures (trajectories-by-bucket, polarization, drift-from-GT, ridgeline, network before/after, targeting mechanism, reach QC, calibration) |
+| Refactor track (v0.8) | [src/cag/abm/sim.py](src/cag/abm/sim.py) split 2755 → 838 lines; focused modules under [src/cag/io/](src/cag/io/) and [network_repair.py](src/cag/abm/network_repair.py); v2 six-section tiered-memory architecture (`policy_id` vs `target_policy_id` scope split) |
+| Notebooks | 46 (01–46) |
+| Source files | 32 under `src/cag/` |
 
 See [ROADMAP.md](ROADMAP.md) for the full issue list and status.
 See [docs/Model_Design.md](docs/Model_Design.md) for the design specification.
@@ -64,6 +105,7 @@ See [docs/Code_Tour.md](docs/Code_Tour.md) for a newcomer-friendly walkthrough o
 See [docs/result_report.md](docs/result_report.md) for experiment results and analysis.
 See [docs/Simulation_Configuration_Guide.md](docs/Simulation_Configuration_Guide.md) for canonical configuration options (supervisor brief + developer matrix).
 See [docs/AIRE_Quickstart.md](docs/AIRE_Quickstart.md) for the v0.7 HPC walkthrough.
+See [paper/](paper/) for the manuscript in preparation (`sn-article.tex` and supplementary `sn-si.tex`).
 
 
 ## Architecture
@@ -137,6 +179,18 @@ Interactive demos live in `notebooks/`. Each covers one simulation component:
 | 32 | v0.6 Outputs Smoke | End-to-end validation of 29-artefact outputs expansion + network connectivity defence + v0.8 `sim.py` modular split regression |
 | 33 | `assemble_context` v2 Sandbox | Iterative-design sandbox notebook used to scope the v0.8 six-section context order, `policy_id` vs `target_policy_id` split, and verbatim Day-0 anchor path before NB 34 |
 | 34 | v2 Memory Smoke | End-to-end smoke for the v0.8 v2 six-section context order, `target_policy_id` scope split, and verbatim Day-0 anchor path (local Qwen3-8B-4bit) |
+| 35 | Memory Ablation Demo | `MEMORY_PRESETS` ablation over the v2 six-section context (short / wide / no-anchor / no-compression variants) |
+| 36 | Tier-P Persona-Null | Persona-conditioning manipulation check (`real` / `shuffled` derangement / `neutral` arms) |
+| 37 | Tier-P Calibration | Calibration follow-up for the persona-null ablation |
+| 38 | Tier-1 Bias Invariance | Bias-mitigation invariance check under the production stack |
+| 39 | Tier-1 Per-Policy | Per-policy Tier-1 validation across the six climate policies |
+| 40 | Tier-2 Scale Robustness | Robustness of results across citizen-sample scale |
+| 41 | Tier-3 Network Robustness | Robustness across network topologies (SBM / BA / WS) |
+| 42 | Reach-Targeting Smoke | Per-side reach targeting (persuadable + centrality) smoke with asserts + output checks |
+| 43 | Observability Gallery | Prompt-capture walkthrough and diagnostic-figure gallery |
+| 44 | Draft-45 Results Figures | Result figures for the draft-45 experiment program |
+| 45 | Evaluation Audit | Provenance audit of the evaluation numbers into `paper/tables/` CSVs |
+| 46 | Experiments Audit | Provenance audit of the experiment numbers into `paper/tables/` CSVs |
 
 
 ## License

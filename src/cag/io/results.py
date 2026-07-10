@@ -7,6 +7,9 @@ collectors, atomic file writers, and the public ``save_results`` entry
 point. Extracted from ``cag.abm.sim`` in the 2026-06-22 refactor; all names
 are re-exported from ``cag.abm.sim`` for backwards compatibility.
 """
+
+__version__ = "0.9.0"
+
 import json
 import logging
 import os

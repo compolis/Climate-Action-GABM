@@ -5,7 +5,7 @@ from __future__ import annotations
 Agent module for Climate-Action-GABM.
 """
 __author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
-__version__ = "0.7.0"
+__version__ = "0.9.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 from copy import deepcopy

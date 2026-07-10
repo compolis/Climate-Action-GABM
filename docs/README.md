@@ -17,7 +17,7 @@ Pick the doc that matches what you want to do:
 
 | I want to… | Read |
 |---|---|
-| Understand the model's design and research questions | [Model_Design.md](Model_Design.md) |
+| Understand the model's design and research questions | the paper in [`paper/`](../paper/) (see also [Simulation_Configuration_Guide.md](Simulation_Configuration_Guide.md)) |
 | Configure and launch a simulation | [Simulation_Configuration_Guide.md](Simulation_Configuration_Guide.md) |
 | Understand the files a run produces | [Run_Output_Guide.md](Run_Output_Guide.md) |
 | See the exact prompts and personas sent to the LLM | [Prompts_and_Personas_Guide_v2.md](Prompts_and_Personas_Guide_v2.md) |
@@ -25,14 +25,23 @@ Pick the doc that matches what you want to do:
 | Run a fully local LLM backend | [Local_LLM_Setup_Guide.md](Local_LLM_Setup_Guide.md) |
 | Run on the AIRE HPC cluster | [AIRE_Quickstart.md](AIRE_Quickstart.md) |
 | Check what past experiments found | [result_report.md](result_report.md) |
+| Read the paper draft (manuscript + SI) | [`paper/`](../paper/) |
 
 ---
 
 ## Design & research rationale
 
+> **⚠ `Model_Design.md` is an internal history file, not a current spec.** It is an append-only
+> log that was updated over many iterations, so roughly half of it describes earlier model
+> versions that no longer match the code. Treat it as a historical / internal reference only.
+> For current behaviour, use [Simulation_Configuration_Guide.md](Simulation_Configuration_Guide.md),
+> [Code_Tour.md](Code_Tour.md), the paper in [`paper/`](../paper/), and the code itself; the
+> maintained change history lives in the root [CHANGE_LOG.md](../CHANGE_LOG.md) and
+> [DEVELOPMENT_HISTORY.md](../DEVELOPMENT_HISTORY.md).
+
 | File | Role | Use it when… |
 |---|---|---|
-| [Model_Design.md](Model_Design.md) | The full, **append-only** design specification and decision log — agent types, phases, scales, and every subsequent design decision added as a new numbered section. | You need the authoritative "why it works this way" and the historical record of design choices. |
+| [Model_Design.md](Model_Design.md) | Append-only design / decision log spanning the project's history. **Partly outdated** — an internal reference for tracking how the model evolved, not an authoritative current spec (see warning above). | You want the historical record of a design decision. |
 | [research_notes.md](research_notes.md) | Append-only log of research-direction thinking — framing decisions, what the model is and isn't measuring, where the next sweep is pointed. | You want the strategic/scientific context that spans multiple runs and PRs. |
 | [yougov_survey_data.md](yougov_survey_data.md) | Documentation of the YouGov "Ecofascism in the UK" (April 2024) survey that agents are anchored to — sample, design, weighting. | You need to understand the empirical ground truth behind agent opinions. |
 
@@ -63,6 +72,32 @@ Pick the doc that matches what you want to do:
 | File | Role | Use it when… |
 |---|---|---|
 | [result_report.md](result_report.md) | Ongoing, newest-first record of experiments — settings, findings, iteration notes, and a paper cross-reference table. | You want to know what each run showed or which result backs which paper section. |
+
+## Paper
+
+The manuscript lives in the top-level [`paper/`](../paper/) folder (Springer Nature
+single-file `sn-jnl` format), separate from these docs.
+
+| File / folder | Role |
+|---|---|
+| [`paper/sn-article.tex`](../paper/sn-article.tex) | Main manuscript — the current working draft. |
+| [`paper/sn-si.tex`](../paper/sn-si.tex) | Supplementary Information (Sections S1–S5, Tables S1–S9). |
+| [`paper/tables/`](../paper/tables/) | Machine-readable audit tables (`audit_evaluation.csv`, `audit_experiments.csv`, `table1_experiments.csv`) that every reported number is recomputed from. |
+| [`paper/figures/`](../paper/figures/) | The figures the tex references. |
+
+**Current contents (draft, work in progress).** The paper reports a fit-for-purpose
+*evaluation* of the model — does it read personas, respond to the lever, avoid a
+scale-ceiling artefact, and replicate across graph and model — followed by *four
+resource-advantage experiments* pitting two competing committed minorities against each
+other: broadcast **reach**, broadcast **frequency**, **targeting**, and
+**breadth-vs-depth** at a fixed impression budget. The intro, model framework,
+experimental design, results (with Table 1) and discussion are drafted, and the SI is
+populated; the literature review and the result figures are still to do. Every number is
+traceable to the audit notebooks
+([`notebooks/45_evaluation_audit.ipynb`](../notebooks/45_evaluation_audit.ipynb) and
+[`notebooks/46_experiments_audit.ipynb`](../notebooks/46_experiments_audit.ipynb)); see
+[result_report.md](result_report.md) → "Paper Cross-Reference" for the section-by-section
+map.
 
 ## Dependencies (documentation mirrors)
 

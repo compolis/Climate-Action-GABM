@@ -1,6 +1,9 @@
 """
 Simulation runner for Climate-Action-GABM.
 """
+
+__version__ = "0.9.0"
+
 import json
 import logging
 from copy import deepcopy

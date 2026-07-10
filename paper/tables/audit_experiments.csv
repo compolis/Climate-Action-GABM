@@ -1,0 +1,13 @@
+claim,paper,computed,source_runs,status
+Reach: whole-population effect (points),0.42,0.4228,"run_6458327_tier1_green_dom_s42,run_6458328_tier1_green_dom_s43,run_6458329_tier1_green_dom_s44,run_6458330_tier1_reform_dom_s42,run_6458331_tier1_reform_dom_s43,run_6458332_tier1_reform_dom_s44",PASS
+Reach: among those who hear both sides,0.5,0.4981,tier1 both-bucket,PASS
+Frequency 2:1 - whole population (points),0.158,0.1578,"run_6515406_d45_freq_green2v1_s42,run_6515407_d45_freq_green2v1_s43,run_6515408_d45_freq_green2v1_s44,run_6515412_d45_freq_reform1v2_s42,run_6515413_d45_freq_reform1v2_s43,run_6515414_d45_freq_reform1v2_s44",PASS
+Frequency 3:1 - whole population (points),0.277,0.2772,"run_6515409_d45_freq_green3v1_s42,run_6515410_d45_freq_green3v1_s43,run_6515411_d45_freq_green3v1_s44,run_6515415_d45_freq_reform1v3_s42,run_6515416_d45_freq_reform1v3_s43,run_6515417_d45_freq_reform1v3_s44",PASS
+Frequency 2:1 - among those who hear both sides,0.146,0.1463,freq both-bucket,PASS
+Frequency 3:1 - among those who hear both sides,0.338,0.338,freq both-bucket,PASS
+Frequency: support share when sceptic side loudest (%),77.7,77.6667,d45_freq_reform1v3,PASS
+Frequency: support share when pro side loudest (%),83.3,83.3333,d45_freq_green3v1,PASS
+"Targeting: persuadable - random (points; expect ~0, n.s.)",0.044,0.0439,"run_6535130_d45_tgt_random_s42,run_6535131_d45_tgt_random_s43,run_6535132_d45_tgt_random_s44,run_6535133_d45_tgt_persuadable_s42,run_6535134_d45_tgt_persuadable_s43,run_6535135_d45_tgt_persuadable_s44",PASS
+"Targeting: degree(hubs) - random (points; expect ~0, n.s.)",0.027,0.0267,"run_6535130_d45_tgt_random_s42,run_6535131_d45_tgt_random_s43,run_6535132_d45_tgt_random_s44,run_6535136_d45_tgt_degree_s42,run_6535137_d45_tgt_degree_s43,run_6535138_d45_tgt_degree_s44",PASS
+Breadth vs depth: whole population (points; > 0 => breadth wins),0.12,0.12,"run_6535139_d45_iso_depth2_s42,run_6535140_d45_iso_depth2_s43,run_6535141_d45_iso_depth2_s44,run_6535142_d45_iso_depth4_s42,run_6535143_d45_iso_depth4_s43,run_6535144_d45_iso_depth4_s44",PASS
+Breadth vs depth: among those who hear both sides,0.203,0.2028,iso both-bucket,PASS

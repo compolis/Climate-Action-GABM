@@ -3,7 +3,7 @@ Politics module for Climate-Action-GABM.
 """
 # Metadata
 __author__ = ["Andy Turner <agdturner@gmail.com>"]
-__version__ = "0.7.0"
+__version__ = "0.9.0"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 # Standard library imports
