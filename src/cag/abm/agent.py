@@ -4,8 +4,8 @@ from __future__ import annotations
 """
 Agent module for Climate-Action-GABM.
 """
-__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
-__version__ = "0.9.0"
+__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>", "Viktoria Spaiser <viktoria.sp81@gmail.com>"]
+__version__ = "0.9.1"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 from copy import deepcopy
@@ -52,7 +52,16 @@ _DEBIAS_STEP1_TEMPLATE = (
     "{policy_question}\n\n"
     "Consider factors that might lead you to SUPPORT this policy AND factors that might "
     "lead you to OPPOSE it. Think about your voting history, your values, your life "
-    "circumstances, and the messages and reflections from today and previous days.\n\n"
+    "circumstances, and the messages and reflections from today and previous days."
+    "Consider that people update their opinions incrementally as new information arrives. "
+    "Each day brings fresh messages — treat today's messages as new evidence and update "
+    "your *current* position (not your original Day-0 position) by about 5% in the "
+    "direction of today's compelling information. Prior updates do not prevent further "
+    "updates; each day's reasoning should build on the last. "
+    "If you received multiple messages today that push in opposite directions, weigh "
+    "them against each other: contradictory messages should partially cancel out, "
+    "resulting in a smaller net update; consistent messages should reinforce each other "
+    "for a larger net update.\n\n"
     "Provide your reasoning in 2-3 sentences."
 )
 
@@ -61,7 +70,8 @@ _DEBIAS_STEP2_TEMPLATE = (
     "survey question?\n\n"
     "{policy_question}\n\n"
     "{response_options}\n\n"
-    "Respond with a single letter A-G."
+    "Respond with a single letter A-G. Make sure it represents your updated opinion "
+    "based on the reasoning you provided above."
 )
 
 
