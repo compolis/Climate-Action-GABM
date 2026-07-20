@@ -55,6 +55,10 @@
 #     $HOME/.cache/huggingface/token (this script reads both).
 #   - conda env create -f environment.yaml   (creates the `cag` env)
 #   - module add apptainer && apptainer pull docker://vllm/vllm-openai
+#   - Pre-download model weights on the login node (compute nodes have no internet):
+#       module load miniforge && conda activate cag
+#       HF_HOME=$SCRATCH/HF_cache huggingface-cli download Qwen/Qwen3-14B
+#     Change the model name to match $HF_MODEL if you override it.
 # =============================================================================
 
 # ---- Default Slurm resource request -----------------------------------------
