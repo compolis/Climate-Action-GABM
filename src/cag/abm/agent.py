@@ -786,10 +786,21 @@ class SurveyedCitizen():
                               temperature=0.5, thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id, stage="peer_message")
         policy_description = SURVEY_QUESTIONS[policy_id]
+        today_reflections = [
+            r["text"] for r in self.reflections
+            if r["day"] == day and r.get("policy_id") == policy_id
+        ]
+        refl_block = (
+            "\n\nYour recent reflections on this:\n"
+            + "\n".join(f"- {t}" for t in today_reflections)
+            if today_reflections else ""
+        )
         user_prompt = (
-            f"Express your current thinking on the following policy in "
-            f"2\u20133 sentences. Be genuine and conversational: "
-            f"{policy_description}"
+            f"A peer asks what you think about: {policy_description}"
+            f"{refl_block}\n\n"
+            f"In 2\u20133 sentences, share your current thinking with them — "
+            f"drawing on any messages you've heard recently and your own "
+            f"reflections on them. Be genuine and conversational."
         )
         return self._chat(system_prompt, user_prompt, stage="peer_message",
                          day=day, phase="C", policy_id=policy_id,
@@ -927,11 +938,23 @@ class SurveyedCitizen():
                                       temperature=0.5, thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE, stage="peer_message")
         package_description = _format_policy_package(policy_ids)
+        today_reflections = [
+            r["text"] for r in self.reflections
+            if r["day"] == day and r.get("policy_id") == PACKAGE_SCOPE
+        ]
+        refl_block = (
+            "\n\nYour recent reflections on this package:\n"
+            + "\n".join(f"- {t}" for t in today_reflections)
+            if today_reflections else ""
+        )
         user_prompt = (
-            "Express your current thinking about the following climate-policy "
-            "package in 2-3 sentences. Be genuine and conversational, and feel "
-            "free to mention if some parts appeal to you more than others:\n"
-            f"{package_description}"
+            "A peer asks what you think about the following climate-policy "
+            f"package:\n{package_description}"
+            f"{refl_block}\n\n"
+            "In 2-3 sentences, share your current thinking with them — "
+            "drawing on any messages you've heard recently and your own "
+            "reflections on them. Be genuine and conversational, and feel "
+            "free to mention if some parts appeal to you more than others."
         )
         return self._chat(
             system_prompt, user_prompt, stage="peer_message",
