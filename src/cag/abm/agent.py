@@ -52,7 +52,7 @@ _DEBIAS_STEP1_TEMPLATE = (
     "{policy_question}\n\n"
     "Consider factors that might lead you to SUPPORT this policy AND factors that might "
     "lead you to OPPOSE it. Think about your voting history, your values, your life "
-    "circumstances, and the messages and reflections from today and previous days."
+    "circumstances, and the messages and reflections from today and previous days.\n\n"
     "Consider that people update their opinions incrementally as new information arrives. "
     "Each day brings fresh messages — treat today's messages as new evidence and update "
     "your *current* position (not your original Day-0 position) by about 5% in the "
