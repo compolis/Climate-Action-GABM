@@ -4,8 +4,8 @@ from __future__ import annotations
 """
 Agent module for Climate-Action-GABM.
 """
-__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>"]
-__version__ = "0.9.0"
+__author__ = ["Andy Turner <agdturner@gmail.com>","Ajaykumar Manivannan <ashwamanivannan@gmail.com>", "Charlie Pilgrim <pilgrimcharlie2@gmail.com>", "Viktoria Spaiser <viktoria.sp81@gmail.com>"]
+__version__ = "0.9.1"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 from copy import deepcopy
@@ -52,7 +52,16 @@ _DEBIAS_STEP1_TEMPLATE = (
     "{policy_question}\n\n"
     "Consider factors that might lead you to SUPPORT this policy AND factors that might "
     "lead you to OPPOSE it. Think about your voting history, your values, your life "
-    "circumstances, and the messages and reflections from today and previous days.\n\n"
+    "circumstances, and the messages and reflections from today and previous days."
+    "Consider that people update their opinions incrementally as new information arrives. "
+    "Each day brings fresh messages — treat today's messages as new evidence and update "
+    "your *current* position (not your original Day-0 position) by about 5% in the "
+    "direction of today's compelling information. Prior updates do not prevent further "
+    "updates; each day's reasoning should build on the last. "
+    "If you received multiple messages today that push in opposite directions, weigh "
+    "them against each other: contradictory messages should partially cancel out, "
+    "resulting in a smaller net update; consistent messages should reinforce each other "
+    "for a larger net update.\n\n"
     "Provide your reasoning in 2-3 sentences."
 )
 
@@ -61,7 +70,8 @@ _DEBIAS_STEP2_TEMPLATE = (
     "survey question?\n\n"
     "{policy_question}\n\n"
     "{response_options}\n\n"
-    "Respond with a single letter A-G."
+    "Respond with a single letter A-G. Make sure it represents your updated opinion "
+    "based on the reasoning you provided above."
 )
 
 
@@ -776,10 +786,21 @@ class SurveyedCitizen():
                               temperature=0.5, thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=policy_id, stage="peer_message")
         policy_description = SURVEY_QUESTIONS[policy_id]
+        today_reflections = [
+            r["text"] for r in self.reflections
+            if r["day"] == day and r.get("policy_id") == policy_id
+        ]
+        refl_block = (
+            "\n\nYour recent reflections on this:\n"
+            + "\n".join(f"- {t}" for t in today_reflections)
+            if today_reflections else ""
+        )
         user_prompt = (
-            f"Express your current thinking on the following policy in "
-            f"2\u20133 sentences. Be genuine and conversational: "
-            f"{policy_description}"
+            f"A peer asks what you think about: {policy_description}"
+            f"{refl_block}\n\n"
+            f"In 2\u20133 sentences, share your current thinking with them — "
+            f"drawing on any messages you've heard recently and your own "
+            f"reflections on them. Be genuine and conversational."
         )
         return self._chat(system_prompt, user_prompt, stage="peer_message",
                          day=day, phase="C", policy_id=policy_id,
@@ -917,11 +938,23 @@ class SurveyedCitizen():
                                       temperature=0.5, thinking=False) -> str:
         system_prompt = self.get_system_prompt(day=day, policy_id=PACKAGE_SCOPE, stage="peer_message")
         package_description = _format_policy_package(policy_ids)
+        today_reflections = [
+            r["text"] for r in self.reflections
+            if r["day"] == day and r.get("policy_id") == PACKAGE_SCOPE
+        ]
+        refl_block = (
+            "\n\nYour recent reflections on this package:\n"
+            + "\n".join(f"- {t}" for t in today_reflections)
+            if today_reflections else ""
+        )
         user_prompt = (
-            "Express your current thinking about the following climate-policy "
-            "package in 2-3 sentences. Be genuine and conversational, and feel "
-            "free to mention if some parts appeal to you more than others:\n"
-            f"{package_description}"
+            "A peer asks what you think about the following climate-policy "
+            f"package:\n{package_description}"
+            f"{refl_block}\n\n"
+            "In 2-3 sentences, share your current thinking with them — "
+            "drawing on any messages you've heard recently and your own "
+            "reflections on them. Be genuine and conversational, and feel "
+            "free to mention if some parts appeal to you more than others."
         )
         return self._chat(
             system_prompt, user_prompt, stage="peer_message",

@@ -266,9 +266,9 @@ class TestRunPeerMessaging(unittest.TestCase):
         call_log = []
 
         def tracking_send_chat(system_prompt, user_prompt, **kwargs):
-            if "Express your current thinking" in user_prompt:
+            if "A peer asks what you think about" in user_prompt:
                 call_log.append("generate")
-            elif "conversations with some of your peers" in user_prompt:
+            elif "You just received peer messages" in user_prompt:
                 call_log.append("receive")
             return _MOCK_PEER_MESSAGE
 
