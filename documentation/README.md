@@ -30,6 +30,18 @@ Pick the doc that matches what you want to do:
 | Check what past experiments found | [result_report.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/research/result_report.md) |
 | Read the paper draft (manuscript + SI) | [`paper/`](paper/) |
 
+### New collaborator: first-day path
+
+If you are onboarding and want the fastest route to running examples and understanding
+the repository layout, use this sequence:
+
+1. [README.md](../README.md) — project overview and quick smoke-run commands.
+2. [DEV_QUICKSTART.md](../DEV_QUICKSTART.md) — local setup and test/docs validation loop.
+3. [Code_Tour.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Code_Tour.md) — where the simulation logic lives in `src/cag/`.
+4. [Simulation_Configuration_Guide.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Simulation_Configuration_Guide.md) — canonical run knobs.
+5. HPC only: [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md), then
+   [AIRE_HPC_repo_primer.md](guides/hpc/AIRE_HPC_repo_primer.md) for policy/constraints.
+
 ---
 
 ## Design & research rationale

@@ -82,7 +82,9 @@ The root project directory contains documentation and files needed for building 
 - `docs/`: Sphinx configuration/navigation plus temporary staged content and
   generated site output. Do not author new usage guides here; see
   [Developing Documentation](#developing-documentation).
-- `scripts/`: Utility scripts
+- `scripts/`: Utility scripts organised by purpose:
+  - `scripts/dev/`: developer workflow helpers used by Makefile targets.
+  - `scripts/hpc/`: cluster launch/ops scripts (Aire and Calder profiles).
 - `src/`: Python source code
 - `tests/`: Test suite for src
 - `venv-build-test/`: For temporary virtual environments created for testing.
