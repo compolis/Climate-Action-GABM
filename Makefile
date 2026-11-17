@@ -21,7 +21,7 @@
 #
 # If you add a new target, please also add it to the help target and the DEV_GUIDE.md for consistency and ease of use for other developers.
 #
-# Caution: Some commands (like git-clean, release, and delete-release) can modify your git history or delete tags. Always review the scripts they call (in the scripts/ directory) to ensure they do what you expect before running these commands.
+# Caution: Some commands (like git-clean, release, and delete-release) can modify your git history or delete tags. Always review the scripts they call (in scripts/dev/) to ensure they do what you expect before running these commands.
 
 # Phony targets (not actual files)
 .PHONY: help test docs docs-clean gh-pages-deploy clean git-clean clear-caches sync sync-feature release delete-release build build-test pypi-release testpypi-release bump-version
@@ -50,7 +50,7 @@ help:
 # Run all tests (requires pytest)
 test:
 	@echo "Running tests with pytest..."
-	PYTHONPATH=src:scripts pytest
+	PYTHONPATH=src:scripts/dev pytest
 	@echo "...done running tests with pytest."
 
 
@@ -63,14 +63,14 @@ docs: docs-make
 # Build documentation with Sphinx (in docs/)
 docs-make:
 	@echo "Building documentation with Sphinx..."
-	python3 scripts/docs.py
+	python3 scripts/dev/docs.py
 	PYTHONPATH=.. sphinx-build -b html docs docs/_build/html
 	@echo "..done building documentation with Sphinx. Output in docs/_build/html/"
 
 # Remove all auto-copied documentation files from docs/
 docs-clean:
 	@echo "Cleaning auto-copied documentation files from docs/..."
-	python3 scripts/docs-clean.py
+	python3 scripts/dev/docs-clean.py
 	@echo "..done cleaning auto-copied documentation files from docs/"
 
 # Build and deploy documentation to GitHub Pages
@@ -82,20 +82,20 @@ gh-pages-deploy: docs
 	# Deploys documentation to GitHub Pages.
 	# If you see a worktree error (gh-pages already used), the deployment script will attempt to clean up lingering worktrees automatically.
 	# Manual cleanup: git worktree remove /tmp/gh-pages-xxxx...
-	python3 scripts/gh-pages-deploy.py
+	python3 scripts/dev/gh-pages-deploy.py
 	@echo "...done deploying documentation to GitHub Pages."
 
 
 # Remove build/test artifacts
 clean:
 	@echo "Cleaning build and test artifacts..."
-	python3 scripts/clean.py
+	python3 scripts/dev/clean.py
 	@echo "...done cleaning build and test artifacts."
 
 # Delete all LLM caches and model lists (for a clean slate)
 clear-caches:
 	@echo "Clearing all LLM caches and model lists..."
-	python3 scripts/clear-caches.py
+	python3 scripts/dev/clear-caches.py
 	@echo "...done clearing all LLM caches and model lists."
 	
 # Clean up merged local branches and prune deleted remotes (safe)
@@ -125,7 +125,7 @@ sync:
 # Usage: make sync-feature BRANCH=release/0.2.0
 sync-feature:
 	@echo "Syncing and rebasing branch $(BRANCH) with main..."
-	python3 scripts/sync-feature.py --branch $(BRANCH)
+	python3 scripts/dev/sync-feature.py --branch $(BRANCH)
 	@echo "...done syncing and rebasing branch $(BRANCH) with main."
 
 
@@ -140,7 +140,7 @@ release:
 		echo "Error: BRANCH variable not set. Usage: make release VERSION=x.y.z BRANCH=release/x.y.z"; \
 		exit 1; \
 	fi
-	python3 scripts/release.py --version $(VERSION) --branch $(BRANCH)
+	python3 scripts/dev/release.py --version $(VERSION) --branch $(BRANCH)
 	@echo "...done making a tag release on GitHub for version $(VERSION) from branch $(BRANCH)."
 
 # Delete a release tag locally and on remotes (usage: make delete-release VERSION=x.y.z)
@@ -164,7 +164,7 @@ build: clean
 # Build and test install the package in a fresh venv
 build-test: build
 	@echo "Building and test installing the package in a fresh venv..."
-	python3 scripts/build-test.py
+	python3 scripts/dev/build-test.py
 	@echo "...done building and test installing the package in a fresh venv."
 
 # Upload the built package to PyPI

@@ -3,7 +3,7 @@
 """
 Script to sync and rebase a feature/release branch onto main.
 Usage:
-    python3 scripts/sync_feature.py --branch release/0.2.0
+    python3 scripts/dev/sync-feature.py --branch release/0.2.0
 """
 # Metadata
 __author__ = ["Andy Turner <agdturner@gmail.com>"]
