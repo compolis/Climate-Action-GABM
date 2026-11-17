@@ -4,47 +4,49 @@
 ## Table of Contents
 - [Overview](#overview)
 - [Getting Started](#getting-started)
+- [Current Recommended Run Path](#current-recommended-run-path)
 - [v0.8 Configuration Path](#v08-configuration-path)
 - [v0.7 Configuration Path](#v07-configuration-path)
 - [Running on HPC / AIRE](#running-on-hpc--aire)
 - [v0.6 Configuration Path](#v06-configuration-path)
 - [Troubleshooting](#troubleshooting)
-- [Running Models](#running-models)
 - [Managing Logs and Caches](#managing-logs-and-caches)
 - [Additional Resources](#additional-resources)
 
 
 ## Overview
-This guide helps users get started with Climate-Action-GABM, find documentation, and get support. Documentation will be updated as more features and configuration options are added.
+This guide helps users get started with Climate-Action-GABM, run canonical examples, and find the right reference documentation for deeper configuration.
 
 In the rest of the document "you" means you as a Climate-Action-GABM user.
 
 
 ## Getting Started
 
-### Pre-requisits
- You will either need a local installation of [Conda](https://conda.org/), or [Python](https://www.python.org/) at or above version 3.12. To check your default Python version run:
+### Prerequisites
+You need either [Conda](https://conda.org/) or [Python](https://www.python.org/) version 3.12+.
+To check your Python version:
 
 ```bash
 python3 --version
 ```
 
-### Initial set up
+### Initial setup
 
 #### Using Conda
-If you use [Conda](https://conda.org/) which is distributed with[Anaconda](https://www.anaconda.com/)/[Miniconda](https://docs.conda.io/en/latest/miniconda.html) and [Miniforge](https://github.com/conda-forge/miniforge) you can set up Climate-Action-GABM in a new environment as follows:
+If you use [Conda](https://conda.org/) (Anaconda/Miniconda/Miniforge), set up a new environment:
 
 ```bash
 conda create -n gabm
 conda activate gabm
 conda install python=3.12
-git clone https://github.com/your-org/Climate-Action-GABM.git
+git clone https://github.com/compolis/Climate-Action-GABM.git
 cd Climate-Action-GABM
 pip install -e .
 pip install -r requirements.txt
 ```
 
-Climate-Action-GABM is **not** yet published on PyPI; install from source by cloning the repository and running `pip install -e .` in editable mode. You can then check all installed dependencies and create your own requirements file with:
+Climate-Action-GABM is **not** yet published on PyPI; install from source.
+To inspect resolved dependencies:
 
 ```bash
 conda list -e > requirements.txt
@@ -52,13 +54,13 @@ conda list -e > requirements.txt
 
 
 #### Using Python >=3.12
-Install from source (Climate-Action-GABM is not yet published on PyPI):
+Install from source:
 
 ```bash
 python3 -m venv gabm-venv
 source gabm-venv/bin/activate  # On Windows: gabm-venv\\Scripts\\activate
 pip install --upgrade pip
-git clone https://github.com/your-org/Climate-Action-GABM.git
+git clone https://github.com/compolis/Climate-Action-GABM.git
 cd Climate-Action-GABM
 pip install -e .
 pip install -r requirements.txt
@@ -71,36 +73,33 @@ pip freeze > requirements.txt
 ```
 
 
-### Set Up API Keys
+### Set up API keys
 Create `data/api_key.csv` with your API keys. See [API_KEYS.md](API_KEYS.md) for details and instructions.
 
 
-### Run the Main Program
+### Run the main program
 From the project root:
 
 ```bash
-python3 -m cag
+PYTHONPATH=src python3 -m cag --preset smoke --dry-run
 ```
 
-When you run:
+This validates the resolved configuration without making LLM calls.  
+To run a real simulation, drop `--dry-run` and set your provider/configuration
+as documented in [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md).
 
-```bash
-python3 -m cag
-```
 
-the main program for Climate-Action-GABM is executed. This will:
+## Current Recommended Run Path
 
-- Initialize the simulation environment, including any subclasses such as `Political_Environment`.
-- Create agent populations, including `Person` agents with attributes like year of birth and gender.
-- Set up any required groups, relationships, or initial conditions for the agents.
-- Begin the simulation loop, where agents interact, update their states, and the environment may change over time.
-- Output results, logs, or summaries to the console and/or files in the `data/output/` directory. This may include:
-  - Simulation progress and status messages
-  - Key statistics or metrics from the run
-  - Any errors or warnings encountered
-- Save logs and data for further analysis or reproducibility.
+For current usage, follow this sequence:
 
-The specific output and behavior may depend on your configuration, model parameters, and any customizations you have made. For more details, check the logs and output files generated in the `data/output/` directory after running the command.
+1. Run `--preset smoke --dry-run` first (shown above).
+2. Read [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md) for canonical run knobs.
+3. Run with `--preset r14_canonical --exposure-targets split50` for the standard baseline.
+4. Use [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md) to inspect generated outputs.
+5. For Leeds cluster usage, follow [AIRE_Quickstart.md](documentation/guides/hpc/AIRE_Quickstart.md) and keep [AIRE_HPC_repo_primer.md](documentation/guides/hpc/AIRE_HPC_repo_primer.md) as the policy/constraints reference.
+
+The versioned sections below are retained as historical migration notes.
 
 
 ## v0.8 Configuration Path
@@ -268,7 +267,7 @@ SIM_CONFIG = {
 }
 ```
 
-Full design rationale is in [docs/Model_Design.md](documentation/research/Model_Design.md) §18 (especially §18.15 for the v0.5 sanity-check write-up and the two bug fixes that landed alongside it). Literature support for the target presets is in [docs/Literature_Political_Exposure.md](docs/Literature_Political_Exposure.md) §6 and §6.3. The end-to-end structural sanity check on the YouGov pool is [notebooks/27_affinity_exposure_demo.ipynb](notebooks/27_affinity_exposure_demo.ipynb), summarised in [docs/result_report.md](documentation/research/result_report.md).
+Full design rationale is in [docs/Model_Design.md](documentation/research/Model_Design.md) §18 (especially §18.15 for the v0.5 sanity-check write-up and the two bug fixes that landed alongside it). Literature support for the target presets is in [docs/Literature_Political_Exposure.md](documentation/research/Literature_Political_Exposure.md) §6 and §6.3. The end-to-end structural sanity check on the YouGov pool is [notebooks/27_affinity_exposure_demo.ipynb](notebooks/27_affinity_exposure_demo.ipynb), summarised in [docs/result_report.md](documentation/research/result_report.md).
 
 
 ## Troubleshooting
