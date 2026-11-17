@@ -19,53 +19,101 @@ next for configuration and output interpretation.
 ## Getting Started
 
 ### Prerequisites
-Use one of:
-- [Conda](https://conda.org/) (Anaconda/Miniconda/Miniforge), or
-- [Python](https://www.python.org/) 3.12+
 
-Check Python:
+You will either need a local installation of [Conda](https://conda.org/), or [Python](https://www.python.org/) at or above version 3.12. To check your default Python version run:
 
 ```bash
 python3 --version
 ```
 
-### Initial setup (Conda)
+### Initial set up
+
+#### Using Conda
+If you use [Conda](https://conda.org/) which is distributed with [Anaconda](https://www.anaconda.com/), [Miniconda](https://docs.conda.io/en/latest/miniconda.html), or [Miniforge](https://github.com/conda-forge/miniforge), you can set up Climate-Action-GABM in a new environment as follows:
 
 ```bash
-conda create -n gabm -y
-conda activate gabm
+conda create -n cag -y
+conda activate cag
 conda install python=3.12 -y
 git clone https://github.com/compolis/Climate-Action-GABM.git
 cd Climate-Action-GABM
 pip install -r requirements.txt
 ```
 
+You can then check all installed dependencies and create your own requirements file with:
+
+```bash
+conda list -e > requirements.txt
+```
+
+
 ### Initial setup (venv)
 
 ```bash
-python3 -m venv gabm-venv
-source gabm-venv/bin/activate  # On Windows: gabm-venv\\Scripts\\activate
+python3 -m venv cag-venv
+source cag-venv/bin/activate  # On Windows: gabm-venv\\Scripts\\activate
 pip install --upgrade pip
 git clone https://github.com/compolis/Climate-Action-GABM.git
 cd Climate-Action-GABM
 pip install -r requirements.txt
 ```
 
-### Set up API keys
-Create `data/api_key.csv` with your API keys. See
-[API_KEYS.md](API_KEYS.md) for required fields and examples.
-
-Note: this repository currently does not provide a `pyproject.toml`/`setup.py`,
-so `pip install -e .` is not supported.
-
-### Validate installation (no LLM calls)
-From the project root:
+Once installed you can check installed dependencies and create a requirements file:
 
 ```bash
-PYTHONPATH=src python3 -m cag --preset smoke --dry-run
+pip freeze > requirements.txt
 ```
 
-This validates resolved configuration without making provider calls.
+
+#### Optional: Local LLM Server Setup
+
+The default runtime path uses `provider=local`, which expects an
+OpenAI-compatible local server at `http://localhost:8080/v1`.
+
+If you plan to run non-dry-run simulations locally, set up and start a local
+server first. See
+[Local_LLM_Setup_Guide.md](documentation/guides/Local_LLM_Setup_Guide.md).
+
+Any OpenAI-compatible server works (for example vLLM on HPC, or Ollama
+locally). Use whichever is available in your environment.
+
+Quick start example (Ollama, local workstation):
+
+```bash
+ollama serve
+```
+
+In another terminal:
+
+```bash
+ollama pull qwen3:8b
+curl http://localhost:11434/v1/models
+```
+
+Then run Climate-Action-GABM with:
+
+```bash
+PYTHONPATH=src python3 -m cag \
+  --preset r14_canonical \
+  --provider local \
+  --model qwen3:8b \
+  --base-url http://localhost:11434/v1 \
+  --outdir "data/output/experiments/$(date +%Y%m%d_%H%M%S)_r14_local"
+```
+
+Quick start example (vLLM):
+
+```bash
+vllm serve Qwen/Qwen3-8B --port 8000
+curl http://localhost:8000/v1/models
+```
+
+Then point CAG to it with `--base-url http://localhost:8000/v1`.
+
+
+### Set up API keys
+
+Create `data/api_key.csv` with your API keys. For all supported LLM providers (including PublicAI/Apertus), see [API_KEYS.md](API_KEYS.md) for up-to-date details and instructions.
 
 
 ## Run the Main Program
@@ -81,20 +129,38 @@ PYTHONPATH=src python3 -m cag --preset smoke --dry-run
 Expected result:
 - The command exits successfully and prints resolved configuration JSON
   (including keys such as `days`, `k_peers_per_day`, and `n_citizens`).
-- No run artefacts are written because this is a dry-run validation path.
 
 Run the canonical baseline:
 
 ```bash
-PYTHONPATH=src python3 -m cag --preset r14_canonical --exposure-targets split50
+PYTHONPATH=src python3 -m cag \
+  --preset r14_canonical \
+  --exposure-targets split50 \
+  --outdir "data/output/experiments/$(date +%Y%m%d_%H%M%S)_r14_canonical"
 ```
 
 Expected result:
-- A timestamped run directory is created under `data/output/experiments/`.
+- A new run directory is created at the `--outdir` path you provide.
 - The run writes CSV/JSON artefacts and plots for analysis.
 - Exact files vary by configuration; see
   [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md) for the
   expected bundle.
+
+If you see an error like:
+`Local LLM server not reachable at http://localhost:8080/v1/models`,
+start a local server first (see
+[Local_LLM_Setup_Guide.md](documentation/guides/Local_LLM_Setup_Guide.md)), or
+set a hosted provider explicitly with CLI flags and API keys.
+
+Example (hosted OpenAI path):
+
+```bash
+PYTHONPATH=src python3 -m cag \
+  --preset r14_canonical \
+  --provider openai \
+  --model gpt-4o-mini \
+  --outdir "data/output/experiments/$(date +%Y%m%d_%H%M%S)_r14_openai"
+```
 
 ### Run using the Makefile
 
@@ -106,6 +172,9 @@ make run-local
 
 This launches `python3 -m cag` with output rooted at
 `data/output/experiments/`.
+
+For direct CLI runs (without `make run-local`), include `--outdir` on any
+non-inspection run.
 
 ### What to check after a run
 
@@ -121,6 +190,33 @@ interactions.
 
 Use [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md) to inspect
 generated CSV/JSON/plot artefacts and interpret run outcomes.
+
+### Runtime expectations (rough guidance)
+
+Wall-clock runtime depends heavily on provider latency, queueing/rate limits,
+and whether responses are local or hosted. As a rough guide:
+
+- `--preset smoke --dry-run`: usually seconds (config-only, no LLM calls).
+- `--preset smoke` with hosted OpenAI: often around 10–20 minutes.
+- `--preset r14_canonical` with hosted APIs: typically much longer than smoke;
+  expect tens of minutes to multiple hours depending on model/provider
+  throughput.
+
+Recent observed example on this repository/environment:
+- `--preset smoke --provider openai --model gpt-4o-mini` completed in
+  **10.6 minutes total wall-clock** (`simulation=10.5 min`, setup/save ~5s).
+- The run log reported `sim per agent-day: 21.09s` for that run.
+
+Quick planning estimate:
+- runtime ≈ `sim_per_agent_day × n_citizens × (days + 1)`.
+- `days + 1` includes Day 0 baseline survey.
+
+Example using 21.09s from the smoke run:
+- `r14_canonical` (`n=50`, `days=5`) → `21.09 × 50 × 6 ≈ 6327s` ≈ **1.75h**
+  simulation time, plus a small save/setup overhead.
+
+If you need fast iteration, validate changes with `--preset smoke` first, then
+run `r14_canonical` once configuration is stable.
 
 ## Advanced Guides
 
