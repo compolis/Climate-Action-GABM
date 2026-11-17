@@ -228,7 +228,7 @@ cd Climate-Action-GABM
 <details>
 <summary>Details — org repo vs. your fork, and using a non-default SSH key</summary>
 
-**Org repo vs. your fork.** This clones the canonical **org** repo `compolis/Climate-Action-GABM` — the right choice for *running* canonical experiments on Aire, since you want the merged source of truth. If instead you are *developing code* and following the fork-based contributor flow ([DEV_QUICKSTART](../../DEV_QUICKSTART.md)), clone your own fork — `git@github.com:<your-github-username>/Climate-Action-GABM.git` — and add the org repo as `upstream` (`git remote add upstream git@github.com:compolis/Climate-Action-GABM.git`). Either way the SSH-key setup is identical, and `scripts/hpc/aire/run.sh` doesn't care which remote you cloned from.
+**Org repo vs. your fork.** This clones the canonical **org** repo `compolis/Climate-Action-GABM` — the right choice for *running* canonical experiments on Aire, since you want the merged source of truth. If instead you are *developing code* and following the fork-based contributor flow ([DEV_QUICKSTART](../../../DEV_QUICKSTART.md)), clone your own fork — `git@github.com:<your-github-username>/Climate-Action-GABM.git` — and add the org repo as `upstream` (`git remote add upstream git@github.com:compolis/Climate-Action-GABM.git`). Either way the SSH-key setup is identical, and `scripts/hpc/aire/run.sh` doesn't care which remote you cloned from.
 
 **If your Aire key isn't the default `~/.ssh/id_ed25519`** (e.g. you keep a dedicated `~/.ssh/aire_repo`), the bare `git clone git@...` form won't pick it up. Use:
 
@@ -637,7 +637,7 @@ guaranteed**: checkpoints restore offline message cursors and Python's
 process-wide random state, but prompt history is restored only if opt-in
 persistence was enabled from the original run, and live-model variability
 remains a limitation. Older checkpoints lacking random state cannot
-continue with days remaining. See the [refactor plan](../planning/GABM_Refactor_Plan.md)
+continue with days remaining. See the [refactor plan](../../planning/GABM_Refactor_Plan.md)
 and do not treat a resumed run as scientifically equivalent without an
 appropriate equivalence check.
 
@@ -659,7 +659,7 @@ before accepting that risk.
 Checked at startup, fails loudly on mismatch:
 
 The authoritative hard/soft key lists and resolved network-parameter comparison
-are in [checkpoint.py](../../src/cag/io/checkpoint.py). Hard keys include
+are in [checkpoint.py](../../../src/cag/io/checkpoint.py). Hard keys include
 persona mode, reach-targeting modes, and memory configuration as well as
 population/exposure/message settings; mismatches abort. Tolerated transport
 changes can still alter research results even when only a warning is emitted.
@@ -675,7 +675,7 @@ If you need to change a hard key, start a fresh run instead of resuming.
 
 For ≥3 related jobs (different exposure targets, different reach values, etc.), use the sweep wrapper: one text file lists the per-job flag suffix on each line, the wrapper submits one `sbatch` per line.
 
-The shipped example, [scripts/hpc/aire/sweeps/r14_v2.txt](../../scripts/hpc/aire/sweeps/r14_v2.txt):
+The shipped example, [scripts/hpc/aire/sweeps/r14_v2.txt](../../../scripts/hpc/aire/sweeps/r14_v2.txt):
 
 ```text
 --preset r14_canonical --exposure-targets split50
@@ -711,7 +711,7 @@ LABEL=split50_s42 --preset r14_canonical --seed 42 --exposure-targets {"A-only":
 - **Sweep is better:** ≥3 related jobs; you want a single artefact (the `.log`) recording the whole experiment grid; you want identical Slurm settings.
 - **Plain sbatch is better:** one-off, or each job needs different Slurm settings.
 
-To author a new sweep, drop a new `.txt` file under [scripts/hpc/aire/sweeps/](../../scripts/hpc/aire/sweeps/) — one line per job, `#` for comments. No code change.
+To author a new sweep, drop a new `.txt` file under [scripts/hpc/aire/sweeps/](../../../scripts/hpc/aire/sweeps/) — one line per job, `#` for comments. No code change.
 </details>
 
 **Next:** errors? §12.

@@ -26,7 +26,7 @@ Pick the doc that matches what you want to do:
 | Find my way around the source code | [Code_Tour.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Code_Tour.md) |
 | Refactor CAG to reuse and extend the GABM framework | [GABM_Refactor_Plan.md](planning/GABM_Refactor_Plan.md) |
 | Run a fully local LLM backend | [Local_LLM_Setup_Guide.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Local_LLM_Setup_Guide.md) |
-| Run on the Aire HPC cluster | [AIRE_Quickstart.md](guides/AIRE_Quickstart.md) |
+| Run on the Aire HPC cluster | [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md) |
 | Check what past experiments found | [result_report.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/research/result_report.md) |
 | Read the paper draft (manuscript + SI) | [`paper/`](paper/) |
 
@@ -68,14 +68,14 @@ Pick the doc that matches what you want to do:
 
 | File | Role | Use it when… |
 |---|---|---|
-| [AIRE_HPC_repo_primer.md](guides/AIRE_HPC_repo_primer.md) | CAG launcher reference, cited Leeds guidance, storage/data constraints, and verification limits. | You need to distinguish repository conventions from service policy and unresolved deployment work. |
-| [AIRE_Quickstart.md](guides/AIRE_Quickstart.md) | Maintained setup/submission/transfer recipe; links to canonical configuration and output references instead of duplicating them. | You want to prepare and validate a CAG job on Aire. |
+| [AIRE_HPC_repo_primer.md](guides/hpc/AIRE_HPC_repo_primer.md) | CAG launcher reference, cited Leeds guidance, storage/data constraints, and verification limits. | You need to distinguish repository conventions from service policy and unresolved deployment work. |
+| [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md) | Maintained setup/submission/transfer recipe; links to canonical configuration and output references instead of duplicating them. | You want to prepare and validate a CAG job on Aire. |
 | [RunningLLMsOnAire.md](archive/RunningLLMsOnAire.md) | Historical article draft with preserved authorship and distinct multi-node/socket/cache/energy ideas; not a runnable CAG recipe. | You need provenance or context for a future deployment design. |
 
 For framework-level HPC/model-serving patterns and historical Calder/Apertus
 context, see GABM's
 [Running On HPC Systems](https://github.com/compolis/gabm/blob/main/Running_On_HPC_Systems.md)
-and the [CAG portability notes](guides/AIRE_HPC_repo_primer.md#6-related-gabm-guidance-and-calder-portability).
+and the [CAG portability notes](guides/hpc/AIRE_HPC_repo_primer.md#6-related-gabm-guidance-and-calder-portability).
 
 ## Results
 

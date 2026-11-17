@@ -2072,8 +2072,8 @@ New [src/cag/presets.py](../../src/cag/presets.py) defines `RUN_BUNDLE_PRESETS`,
 
 ### 22.4 Walkthrough docs
 
-- [docs/AIRE_HPC_repo_primer.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_HPC_repo_primer.md) — cluster fundamentals, storage rules, hard constraints, troubleshooting.
-- [docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_Quickstart.md) — copy-pasteable zero-to-Run-14 walkthrough.
+- [docs/AIRE_HPC_repo_primer.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/hpc/AIRE_HPC_repo_primer.md) — cluster fundamentals, storage rules, hard constraints, troubleshooting.
+- [docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/hpc/AIRE_Quickstart.md) — copy-pasteable zero-to-Run-14 walkthrough.
 
 
 ## 23. NB-31 package-mode survey-context fix (v0.7, 2026-06-21)
@@ -2345,7 +2345,7 @@ Future network types added to `NETWORK_TYPES` automatically render correctly —
 
 ### 29.3 AIRE Quickstart §6 first-time-model-download callout
 
-[docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_Quickstart.md) §6 ("First real experiment — split50 Run-14") gained a `> **Important — first-time model download.**` blockquote between the wall-clock estimate and the `sbatch --time=06:00:00` example. Explains that the first submission with a model not yet in the Hugging Face cache can exceed the **1500 s** vLLM-readiness wait baked into `scripts/hpc/aire/run.sh`, and recommends `--time=06:00:00` on that first submission. Subsequent runs warm from cache in <2 min and the standard wall-clock is fine.
+[docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/hpc/AIRE_Quickstart.md) §6 ("First real experiment — split50 Run-14") gained a `> **Important — first-time model download.**` blockquote between the wall-clock estimate and the `sbatch --time=06:00:00` example. Explains that the first submission with a model not yet in the Hugging Face cache can exceed the **1500 s** vLLM-readiness wait baked into `scripts/hpc/aire/run.sh`, and recommends `--time=06:00:00` on that first submission. Subsequent runs warm from cache in <2 min and the standard wall-clock is fine.
 
 ### 29.4 Code Tour — researcher onboarding doc
 
@@ -2359,7 +2359,7 @@ Future network types added to `NETWORK_TYPES` automatically render correctly —
 - **F. Glossary** — 11 terms (PACKAGE_SCOPE, debias, day0_anchor modes, reach_*, audience_cap, political_exposure_mode, affinity_weights, thinking, P-A/P-B/C, package mode, vivid window / gist memory).
 - **G. AIRE pre-flight checklist** — 10 copy-pasteable steps plus 4 common pitfalls.
 
-The doc is model-agnostic; it does not assume the reader will use any particular provider. It pairs with [docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_Quickstart.md) for HPC submission and [docs/USER_GUIDE.md](../../USER_GUIDE.md) for the canonical research config.
+The doc is model-agnostic; it does not assume the reader will use any particular provider. It pairs with [docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/hpc/AIRE_Quickstart.md) for HPC submission and [docs/USER_GUIDE.md](../../USER_GUIDE.md) for the canonical research config.
 
 ### 29.5 NB 34 v2-memory smoke
 

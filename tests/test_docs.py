@@ -18,7 +18,7 @@ from docs_assets import DOC_FILES, GITHUB_DOC_FILES, STAGED_NAMES, GENERATED_DOC
     ("README.md#overview", "project_readme.md#overview"),
     ("./documentation/planning/GABM_Refactor_Plan.md", "GABM_Refactor_Plan.md"),
     ("documentation/guides/Code_Tour.md", "Code_Tour.md"),
-    ("documentation/guides/AIRE_Quickstart.md", "AIRE_Quickstart.md"),
+    ("documentation/guides/hpc/AIRE_Quickstart.md", "AIRE_Quickstart.md"),
     ("src/cag/abm/attributes/politics.py", docs.REPOSITORY_URL + "src/cag/abm/attributes/politics.py"),
     ("tests/test_gabm_compatibility.py", docs.REPOSITORY_URL + "tests/test_gabm_compatibility.py"),
     ("requirements-dev.txt", "requirements-dev.txt"),
@@ -95,7 +95,7 @@ def test_copy_and_cleanup_preserve_authored_sources(tmp_path, monkeypatch):
 ])
 def test_nested_authored_links(target, expected):
     assert docs.update_links(
-        f"[link]({target})", "documentation/guides/AIRE_Quickstart.md",
+        f"[link]({target})", "documentation/guides/hpc/AIRE_Quickstart.md",
     ) == f"[link]({expected})"
 
 
@@ -136,7 +136,7 @@ def _aire_submission_examples():
     root = Path(__file__).resolve().parents[1]
     examples = []
     for filename in ("AIRE_Quickstart.md", "AIRE_HPC_repo_primer.md"):
-        text = (root / "documentation/guides" / filename).read_text()
+        text = (root / "documentation/guides/hpc" / filename).read_text()
         for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL):
             for line in block.replace("\\\n", " ").splitlines():
                 tokens = shlex.split(line, comments=True)

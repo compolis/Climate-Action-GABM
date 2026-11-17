@@ -68,9 +68,9 @@ Seek advice if suitability is uncertain.
 
 ## 3. Current launcher contract
 
-The implementation sources are [run.sh](../../scripts/hpc/aire/run.sh),
-[sweep.sh](../../scripts/hpc/aire/sweep.sh), and
-[environment.yaml](../../environment.yaml).
+The implementation sources are [run.sh](../../../scripts/hpc/aire/run.sh),
+[sweep.sh](../../../scripts/hpc/aire/sweep.sh), and
+[environment.yaml](../../../environment.yaml).
 
 The client is `PYTHONPATH=src python -m cag`; it does not itself serve the model.
 The default launcher requests one node, one task, eight CPUs, one GPU, 80 GB
@@ -144,13 +144,13 @@ Preserve resolved `config.json`, input/message-set provenance, source commit,
 container identity, and environment versions alongside results. A pinned SIF
 name alone is not a container digest. Fixed seeds do not guarantee identical
 live LLM responses or exact checkpoint replay: the
-[refactor plan](../planning/GABM_Refactor_Plan.md) records checkpoint validation
+[refactor plan](../../planning/GABM_Refactor_Plan.md) records checkpoint validation
 and remaining audit limitations. Sampled prompt-log persistence is opt-in;
 see the [configuration guide](Simulation_Configuration_Guide.md#7-pausing-and-resuming-a-run).
 
 ## 5. Archived article: retained context and unresolved work
 
-[RunningLLMsOnAire.md](../archive/RunningLLMsOnAire.md) remains a dated article
+[RunningLLMsOnAire.md](../../archive/RunningLLMsOnAire.md) remains a dated article
 draft credited to John Hodrien, Jo Kershaw, and Andy Turner, not current CAG
 setup instructions. Its distinct research/service topics remain useful:
 

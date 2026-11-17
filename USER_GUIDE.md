@@ -228,7 +228,7 @@ Full design rationale and the empirical sweep that motivated the new defaults ar
 
 v0.7 ships first-class support for the University of Leeds AIRE cluster (SLURM, GPU partitions, vLLM-served local LLMs). The integration is *thin and edit-free* — launching a new experiment is one entry in a Python preset dict plus one line in a sweep file.
 
-The full walkthrough is in [documentation/guides/AIRE_Quickstart.md](documentation/guides/AIRE_Quickstart.md) (copy-pasteable zero-to-Run-14) and [documentation/guides/AIRE_HPC_repo_primer.md](documentation/guides/AIRE_HPC_repo_primer.md) (cluster fundamentals, storage rules, hard constraints, troubleshooting). In short:
+The full walkthrough is in [documentation/guides/hpc/AIRE_Quickstart.md](documentation/guides/hpc/AIRE_Quickstart.md) (copy-pasteable zero-to-Run-14) and [documentation/guides/hpc/AIRE_HPC_repo_primer.md](documentation/guides/hpc/AIRE_HPC_repo_primer.md) (cluster fundamentals, storage rules, hard constraints, troubleshooting). In short:
 
 1. `git clone` the repo onto AIRE storage; create a venv; `pip install -e .` + requirements.
 2. Submit a single experiment: `sbatch scripts/hpc/aire/run.sh` with `HF_MODEL=...` and any `SIM_CONFIG` flags as environment variables. vLLM auto-starts on the GPU node.
