@@ -57,9 +57,18 @@ way — start it however you like and set `llm_model` + `local_base_url` to matc
 example, with Ollama:
 
 ```bash
-ollama serve &
 ollama pull qwen3:8b
+ollama serve
+# in another terminal:
+curl http://127.0.0.1:11434/v1/models
 # SIM_CONFIG: llm_model="qwen3:8b", local_base_url="http://localhost:11434/v1"
+```
+
+If `ollama serve` reports `bind: address already in use`, Ollama is likely already
+running. In that case, do not restart it; just verify with:
+
+```bash
+curl http://127.0.0.1:11434/v1/models
 ```
 
 On AIRE the launcher wires this up for you with vLLM — see
