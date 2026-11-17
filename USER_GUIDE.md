@@ -2,9 +2,9 @@
 
 ## Table of Contents
 - [Overview](#overview)
-- [Support Policy (pre-1.0)](#support-policy-pre-10)
 - [Getting Started](#getting-started)
-- [Run Recipes (Current)](#run-recipes-current)
+- [Run the Main Program](#run-the-main-program)
+- [Advanced Guides](#advanced-guides)
 - [Running on HPC / AIRE](#running-on-hpc--aire)
 - [Troubleshooting](#troubleshooting)
 - [Additional Resources](#additional-resources)
@@ -14,15 +14,6 @@
 This guide is the current, practical runbook for Climate-Action-GABM users.
 It focuses on setup, smoke validation, canonical baseline runs, and where to go
 next for configuration and output interpretation.
-
-
-## Support Policy (pre-1.0)
-Before a 1.0 release, this project supports the **current documentation and
-current runtime path only**.
-
-Historical version-specific guidance has been moved to
-[USER_GUIDE_pre_1_0_archive.md](documentation/history/USER_GUIDE_pre_1_0_archive.md).
-Use it as background reference, not as an actively supported run path.
 
 
 ## Getting Started
@@ -76,23 +67,47 @@ PYTHONPATH=src python3 -m cag --preset smoke --dry-run
 This validates resolved configuration without making provider calls.
 
 
-## Run Recipes (Current)
+## Run the Main Program
 
-### Canonical baseline run
-Run the standard baseline:
+### Run from the command line
+
+Validate configuration first (no provider calls):
+
+```bash
+PYTHONPATH=src python3 -m cag --preset smoke --dry-run
+```
+
+Run the canonical baseline:
 
 ```bash
 PYTHONPATH=src python3 -m cag --preset r14_canonical --exposure-targets split50
 ```
 
-### Configure runs
+### Run using the Makefile
+
+From the repository root:
+
+```bash
+make run-local
+```
+
+This launches `python3 -m cag` with output rooted at
+`data/output/experiments/`.
+
+### Configure and interpret runs
 Use [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md)
 as the canonical source of truth for active configuration options and
 interactions.
 
-### Inspect outputs
 Use [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md) to inspect
 generated CSV/JSON/plot artefacts and interpret run outcomes.
+
+## Advanced Guides
+
+- [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md)
+- [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md)
+- [AIRE_Quickstart.md](documentation/guides/hpc/AIRE_Quickstart.md)
+- [AIRE_HPC_repo_primer.md](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
 
 
 ## Running on HPC / AIRE
