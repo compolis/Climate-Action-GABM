@@ -32,12 +32,11 @@ python3 --version
 ### Initial setup (Conda)
 
 ```bash
-conda create -n gabm
+conda create -n gabm -y
 conda activate gabm
-conda install python=3.12
+conda install python=3.12 -y
 git clone https://github.com/compolis/Climate-Action-GABM.git
 cd Climate-Action-GABM
-pip install -e .
 pip install -r requirements.txt
 ```
 
@@ -49,13 +48,15 @@ source gabm-venv/bin/activate  # On Windows: gabm-venv\\Scripts\\activate
 pip install --upgrade pip
 git clone https://github.com/compolis/Climate-Action-GABM.git
 cd Climate-Action-GABM
-pip install -e .
 pip install -r requirements.txt
 ```
 
 ### Set up API keys
 Create `data/api_key.csv` with your API keys. See
 [API_KEYS.md](API_KEYS.md) for required fields and examples.
+
+Note: this repository currently does not provide a `pyproject.toml`/`setup.py`,
+so `pip install -e .` is not supported.
 
 ### Validate installation (no LLM calls)
 From the project root:
@@ -77,11 +78,23 @@ Validate configuration first (no provider calls):
 PYTHONPATH=src python3 -m cag --preset smoke --dry-run
 ```
 
+Expected result:
+- The command exits successfully and prints resolved configuration JSON
+  (including keys such as `days`, `k_peers_per_day`, and `n_citizens`).
+- No run artefacts are written because this is a dry-run validation path.
+
 Run the canonical baseline:
 
 ```bash
 PYTHONPATH=src python3 -m cag --preset r14_canonical --exposure-targets split50
 ```
+
+Expected result:
+- A timestamped run directory is created under `data/output/experiments/`.
+- The run writes CSV/JSON artefacts and plots for analysis.
+- Exact files vary by configuration; see
+  [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md) for the
+  expected bundle.
 
 ### Run using the Makefile
 
@@ -93,6 +106,13 @@ make run-local
 
 This launches `python3 -m cag` with output rooted at
 `data/output/experiments/`.
+
+### What to check after a run
+
+1. Confirm a new timestamped folder exists under `data/output/experiments/`.
+2. Open `config.json` in that run folder to verify the resolved settings used.
+3. Review key outputs using
+   [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md).
 
 ### Configure and interpret runs
 Use [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md)
