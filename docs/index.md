@@ -58,6 +58,7 @@ supplementary_docs/old_Code_Tour.md
 supplementary_docs/RunningLLMsOnAire.md
 supplementary_docs/github_issues.md
 supplementary_docs/github_issues_v2.md
+USER_GUIDE_pre_1_0_archive.md
 ```
 
 ---
