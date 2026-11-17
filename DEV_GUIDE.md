@@ -248,7 +248,7 @@ For maintainability, all Makefile targets that depend on other build steps shoul
 | `make docs`    | Build documentation (Sphinx) and clean auto-copied docs assets                    |
 | `make docs-build` | Build documentation (Sphinx)                                                      |
 | `make docs-clean` | Remove auto-copied documentation files from docs/                              |
-| `make gh-pages-deploy` | Build and deploy documentation to GitHub Pages (runs scripts/gh-pages-deploy.py) |
+| `make gh-pages-deploy` | Build and deploy documentation to GitHub Pages (runs `scripts/dev/gh-pages-deploy.py` via compatibility wrapper) |
 | `make clean`   | Remove build/test artifacts and Python caches                                     |
 | `make clear-caches` | Delete all LLM caches and model lists (for a clean slate)                    |
 | `make git-clean` | Clean up merged local branches and prune deleted remotes                        |
@@ -265,7 +265,10 @@ For maintainability, all Makefile targets that depend on other build steps shoul
 | `make run-installed` | Run cag using installed package |
 
 
-All Python scripts used by Makefile targets are in the `scripts/` directory and are named consistently with their Makefile targets (e.g., `make docs-clean` runs `scripts/docs-clean.py`).
+Makefile-target helper scripts now live under `scripts/dev/`. Compatibility
+wrappers remain at the legacy `scripts/*.py` paths (for example,
+`make docs-clean` still invokes `scripts/docs-clean.py`, which dispatches to
+`scripts/dev/docs-clean.py`).
 
 The `delete-release` target automates deleting a release tag locally and on both remotes (origin, upstream).
 
@@ -355,7 +358,7 @@ For a new authored Markdown document intended for the Sphinx site:
 1. Create the authoritative file in its agreed source location and link it from an
    appropriate entry-point document.
 2. Add its repository-relative path to `DOC_FILES` in
-   [scripts/docs_assets.py](scripts/docs_assets.py), the shared copy/cleanup
+   [scripts/dev/docs_assets.py](scripts/dev/docs_assets.py), the shared copy/cleanup
    manifest. Do not register an authored file that exists only in `docs/`:
    cleanup would delete it. For a nested source, add a `STAGED_NAMES` entry
    mapping its source path to the desired filename under `docs/`. Keep staged
@@ -449,7 +452,9 @@ To build run:
 make docs
 ```
 
-- This runs [scripts/docs.py](scripts/docs.py) to stage registered sources from
+- This runs [scripts/dev/docs.py](scripts/dev/docs.py) (through
+  [scripts/docs.py](scripts/docs.py) compatibility wrapper) to stage registered
+  sources from
   the repository root and `documentation/` into `docs/`, rewrite links and
   generate dependency pages, then build the site. After a successful build,
   cleanup removes registered staging files, not their authored sources or

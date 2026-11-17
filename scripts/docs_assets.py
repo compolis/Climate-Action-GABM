@@ -1,78 +1,19 @@
-"""
-Shared list of documentation asset files for Climate-Action-GABM docs scripts.
-"""
-# Metadata
-__author__ = ["Andy Turner <agdturner@gmail.com>"]
-__version__ = "0.1.6"
-__copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
+#!/usr/bin/env python3
+"""Compatibility module exporting symbols from scripts/dev/docs_assets.py."""
 
-DOC_FILES = [
-    "README.md",
-    "LICENSE.md",
-    "CODE_OF_CONDUCT.md",
-    "CONTRIBUTORS.md",
-    "USER_GUIDE.md",
-    "DEV_GUIDE.md",
-    "DEV_QUICKSTART.md",
-    "requirements.txt",
-    "requirements-dev.txt",
-    "API_KEYS.md",
-    "documentation/planning/ROADMAP.md",
-    "documentation/planning/GABM_Refactor_Plan.md",
-    "CHANGE_LOG.md",
-    "documentation/history/DEVELOPMENT_HISTORY.md",
-    "documentation/guides/AIRE_HPC_repo_primer.md",
-    "documentation/guides/AIRE_Quickstart.md",
-    "documentation/guides/Code_Tour.md",
-    "documentation/guides/Local_LLM_Setup_Guide.md",
-    "documentation/guides/Prompts_and_Personas_Guide_v2.md",
-    "documentation/guides/Run_Output_Guide.md",
-    "documentation/guides/Simulation_Configuration_Guide.md",
-    "documentation/research/Model_Design.md",
-    "documentation/research/research_notes.md",
-    "documentation/research/result_report.md",
-    "documentation/research/yougov_survey_data.md",
-    "documentation/research/Climate Policy Research for Agent-Based Model.md",
-    "documentation/research/Literature_Political_Exposure.md",
-    "documentation/archive/Prompts_and_Personas_Guide.md",
-    "documentation/archive/RunningLLMsOnAire.md",
-    "documentation/archive/github_issues.md",
-    "documentation/archive/github_issues_v2.md",
-    "documentation/archive/old_Code_Tour.md",
-    "documentation/presentations/cag_handover_deck.html",
-    "documentation/README.md",
-]
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
-STAGED_NAMES = {
-    "README.md": "project_readme.md",
-    "documentation/planning/ROADMAP.md": "ROADMAP.md",
-    "documentation/planning/GABM_Refactor_Plan.md": "GABM_Refactor_Plan.md",
-    "documentation/history/DEVELOPMENT_HISTORY.md": "DEVELOPMENT_HISTORY.md",
-    "documentation/guides/AIRE_HPC_repo_primer.md": "AIRE_HPC_repo_primer.md",
-    "documentation/guides/AIRE_Quickstart.md": "AIRE_Quickstart.md",
-    "documentation/guides/Code_Tour.md": "Code_Tour.md",
-    "documentation/guides/Local_LLM_Setup_Guide.md": "Local_LLM_Setup_Guide.md",
-    "documentation/guides/Prompts_and_Personas_Guide_v2.md": "Prompts_and_Personas_Guide_v2.md",
-    "documentation/guides/Run_Output_Guide.md": "Run_Output_Guide.md",
-    "documentation/guides/Simulation_Configuration_Guide.md": "Simulation_Configuration_Guide.md",
-    "documentation/research/Model_Design.md": "Model_Design.md",
-    "documentation/research/research_notes.md": "research_notes.md",
-    "documentation/research/result_report.md": "result_report.md",
-    "documentation/research/yougov_survey_data.md": "yougov_survey_data.md",
-    "documentation/research/Climate Policy Research for Agent-Based Model.md": "supplementary_docs/Climate Policy Research for Agent-Based Model.md",
-    "documentation/research/Literature_Political_Exposure.md": "supplementary_docs/Literature_Political_Exposure.md",
-    "documentation/archive/Prompts_and_Personas_Guide.md": "supplementary_docs/Prompts_and_Personas_Guide.md",
-    "documentation/archive/RunningLLMsOnAire.md": "supplementary_docs/RunningLLMsOnAire.md",
-    "documentation/archive/github_issues.md": "supplementary_docs/github_issues.md",
-    "documentation/archive/github_issues_v2.md": "supplementary_docs/github_issues_v2.md",
-    "documentation/archive/old_Code_Tour.md": "supplementary_docs/old_Code_Tour.md",
-    "documentation/presentations/cag_handover_deck.html": "_extra/cag_handover_deck.html",
-    "documentation/README.md": "documentation_index.md",
-}
+_TARGET = Path(__file__).resolve().parent / "dev" / "docs_assets.py"
+_SPEC = spec_from_file_location("_cag_docs_assets_dev", _TARGET)
+if _SPEC is None or _SPEC.loader is None:
+    msg = f"Unable to load docs assets module at {_TARGET}"
+    raise RuntimeError(msg)
+_MODULE = module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
 
-GENERATED_DOC_FILES = ["requirements.md", "requirements-dev.md"]
+for _name in dir(_MODULE):
+    if _name.startswith("_"):
+        continue
+    globals()[_name] = getattr(_MODULE, _name)
 
-GITHUB_DOC_FILES = [
-    "CONTACT.md",
-    "SECURITY.md",
-]
