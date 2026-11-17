@@ -8,6 +8,8 @@
 #   make clean           - Remove build/test artifacts
 #   make clear-caches    - Delete all LLM caches and model lists (for a clean slate)
 #   make git-clean       - Clean up merged local branches and prune deleted remotes
+#   make git-prune-local - Delete local branches merged into main (except main/gh-pages)
+#   make git-prune-origin - Delete origin branches merged into origin/main (except main/gh-pages)
 #   make sync            - Sync main branch with upstream
 #   make sync-feature    - Sync and rebase a feature/release branch onto main (usage: make sync-feature BRANCH=release/0.2.0)
 #   make release         - Tag and push a release (usage: make release VERSION=x.y.z BRANCH=release/x.y.z)
@@ -21,10 +23,10 @@
 #
 # If you add a new target, please also add it to the help target and the DEV_GUIDE.md for consistency and ease of use for other developers.
 #
-# Caution: Some commands (like git-clean, release, and delete-release) can modify your git history or delete tags. Always review the scripts they call (in scripts/dev/) to ensure they do what you expect before running these commands.
+# Caution: Some commands (like git-prune-origin, release, and delete-release) can delete remote branches/tags or modify shared history. Always review the scripts they call (in scripts/dev/) to ensure they do what you expect before running these commands.
 
 # Phony targets (not actual files)
-.PHONY: help test docs docs-clean gh-pages-deploy clean git-clean clear-caches sync sync-feature release delete-release build build-test pypi-release testpypi-release bump-version
+.PHONY: help test docs docs-clean gh-pages-deploy clean git-clean git-prune-local git-prune-origin clear-caches sync sync-feature release delete-release build build-test pypi-release testpypi-release bump-version
 
 # Show available Makefile commands
 help:
@@ -36,6 +38,8 @@ help:
 	@echo "  clean            - Remove build/test artifacts"
 	@echo "  clear-caches     - Delete all LLM caches and model lists (for a clean slate)"
 	@echo "  git-clean        - Clean up merged local branches and prune deleted remotes"
+	@echo "  git-prune-local  - Delete local branches merged into main (except main/gh-pages)"
+	@echo "  git-prune-origin - Delete origin branches merged into origin/main (except main/gh-pages)"
 	@echo "  sync             - Sync main branch with upstream"
 	@echo "  sync-feature     - Sync and rebase a feature/release branch onto main (usage: make sync-feature BRANCH=release/0.2.0)"
 	@echo "  release          - Tag and push a release (usage: make release VERSION=x.y.z BRANCH=release/x.y.z)"
@@ -108,6 +112,40 @@ git-clean:
 	@echo "Pruning deleted remote branches..."
 	@git fetch --prune
 	@echo "Git cleanup complete. Merged branches deleted and remotes pruned."
+
+# Delete local branches merged into main while preserving main and gh-pages
+git-prune-local:
+	@echo "Pruning local branches merged into main (excluding main and gh-pages)..."
+	@echo "Switching to main branch for safe cleanup..."
+	@git checkout main
+	@echo "Branches to delete:"
+	@BRANCHES="$$(git branch --merged main | sed 's/^[ *]*//' | grep -vE '^(main|gh-pages)$$' || true)"; \
+	if [ -n "$$BRANCHES" ]; then \
+		printf "%s\n" $$BRANCHES; \
+		for branch in $$BRANCHES; do \
+			git branch -d "$$branch"; \
+		done; \
+	else \
+		echo "No merged local branches to delete."; \
+	fi
+	@echo "...done pruning merged local branches."
+
+# Delete remote origin branches merged into origin/main while preserving main and gh-pages
+git-prune-origin:
+	@echo "Pruning origin branches merged into origin/main (excluding main and gh-pages)..."
+	@echo "Fetching/pruning origin refs..."
+	@git fetch --prune origin
+	@echo "Origin branches to delete:"
+	@BRANCHES="$$(git branch -r --merged origin/main | sed 's/^[ *]*//' | grep '^origin/' | grep -vE '^origin/(HEAD|main|gh-pages)$$' | sed 's#^origin/##' || true)"; \
+	if [ -n "$$BRANCHES" ]; then \
+		printf "%s\n" $$BRANCHES; \
+		for branch in $$BRANCHES; do \
+			git push origin --delete "$$branch"; \
+		done; \
+	else \
+		echo "No merged origin branches to delete."; \
+	fi
+	@echo "...done pruning merged origin branches."
 
 
 # Sync your main branch with upstream
