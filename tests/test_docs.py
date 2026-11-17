@@ -87,7 +87,7 @@ def test_copy_and_cleanup_preserve_authored_sources(tmp_path, monkeypatch):
 @pytest.mark.parametrize("target,expected", [
     ("AIRE_HPC_repo_primer.md", "AIRE_HPC_repo_primer.md"),
     ("../../DEV_QUICKSTART.md#setup", "DEV_QUICKSTART.md#setup"),
-    ("../../scripts/aire/run.sh", docs.REPOSITORY_URL + "scripts/aire/run.sh"),
+    ("../../scripts/hpc/aire/run.sh", docs.REPOSITORY_URL + "scripts/hpc/aire/run.sh"),
     ("Code_Tour.md", "Code_Tour.md"),
     ("Simulation_Configuration_Guide.md#layer-2", "Simulation_Configuration_Guide.md#layer-2"),
     ("../research/Model_Design.md", "Model_Design.md"),
@@ -140,9 +140,9 @@ def _aire_submission_examples():
         for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL):
             for line in block.replace("\\\n", " ").splitlines():
                 tokens = shlex.split(line, comments=True)
-                if "sbatch" not in tokens or "scripts/aire/run.sh" not in tokens:
+                if "sbatch" not in tokens or "scripts/hpc/aire/run.sh" not in tokens:
                     continue
-                index = tokens.index("scripts/aire/run.sh")
+                index = tokens.index("scripts/hpc/aire/run.sh")
                 examples.append((filename, tokens[index + 1:]))
     return examples
 

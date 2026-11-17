@@ -104,7 +104,7 @@ The package marker. Holds `__version__` only. Skip.
 
 **Breadcrumb.** Read `r14_canonical`. Three observations:
 
-1. It **deliberately omits** `political_exposure_targets`. Each submission line pins it explicitly so the sweep file *is* the experimental design (see `scripts/aire/sweeps/r14_v2.txt`).
+1. It **deliberately omits** `political_exposure_targets`. Each submission line pins it explicitly so the sweep file *is* the experimental design (see `scripts/hpc/aire/sweeps/r14_v2.txt`).
 2. It does **not** override the local-LLM keys (`llm_provider`, `llm_model`, `local_base_url`). That's intentional: the AIRE launcher injects those from env vars.
 3. `days: 5` is an `int`, not a list. `__main__.build_days()` expands it into a default alternating P-A/P-B/C schedule.
 
@@ -545,7 +545,7 @@ PYTHONPATH=src python -m cag --list-presets
 PYTHONPATH=src python -m cag --preset smoke --dry-run
 
 # 5. First smoke submission — give yourself extra wall-clock for the model download
-sbatch --time=06:00:00 scripts/aire/run.sh --preset smoke
+sbatch --time=06:00:00 scripts/hpc/aire/run.sh --preset smoke
 
 # 6. Check it landed
 squeue --me
@@ -555,10 +555,10 @@ tail -f LLM-cag-run_<jobid>.out
 
 # 8. Resume a killed job (same flags, RESUME_FROM points at the exact run dir)
 RESUME_FROM=$SCRATCH/cag/runs/run_<jobid> \
-    sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+    sbatch scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50
 
 # 9. Sweep mode (one job per non-comment line)
-bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt
+bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt
 
 # 10. Pull results back from your laptop
 rsync -avh aire:/mnt/scratch/<user>/cag/runs/run_<jobid>/ ~/cag_results/run_<jobid>/
@@ -569,7 +569,7 @@ rsync -avh aire:/mnt/scratch/<user>/cag/runs/run_<jobid>/ ~/cag_results/run_<job
 - The model-download readiness wait in `run.sh` is 1500 s (25 min). First Apertus-8B or Qwen-32B pull can exceed that — pass `--time=06:00:00` on the *first* sbatch. Once the model is cached, subsequent runs warm up in <2 min.
 - Outputs **must** go to `$SCRATCH` (1 TB quota). `$HOME` is 65 GB and AIRE will suspend accounts that fill it.
 - HF_TOKEN as an env var resets each login. Use the file method (`huggingface-cli login` once, or write the token to `~/.cache/huggingface/token` manually).
-- Flag order: `sbatch [sbatch flags] scripts/aire/run.sh [python flags]`. Anything after `run.sh` is forwarded to `python -m cag`.
+- Flag order: `sbatch [sbatch flags] scripts/hpc/aire/run.sh [python flags]`. Anything after `run.sh` is forwarded to `python -m cag`.
 
 ---
 

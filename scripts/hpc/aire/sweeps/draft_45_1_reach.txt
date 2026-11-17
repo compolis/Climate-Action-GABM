@@ -1,7 +1,7 @@
 # Draft-45 bite 1/4 — REACH dose-response (SBM, 1:1 frequency). 6 conditions x 3 seeds = 18 runs.
 # Base: tier1 preset, overridden to --days 7. Exposure = committed_minority_symmetric (5/5/60/30)
 # except the no-broadcast placebo (neither). Signed green-advantage axis (reform-louder -> green-louder).
-# Submit: bash scripts/aire/sweep.sh scripts/aire/sweeps/draft_45_1_reach.txt --time=15:00:00
+# Submit: bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/draft_45_1_reach.txt --time=15:00:00
 LABEL=d45_reach_reform25_s42 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --seed 42
 LABEL=d45_reach_reform25_s43 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --seed 43
 LABEL=d45_reach_reform25_s44 --preset tier1 --days 7 --reach-a 0.25 --reach-b 1.0 --seed 44

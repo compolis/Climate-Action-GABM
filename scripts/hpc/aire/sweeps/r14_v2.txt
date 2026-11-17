@@ -1,7 +1,7 @@
 # =============================================================================
 # Run-14 v2 sweep — three conditions on the post-NB30/31 fix code base.
-# Each line is forwarded verbatim to `scripts/aire/run.sh "$@"`.
-# Submit:  bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt
+# Each line is forwarded verbatim to `scripts/hpc/aire/run.sh "$@"`.
+# Submit:  bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt
 # =============================================================================
 
 # A. Canonical baseline: split-50 exposure (every agent on exactly one side).

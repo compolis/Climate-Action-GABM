@@ -2,10 +2,10 @@
 # Tier-1 bias-invariance sweep — the honest, multi-seed successor to the
 # seed-42 / n=50 v0.8 pilot (run_6436142/…/6436638, now demoted to preliminary).
 # 4 conditions x 3 seeds (42/43/44) = 12 runs. Each line is forwarded verbatim
-# to `scripts/aire/run.sh "$@"`.
+# to `scripts/hpc/aire/run.sh "$@"`.
 #
 # Submit (wall-clock justified below):
-#   bash scripts/aire/sweep.sh scripts/aire/sweeps/tier1.txt --time=11:00:00
+#   bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/tier1.txt --time=11:00:00
 #
 # Model:   Qwen3-14B (HF_MODEL default; no --model pin). Each run is N=100,
 #          5-day alternating P-A/P-B/C schedule, package mode, k_peers=2,

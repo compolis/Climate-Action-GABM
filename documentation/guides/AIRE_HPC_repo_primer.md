@@ -68,8 +68,8 @@ Seek advice if suitability is uncertain.
 
 ## 3. Current launcher contract
 
-The implementation sources are [run.sh](../../scripts/aire/run.sh),
-[sweep.sh](../../scripts/aire/sweep.sh), and
+The implementation sources are [run.sh](../../scripts/hpc/aire/run.sh),
+[sweep.sh](../../scripts/hpc/aire/sweep.sh), and
 [environment.yaml](../../environment.yaml).
 
 The client is `PYTHONPATH=src python -m cag`; it does not itself serve the model.
@@ -119,7 +119,7 @@ explicit scratch paths for Slurm logs.
 Pass Slurm options **before** the script path, and CAG options **after** it:
 
 ```bash
-sbatch --time=06:00:00 --mem=120G scripts/aire/run.sh \
+sbatch --time=06:00:00 --mem=120G scripts/hpc/aire/run.sh \
     --preset r14_canonical --exposure-targets split50
 ```
 

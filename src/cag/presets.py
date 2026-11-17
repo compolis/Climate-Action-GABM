@@ -10,7 +10,7 @@ schedule via :func:`cag.__main__.build_days`.
 Adding a preset is **optional**. Every knob is independently composable as
 a ``--flag`` at the sbatch command line, so new experiments never require
 a preset definition — sweeps stay in sbatch text files (see
-``scripts/aire/sweeps/``).
+``scripts/hpc/aire/sweeps/``).
 
 Application order (lowest → highest precedence)::
 
@@ -28,7 +28,7 @@ RUN_BUNDLE_PRESETS = {
             "Fast smoke-test run shape: 10 agents, 2 days, no peer "
             "messaging. Does NOT pin a model — Mac picks up the SIM_CONFIG "
             "default (mlx-lm Qwen3-8B-4bit on http://localhost:8080/v1), "
-            "AIRE picks up scripts/aire/run.sh's --model $HF_MODEL. "
+            "AIRE picks up scripts/hpc/aire/run.sh's --model $HF_MODEL. "
             "Override with --provider / --model to retest against an API."
         ),
         "config": {
@@ -42,7 +42,7 @@ RUN_BUNDLE_PRESETS = {
         "description": (
             "Run-14 baseline run shape: 50 agents, 5 days, no peer "
             "messaging, Day-0 anchor = ground-truth + rationale. Does NOT "
-            "pin a model: on AIRE scripts/aire/run.sh forces "
+            "pin a model: on AIRE scripts/hpc/aire/run.sh forces "
             "--model $HF_MODEL (default Qwen/Qwen3-14B via vLLM); on Mac "
             "the SIM_CONFIG default (mlx-community/Qwen3-8B-4bit via "
             "mlx-lm) applies. Exposure target must be set explicitly via "

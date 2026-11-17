@@ -231,8 +231,8 @@ v0.7 ships first-class support for the University of Leeds AIRE cluster (SLURM, 
 The full walkthrough is in [documentation/guides/AIRE_Quickstart.md](documentation/guides/AIRE_Quickstart.md) (copy-pasteable zero-to-Run-14) and [documentation/guides/AIRE_HPC_repo_primer.md](documentation/guides/AIRE_HPC_repo_primer.md) (cluster fundamentals, storage rules, hard constraints, troubleshooting). In short:
 
 1. `git clone` the repo onto AIRE storage; create a venv; `pip install -e .` + requirements.
-2. Submit a single experiment: `sbatch scripts/aire/run.sh` with `HF_MODEL=...` and any `SIM_CONFIG` flags as environment variables. vLLM auto-starts on the GPU node.
-3. Submit a parameter sweep: `bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt` reads one condition per line and submits one `sbatch` per condition.
+2. Submit a single experiment: `sbatch scripts/hpc/aire/run.sh` with `HF_MODEL=...` and any `SIM_CONFIG` flags as environment variables. vLLM auto-starts on the GPU node.
+3. Submit a parameter sweep: `bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt` reads one condition per line and submits one `sbatch` per condition.
 
 Add a new experiment by adding one entry to `RUN_BUNDLE_PRESETS` in [src/cag/presets.py](src/cag/presets.py) plus one line to a sweep file. No shell-script edits.
 

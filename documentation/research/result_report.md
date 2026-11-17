@@ -18,7 +18,7 @@ Which results back which parts of the paper — the **draft-45 program**: a fit-
 | Results §"Reach and frequency are not interchangeable" (`subsec:bite-iso`) | Bite 4 | run_6535139–6535144 (depth2 / depth4 × 3 seeds); [`bite4_iso_impression.py`](../../scripts/paper/analysis/bite4_iso_impression.py) | NB 46 → `audit_experiments.csv` | breadth−depth +0.12 [+0.03,+0.21] / both +0.20 |
 | Results Table 1 (`tab:experiments`) | four-bite ladder | all four experiments | NB 46 → `table1_experiments.csv` | reach +0.35 / freq +0.16→+0.28 / targeting ≈0 / breadth +0.12 |
 | SI §S1 survey (Tables S1–S2) | — | `data/yougov_survey_data/YouGovProcessedData.csv` via `cag.io.survey.load` | recomputed in the SI comments | N=1,483 (of 1,967 raw); age 48.0/17.6; policy baselines (Renewable +1.74/81.7% … Climate comp −0.08/38.9%) |
-| SI §S3 configs / baselines / outcomes (Tables S4–S7) | — | `presets.py` tier1 + `scripts/aire/sweeps/draft_45_*.txt`; Day-0 baselines computed from the survey | NB 46 + in-place compute | base config; Day-0 pkg means seed 42/43/44 = +0.57/+0.50/+0.92 (pooled +0.66) |
+| SI §S3 configs / baselines / outcomes (Tables S4–S7) | — | `presets.py` tier1 + `scripts/hpc/aire/sweeps/draft_45_*.txt`; Day-0 baselines computed from the survey | NB 46 + in-place compute | base config; Day-0 pkg means seed 42/43/44 = +0.57/+0.50/+0.92 (pooled +0.66) |
 | SI §S4 estimand / rulers / bias (Tables S8–S9) | Tier 2 / Tier P | `audit_evaluation.csv` (NB 40 canonical; NB 36/37) | NB 45 | rulers all positive; per-policy signed bias (Ban petrol +1.64 … Green housing −0.15; package +0.64) |
 
 Notes:
@@ -958,7 +958,7 @@ Every B-only cell collapses toward zero relative to 8B. Two policies (**Carbon T
 **Date:** 2026-06-24
 **Run:** [`data/output/experiments/run_6267094/20260624_012156/`](../../data/output/experiments/run_6267094/20260624_012156)
 **AIRE job:** `6267094` (Qwen3-8B via vLLM on a single GPU node)
-**Invocation:** `sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50`
+**Invocation:** `sbatch scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50`
 **Model:** `Qwen/Qwen3-8B` (`llm_provider=local`, vLLM, `T=0.5`)
 **Config:** `n_citizens=50`, `days=5` (alternating `P-A`/`P-B`/`C`), `k_peers_per_day=0`, `communication_mode=package` (all 6 policies), `political_exposure_mode=rule_affinity_rank`, `political_exposure_targets=split50` (→ 25 A-only / 25 B-only), `reach_a=reach_b=1.0`, `day0_anchor=ground_truth_with_rationale`, `debias=True`, `thinking=False`, `random_seed=42`
 
@@ -1269,7 +1269,7 @@ Three small follow-ups landed alongside the NB-31 context fix (full suite 495 pa
 
 1. **`k_peers=0` short-circuit in peer messaging.** `run_peer_messaging` and `run_package_peer_messaging` both used to fall through `random.sample(neighbors, 0)` for every citizen and still call `generate_peer_message` on each one before discovering the inbox was empty. The log line `48 citizens generated package messages, 0 citizens reflected` was the visible artefact: 48 LLM generations × 5 days = ~240 wasted Qwen3-8B calls per r14-style run with k_peers=0. New early-return at the top of both functions: `if k_peers == 0: log "peer messaging disabled (k_peers=0), skipping"; return zero-filled dict`. Tests added: `TestPeerMessagingKPeersZeroShortCircuits` in [tests/test_peer_messaging.py](../../tests/test_peer_messaging.py) (asserts `send_chat.assert_not_called()` for both single-policy and package variants).
 2. **Per-day checkpointing now default-on.** Recent r14-family runs accidentally shipped without checkpoints because the new AIRE Quickstart sbatch invocations dropped the `--checkpoint-every-day` flag, while the earlier R14 split50 baseline ([run_6202348](../../data/output/experiments/run_6202348_R14_split50_5day/checkpoints)) had them. Promoting checkpointing to default-on (`argparse.BooleanOptionalAction, default=True`) means every run is wall-clock-kill-recoverable by default; `--no-checkpoint-every-day` opts out for throwaway smoke tests. Tests added in [tests/test_cli.py](../../tests/test_cli.py) (`test_checkpoint_default_on`, `test_checkpoint_opt_out`).
-3. **Docs in sync.** [docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_Quickstart.md) §5 / §7 / §10.6 / §11 updated to reflect both defaults; [scripts/aire/run.sh](../../scripts/aire/run.sh) inline examples updated to remove the now-redundant `--checkpoint-every-day` flag.
+3. **Docs in sync.** [docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_Quickstart.md) §5 / §7 / §10.6 / §11 updated to reflect both defaults; [scripts/hpc/aire/run.sh](../../scripts/hpc/aire/run.sh) inline examples updated to remove the now-redundant `--checkpoint-every-day` flag.
 
 ### Design
 
@@ -1574,7 +1574,7 @@ The rank-affinity sort correctly put the 25 most pro-climate agents (by YouGov s
 
 ### Operational notes
 
-- The anchor_llm run was killed by the 2-hour wall time during Day 5's 5th policy survey. CSVs were salvaged from `checkpoints/` (`last_completed_day = 4`). Resume infrastructure (`--resume` CLI flag in [src/cag/__main__.py](../../src/cag/__main__.py), `RESUME=1`+`OUTDIR=` env-var overrides in [scripts/aire/smoke.sh](../../scripts/aire/smoke.sh)) is now wired up for future kills.
+- The anchor_llm run was killed by the 2-hour wall time during Day 5's 5th policy survey. CSVs were salvaged from `checkpoints/` (`last_completed_day = 4`). Resume infrastructure (`--resume` CLI flag in [src/cag/__main__.py](../../src/cag/__main__.py), `RESUME=1`+`OUTDIR=` env-var overrides in [scripts/hpc/aire/smoke.sh](../../scripts/hpc/aire/smoke.sh)) is now wired up for future kills.
 - Both completed runs (split50, neither) finished under wall time; the neither run is the cheapest baseline available (no broadcasts → ~70% of split50's LLM call count).
 - All three runs reused seed=42, n_citizens=50, Qwen3-8B bf16, llm_temperature=0.5, debias=on, thinking=off — only the three knobs in the configuration table above were changed across runs.
 

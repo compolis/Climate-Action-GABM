@@ -2060,11 +2060,11 @@ v0.7 ships a production-ready HPC integration layer for the University of Leeds 
 
 ### 22.1 Thin sbatch launcher
 
-[scripts/aire/run.sh](../../scripts/aire/run.sh) is a single sbatch script that delegates every research knob to the Python CLI via environment variables. It defines the SLURM `#SBATCH` directives (partition, gres, mem, time), auto-starts a vLLM server on the GPU node with `$HF_MODEL` (overrideable), waits for the model endpoint to come up, then invokes `python -m cag` with every variable forwarded as a `--flag`. Adding a new experiment never requires editing this script.
+[scripts/hpc/aire/run.sh](../../scripts/hpc/aire/run.sh) is a single sbatch script that delegates every research knob to the Python CLI via environment variables. It defines the SLURM `#SBATCH` directives (partition, gres, mem, time), auto-starts a vLLM server on the GPU node with `$HF_MODEL` (overrideable), waits for the model endpoint to come up, then invokes `python -m cag` with every variable forwarded as a `--flag`. Adding a new experiment never requires editing this script.
 
 ### 22.2 Sweep submitter
 
-[scripts/aire/sweep.sh](../../scripts/aire/sweep.sh) reads a sweep file (one line per condition, each line a list of CLI overrides) and submits one `sbatch` per condition. Sweep files live under [scripts/aire/sweeps/](../../scripts/aire/sweeps). The v0.7 canonical sweep is [scripts/aire/sweeps/r14_v2.txt](../../scripts/aire/sweeps/r14_v2.txt) — 3 split50 conditions for the first AIRE production run.
+[scripts/hpc/aire/sweep.sh](../../scripts/hpc/aire/sweep.sh) reads a sweep file (one line per condition, each line a list of CLI overrides) and submits one `sbatch` per condition. Sweep files live under [scripts/hpc/aire/sweeps/](../../scripts/hpc/aire/sweeps). The v0.7 canonical sweep is [scripts/hpc/aire/sweeps/r14_v2.txt](../../scripts/hpc/aire/sweeps/r14_v2.txt) — 3 split50 conditions for the first AIRE production run.
 
 ### 22.3 Preset bundle registry
 
@@ -2345,7 +2345,7 @@ Future network types added to `NETWORK_TYPES` automatically render correctly —
 
 ### 29.3 AIRE Quickstart §6 first-time-model-download callout
 
-[docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_Quickstart.md) §6 ("First real experiment — split50 Run-14") gained a `> **Important — first-time model download.**` blockquote between the wall-clock estimate and the `sbatch --time=06:00:00` example. Explains that the first submission with a model not yet in the Hugging Face cache can exceed the **1500 s** vLLM-readiness wait baked into `scripts/aire/run.sh`, and recommends `--time=06:00:00` on that first submission. Subsequent runs warm from cache in <2 min and the standard wall-clock is fine.
+[docs/AIRE_Quickstart.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/AIRE_Quickstart.md) §6 ("First real experiment — split50 Run-14") gained a `> **Important — first-time model download.**` blockquote between the wall-clock estimate and the `sbatch --time=06:00:00` example. Explains that the first submission with a model not yet in the Hugging Face cache can exceed the **1500 s** vLLM-readiness wait baked into `scripts/hpc/aire/run.sh`, and recommends `--time=06:00:00` on that first submission. Subsequent runs warm from cache in <2 min and the standard wall-clock is fine.
 
 ### 29.4 Code Tour — researcher onboarding doc
 
@@ -2502,7 +2502,7 @@ The override lives on the agent. [src/cag/abm/agent.py](../../src/cag/abm/agent.
 
 - [src/cag/__main__.py](../../src/cag/__main__.py): new `--persona-mode {real,shuffled,neutral}` flag.
 - [src/cag/presets.py](../../src/cag/presets.py): new `tierP` bundle — 100 agents, a single empty-phase Day-0-only day (`days=[{"phases": []}]`, no broadcasts or peer messaging), package mode, `day0_anchor="llm_survey"` so each Day-0 opinion is a pure function of *(persona + policy question)*, and `memory="persona_only"` to remove cross-policy leakage. It deliberately does **not** pin a model (AIRE's `run.sh` forces `--model $HF_MODEL`; Mac uses the `SIM_CONFIG` default). The arm is chosen with `--persona-mode` and the shuffle permutation is varied with `--seed`.
-- [scripts/aire/sweeps/tierP.txt](../../scripts/aire/sweeps/tierP.txt): 9 lines — the three arms × seeds 42/43/44.
+- [scripts/hpc/aire/sweeps/tierP.txt](../../scripts/hpc/aire/sweeps/tierP.txt): 9 lines — the three arms × seeds 42/43/44.
 
 ### 31.6 Test coverage
 
@@ -2570,7 +2570,7 @@ NB 27 ([notebooks/27_affinity_exposure_demo.ipynb](../../notebooks/27_affinity_e
 
 ### 33.4 AIRE run labels
 
-[scripts/aire/run.sh](../../scripts/aire/run.sh) now honours an optional `RUN_LABEL` environment variable on fresh runs: `SUFFIX="${RUN_LABEL:+_${RUN_LABEL}}"` is appended to the scratch output directory (`OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}${SUFFIX}"`), with a banner echo. Sweep jobs therefore land in self-describing folders, e.g. `RUN_LABEL=split50_freq3v1 sbatch scripts/aire/run.sh …` → `run_1234567_split50_freq3v1`. Resume runs (which read an existing `OUTDIR`) are unaffected.
+[scripts/hpc/aire/run.sh](../../scripts/hpc/aire/run.sh) now honours an optional `RUN_LABEL` environment variable on fresh runs: `SUFFIX="${RUN_LABEL:+_${RUN_LABEL}}"` is appended to the scratch output directory (`OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}${SUFFIX}"`), with a banner echo. Sweep jobs therefore land in self-describing folders, e.g. `RUN_LABEL=split50_freq3v1 sbatch scripts/hpc/aire/run.sh …` → `run_1234567_split50_freq3v1`. Resume runs (which read an existing `OUTDIR`) are unaffected.
 
 ---
 

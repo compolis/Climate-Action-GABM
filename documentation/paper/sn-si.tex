@@ -535,7 +535,7 @@ starting position.
 
 \subsection{Outputs, persistence, reproducibility, and decoding settings}\label{subsec:si-outputs}
 % Source: src/cag/abm/sim.py SIM_CONFIG (llm_temperature=0.5, thinking=False),
-% scripts/aire/run.sh (vLLM serve Qwen/Qwen3-14B), io/results.py + io/checkpoint.py.
+% scripts/hpc/aire/run.sh (vLLM serve Qwen/Qwen3-14B), io/results.py + io/checkpoint.py.
 
 Every generative step is produced by a single local open-weight language model,
 Qwen3-14B, served locally (through vLLM on the HPC backend) and shared by all
@@ -580,7 +580,7 @@ three seeds and recomputed from the raw runs in the provenance notebooks.
   five-day Tier-1--3 runs additionally validate that effect across network topology
   and language model.}
   \label{tab:si-run-config}
-  % Source: src/cag/presets.py (tier1 preset) + scripts/aire/sweeps/draft_45_{1..4}_*.txt.
+  % Source: src/cag/presets.py (tier1 preset) + scripts/hpc/aire/sweeps/draft_45_{1..4}_*.txt.
   \begin{tabular}{@{}llllll@{}}
     \toprule
     Experiment & Network & Reach (A/B) & Broadcasts/day (A/B) & Targeting & Horizon \\

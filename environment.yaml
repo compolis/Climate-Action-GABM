@@ -12,7 +12,7 @@
 #
 # NOTE: This env does NOT include the LLM server (vLLM). On Aire the model is
 # served from a vLLM Apptainer container on a GPU node — see
-# scripts/aire/run.sh and documentation/guides/AIRE_Quickstart.md. The simulation here is
+# scripts/hpc/aire/run.sh and documentation/guides/AIRE_Quickstart.md. The simulation here is
 # only a *client* that talks to that server over HTTP, so it needs no GPU
 # libraries.
 name: cag

@@ -2,7 +2,7 @@
 # 3 modes x 3 seeds = 9 runs. Does spending scarce reach on the undecided / hubs beat random?
 # BA (m=5) so degree centrality actually varies; random cell doubles as a topology check vs SBM reach_reform25.
 # network-params JSON is space-free so it survives sweep.sh word-splitting.
-# Submit: bash scripts/aire/sweep.sh scripts/aire/sweeps/draft_45_3_targeting.txt --time=15:00:00
+# Submit: bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/draft_45_3_targeting.txt --time=15:00:00
 LABEL=d45_tgt_random_s42 --preset tier1 --days 7 --network-type barabasi_albert --network-params {"m":5} --reach-a 0.25 --reach-b 1.0 --reach-targeting-a random --seed 42
 LABEL=d45_tgt_random_s43 --preset tier1 --days 7 --network-type barabasi_albert --network-params {"m":5} --reach-a 0.25 --reach-b 1.0 --reach-targeting-a random --seed 43
 LABEL=d45_tgt_random_s44 --preset tier1 --days 7 --network-type barabasi_albert --network-params {"m":5} --reach-a 0.25 --reach-b 1.0 --reach-targeting-a random --seed 44
