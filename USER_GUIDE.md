@@ -74,8 +74,19 @@ If you plan to run non-dry-run simulations locally, set up and start a local
 server first. See
 [Local_LLM_Setup_Guide.md](documentation/guides/Local_LLM_Setup_Guide.md).
 
-Any OpenAI-compatible server works (for example vLLM on HPC, or Ollama
-locally). Use whichever is available in your environment.
+Recommended default by environment:
+
+- **Local laptop/workstation (single user):** use **Ollama**.
+- **HPC/shared GPU (multi-user throughput):** use **vLLM** (as in the AIRE scripts).
+
+Both expose OpenAI-compatible APIs and work with `provider=local`.
+Official projects:
+- Ollama: <https://github.com/ollama/ollama>
+- vLLM: <https://github.com/vllm-project/vllm>
+
+If `ollama` is not found on your machine, install it using the official
+instructions from the Ollama project page above (for example, Linux users may
+use Snap where available).
 
 Quick start example (Ollama, local workstation):
 
@@ -109,6 +120,13 @@ curl http://localhost:8000/v1/models
 ```
 
 Then point CAG to it with `--base-url http://localhost:8000/v1`.
+
+Quick profile examples:
+
+- Local profile:
+  - `--provider local --model qwen3:8b --base-url http://localhost:11434/v1`
+- HPC profile:
+  - `--provider local --base-url http://localhost:8000/v1`
 
 
 ### Set up API keys
