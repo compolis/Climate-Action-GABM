@@ -81,7 +81,7 @@ make CAG a distributed or multi-node simulation.
 | Setting | Current launcher behaviour |
 |---|---|
 | `HF_MODEL` | Default `Qwen/Qwen3-14B`; selects the served model and the client model name. |
-| `SIF_IMAGE` | Default `$HOME/vllm-openai-v0.8.5.sif`; a pinned repository choice, not a current-version recommendation. |
+| `SIF_IMAGE` | Default `$HOME/vllm-openai_v0.11.0.sif`; version pin comes from `scripts/hpc/aire/variables.sh` (`VLLM_VERSION=0.11.0`). |
 | `PORT` | Override if needed; otherwise `10000 + SLURM_JOB_ID % 50000`. Derived ports reduce collisions but do not reserve a free socket. |
 | `MAX_WAIT_SECONDS` | Default `1500`; separate from Slurm's wall-clock limit. |
 | `LOCAL_HF_CACHE` | Default `$SCRATCH/HF_cache`, bound to `/root/.cache/huggingface` inside the container. |

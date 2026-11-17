@@ -292,18 +292,18 @@ finished. Do not save it in a tracked file or a literal shell-history command.
 
 ### 3.6 Pull the vLLM container
 
-`scripts/hpc/aire/run.sh` defaults to `$HOME/vllm-openai-v0.8.5.sif` — pulled once,
-then reused for compatible deployments. Pinned at `v0.8.5` for reproducibility.
+`scripts/hpc/aire/run.sh` defaults to `$HOME/vllm-openai_v0.11.0.sif` — pulled once,
+then reused for compatible deployments. Pinned at `v0.11.0` for reproducibility.
 
 ```bash
 cd ~
 module add apptainer
-apptainer pull docker://vllm/vllm-openai:v0.8.5
+apptainer pull vllm-openai_v0.11.0.sif docker://vllm/vllm-openai:v0.11.0
 ```
 
-You'll get `vllm-openai-v0.8.5.sif` (~6 GB) in `$HOME`. The script finds it there by default; override with `SIF_IMAGE=/path/to/other.sif sbatch ...` if you put it elsewhere.
+You'll get `vllm-openai_v0.11.0.sif` (~6 GB) in `$HOME`. The script finds it there by default; override with `SIF_IMAGE=/path/to/other.sif sbatch ...` if you put it elsewhere.
 
-This is the launcher's pinned image, not a statement that v0.8.5 supports every
+This is the launcher's pinned image, not a statement that v0.11.0 supports every
 model or future cluster driver. Check compatibility and record the image digest
 or checksum for research runs. Newer model architectures may require a different
 validated image; changing `HF_MODEL` alone does not ensure compatibility.
@@ -324,7 +324,7 @@ launcher (no GPU inference is performed by this command):
 ```bash
 module add apptainer
 HF_MODEL="${HF_MODEL:-Qwen/Qwen3-14B}"
-SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai-v0.8.5.sif}"
+SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai_v0.11.0.sif}"
 LOCAL_HF_CACHE="${LOCAL_HF_CACHE:-$SCRATCH/HF_cache}"
 mkdir -p "$LOCAL_HF_CACHE"
 HF_TOKEN="$(<"${HF_HOME:-$HOME/.cache/huggingface}/token")"
@@ -723,7 +723,7 @@ To author a new sweep, drop a new `.txt` file under [scripts/hpc/aire/sweeps/](.
 | Symptom (in `LLM-cag-run_<jobid>.err` or `.out`) | Cause | Fix |
 | --- | --- | --- |
 | `ERROR: HF_TOKEN is not set` | Token missing on this account or custom `HF_HOME` changed the lookup | Use the protected file or silently supplied environment variable (§3.5); do not print the token |
-| `ERROR: vLLM container not found at: $HOME/vllm-openai-v0.8.5.sif` | Image not pulled, or in wrong place | Re-do §3.6, or `SIF_IMAGE=/your/path.sif sbatch ...` |
+| `ERROR: vLLM container not found at: $HOME/vllm-openai_v0.11.0.sif` | Image not pulled, or in wrong place | Re-do §3.6, or `SIF_IMAGE=/your/path.sif sbatch ...` |
 | `[wait] ERROR: server not ready after 1500s` | Missing weights, slow initialisation, or incompatible model/container | Inspect `vllm_server.log`, pre-cache weights (§3.7), validate compatibility; increase `MAX_WAIT_SECONDS` only if justified. `--time` alone does not fix this |
 | `ERROR: src/cag not found under REPO_DIR=...` | You submitted `sbatch` from outside the repo | `cd ~/Climate-Action-GABM && sbatch ...` |
 | `Cannot resume: config key 'X' changed` | You changed a hard key while passing `--resume` | Either revert the key, or start a fresh run (drop `--resume` and `RESUME_FROM`) |

@@ -54,7 +54,7 @@
 #   - Set HF_TOKEN: either export it in your shell profile, or put it at
 #     $HOME/.cache/huggingface/token (this script reads both).
 #   - conda env create -f environment.yaml   (creates the `cag` env)
-#   - module add apptainer && apptainer pull docker://vllm/vllm-openai
+#   - module add apptainer && apptainer pull "${VLLM_SIF}" "docker://vllm/vllm-openai:v${VLLM_VERSION}"
 #   - Pre-download model weights on the login node (compute nodes have no internet):
 #       module load miniforge && conda activate cag
 #       HF_HOME=$SCRATCH/HF_cache huggingface-cli download Qwen/Qwen3-14B
@@ -78,9 +78,14 @@
 
 set -euo pipefail
 
+# Shared vLLM defaults
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/variables.sh"
+
 # ---- Server plumbing (rarely changes) ---------------------------------------
 HF_MODEL="${HF_MODEL:-Qwen/Qwen3-14B}"                    # change via:  HF_MODEL=swiss-ai/Apertus-8B-2509 sbatch ...
-SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai-v0.8.5.sif}"
+SIF_IMAGE="${SIF_IMAGE:-$HOME/${VLLM_SIF}}"
 # Per-job unique vLLM port so two jobs sharing a GPU node don't collide on a
 # single fixed port (8000), which crashed node-shared sweep jobs. Derived from
 # the Slurm job id; falls back to 8000 outside Slurm. Override with PORT=... .
@@ -159,7 +164,7 @@ echo "=================================================================="
 
 if [[ ! -f "$SIF_IMAGE" ]]; then
     echo "ERROR: vLLM container not found at: $SIF_IMAGE" >&2
-    echo "       Build it once: module add apptainer && apptainer pull docker://vllm/vllm-openai" >&2
+    echo "       Build it once: module add apptainer && apptainer pull \"${VLLM_SIF}\" \"docker://vllm/vllm-openai:v${VLLM_VERSION}\"" >&2
     exit 1
 fi
 

@@ -12,7 +12,7 @@
 #   2. Download a vLLM apptainer sif file to use.
 #
 # Here is an example command:
-# sbatch scripts/hpc/calder/run_server.sh --model Qwen3-14B --working-dir /scratch-calder/calder-uat/geoagdt/gabm --sif vllm-openai_latest.sif
+# sbatch scripts/hpc/calder/run_server.sh --model Qwen3-14B --working-dir /scratch-calder/calder-uat/geoagdt/gabm --sif "${VLLM_SIF}"
 #
 # --model is the name of the LLM model to run
 # --working-dir is a directory location where the sif file is located and where results will be written in a cag_runs folder
@@ -37,6 +37,10 @@ set -euo pipefail
 # set -x causes every command to be echoed into the Slurm output file as it's executed.
 set -x
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/variables.sh"
+
 # Default MODEL_NAME, SIF_FILE, WORKING_DIR, SEED
 MODEL_NAME="Apertus-v1.5-70B"
 #MODEL_NAME="Apertus-v1.5-8B"
@@ -49,9 +53,9 @@ MODEL_NAME="Apertus-v1.5-70B"
 
 # Obtain sif file:
 # apptainer pull apertus15.sif docker://ghcr.io/swiss-ai/vllm_apertus_1.5_release:latest-amd64
-# apptainer pull docker://vllm/vllm-openai
-SIF_FILE="apertus15.sif"
-#SIF_FILE="vllm-openai_latest.sif"
+# apptainer pull "${VLLM_SIF}" "docker://vllm/vllm-openai:v${VLLM_VERSION}"
+SIF_FILE="${VLLM_SIF}"
+#SIF_FILE="apertus15.sif"
 WORKING_DIR="/scratch-calder/calder-uat/${USER}/gabm"
 #WORKING_DIR="/users/${USER}/gabm"
 SEED="42"
@@ -203,4 +207,3 @@ echo "Apptainer exited with code: ${EXIT_CODE}"
 
 echo "=== End memory logging ==="
 kill $MONITOR_PID
-
