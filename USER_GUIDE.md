@@ -280,4 +280,5 @@ Minimal pattern:
 - [DEV_GUIDE.md](DEV_GUIDE.md)
 - [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md)
 - [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md)
+- [Sample output snapshots](documentation/examples/sample_outputs/README.md)
 - [documentation/history/](documentation/history/)
