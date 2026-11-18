@@ -27,6 +27,7 @@ Pick the doc that matches what you want to do:
 | Refactor CAG to reuse and extend the GABM framework | [GABM_Refactor_Plan.md](planning/GABM_Refactor_Plan.md) |
 | Run a fully local LLM backend | [Local_LLM_Setup_Guide.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Local_LLM_Setup_Guide.md) |
 | Run on the Aire HPC cluster | [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md) |
+| See representative completed run artefacts | [sample_outputs/README.md](examples/sample_outputs/README.md) |
 | Check what past experiments found | [result_report.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/research/result_report.md) |
 | Read the paper draft (manuscript + SI) | [`paper/`](paper/) |
 
@@ -39,7 +40,9 @@ the repository layout, use this sequence:
 2. [DEV_QUICKSTART.md](../DEV_QUICKSTART.md) — local setup and test/docs validation loop.
 3. [Code_Tour.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Code_Tour.md) — where the simulation logic lives in `src/cag/`.
 4. [Simulation_Configuration_Guide.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Simulation_Configuration_Guide.md) — canonical run knobs.
-5. HPC only: [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md), then
+5. [sample_outputs/README.md](examples/sample_outputs/README.md) — representative
+   smoke-run artefacts (OpenAI and Ollama) for quick orientation.
+6. HPC only: [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md), then
    [AIRE_HPC_repo_primer.md](guides/hpc/AIRE_HPC_repo_primer.md) for policy/constraints.
 
 ---
