@@ -224,6 +224,10 @@ Recent observed example on this repository/environment:
 - `--preset smoke --provider openai --model gpt-4o-mini` completed in
   **10.6 minutes total wall-clock** (`simulation=10.5 min`, setup/save ~5s).
 - The run log reported `sim per agent-day: 21.09s` for that run.
+- `--preset smoke --provider local --model qwen3:8b` via Ollama completed in
+  **~19.5 hours total wall-clock** on the tested local setup
+  (`simulation=1170.3 min`, setup/save ~12s), showing local latency can vary
+  substantially by hardware/runtime configuration.
 
 Quick planning estimate:
 - runtime ≈ `sim_per_agent_day × n_citizens × (days + 1)`.
@@ -232,6 +236,11 @@ Quick planning estimate:
 Example using 21.09s from the smoke run:
 - `r14_canonical` (`n=50`, `days=5`) → `21.09 × 50 × 6 ≈ 6327s` ≈ **1.75h**
   simulation time, plus a small save/setup overhead.
+
+Practical advice:
+- For fast validation loops, prefer `--preset smoke --dry-run` first, then a
+  hosted-provider smoke run.
+- Use local Ollama runs when local/privacy constraints matter more than speed.
 
 If you need fast iteration, validate changes with `--preset smoke` first, then
 run `r14_canonical` once configuration is stable.
