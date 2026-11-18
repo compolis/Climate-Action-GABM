@@ -15,7 +15,6 @@ like without running the full pipeline first.
 
 ## Files included per snapshot
 
-- `run.log`
 - `config.json`
 - `opinion_trajectories.csv`
 - `package_index_trajectories.csv`
