@@ -214,6 +214,9 @@ run `r14_canonical` once configuration is stable.
 
 ## Running on HPC / AIRE
 
+Start with [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
+to choose the right cluster path and script set.
+
 For University of Leeds AIRE usage, use:
 - [AIRE_Quickstart.md](documentation/guides/hpc/AIRE_Quickstart.md) for zero-to-run setup
 - [AIRE_HPC_repo_primer.md](documentation/guides/hpc/AIRE_HPC_repo_primer.md) for policies, constraints, and troubleshooting
