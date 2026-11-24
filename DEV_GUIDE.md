@@ -82,7 +82,9 @@ The root project directory contains documentation and files needed for building 
 - `docs/`: Sphinx configuration/navigation plus temporary staged content and
   generated site output. Do not author new usage guides here; see
   [Developing Documentation](#developing-documentation).
-- `scripts/`: Utility scripts
+- `scripts/`: Utility scripts organised by purpose:
+  - `scripts/dev/`: developer workflow helpers used by Makefile targets.
+  - `scripts/hpc/`: cluster launch/ops scripts (Aire and Calder profiles).
 - `src/`: Python source code
 - `tests/`: Test suite for src
 - `venv-build-test/`: For temporary virtual environments created for testing.
@@ -246,12 +248,14 @@ For maintainability, all Makefile targets that depend on other build steps shoul
 | `make help`    | Show available Makefile commands                                                  |
 | `make test`    | Run all tests (pytest)                                                            |
 | `make docs`    | Build documentation (Sphinx) and clean auto-copied docs assets                    |
-| `make docs-build` | Build documentation (Sphinx)                                                      |
+| `make docs-make` | Build documentation (Sphinx)                                                      |
 | `make docs-clean` | Remove auto-copied documentation files from docs/                              |
 | `make gh-pages-deploy` | Build and deploy documentation to GitHub Pages (runs `scripts/dev/gh-pages-deploy.py`) |
 | `make clean`   | Remove build/test artifacts and Python caches                                     |
 | `make clear-caches` | Delete all LLM caches and model lists (for a clean slate)                    |
 | `make git-clean` | Clean up merged local branches and prune deleted remotes                        |
+| `make git-prune-local` | Delete local branches merged into `main` (except `main`/`gh-pages`)      |
+| `make git-prune-origin` | Delete `origin` branches merged into `origin/main` (except `main`/`gh-pages`) |
 | `make sync`    | Sync main branch with upstream                                                    |
 | `make sync-feature BRANCH=release/0.2.0` | Sync and rebase a feature/release branch onto main     |
 | `make release VERSION=x.y.z BRANCH=release/x.y.z` | Tag and push a release (platform-agnostic)     |

@@ -68,9 +68,9 @@ Seek advice if suitability is uncertain.
 
 ## 3. Current launcher contract
 
-The implementation sources are [run.sh](../../scripts/aire/run.sh),
-[sweep.sh](../../scripts/aire/sweep.sh), and
-[environment.yaml](../../environment.yaml).
+The implementation sources are [run.sh](../../../scripts/hpc/aire/run.sh),
+[sweep.sh](../../../scripts/hpc/aire/sweep.sh), and
+[environment.yaml](../../../environment.yaml).
 
 The client is `PYTHONPATH=src python -m cag`; it does not itself serve the model.
 The default launcher requests one node, one task, eight CPUs, one GPU, 80 GB
@@ -81,7 +81,7 @@ make CAG a distributed or multi-node simulation.
 | Setting | Current launcher behaviour |
 |---|---|
 | `HF_MODEL` | Default `Qwen/Qwen3-14B`; selects the served model and the client model name. |
-| `SIF_IMAGE` | Default `$HOME/vllm-openai-v0.8.5.sif`; a pinned repository choice, not a current-version recommendation. |
+| `SIF_IMAGE` | Default `$HOME/vllm-openai_v0.11.0.sif`; version pin comes from `scripts/hpc/aire/variables.sh` (`VLLM_VERSION=0.11.0`). |
 | `PORT` | Override if needed; otherwise `10000 + SLURM_JOB_ID % 50000`. Derived ports reduce collisions but do not reserve a free socket. |
 | `MAX_WAIT_SECONDS` | Default `1500`; separate from Slurm's wall-clock limit. |
 | `LOCAL_HF_CACHE` | Default `$SCRATCH/HF_cache`, bound to `/root/.cache/huggingface` inside the container. |
@@ -119,7 +119,7 @@ explicit scratch paths for Slurm logs.
 Pass Slurm options **before** the script path, and CAG options **after** it:
 
 ```bash
-sbatch --time=06:00:00 --mem=120G scripts/aire/run.sh \
+sbatch --time=06:00:00 --mem=120G scripts/hpc/aire/run.sh \
     --preset r14_canonical --exposure-targets split50
 ```
 
@@ -144,13 +144,13 @@ Preserve resolved `config.json`, input/message-set provenance, source commit,
 container identity, and environment versions alongside results. A pinned SIF
 name alone is not a container digest. Fixed seeds do not guarantee identical
 live LLM responses or exact checkpoint replay: the
-[refactor plan](../planning/GABM_Refactor_Plan.md) records checkpoint validation
+[refactor plan](../../planning/GABM_Refactor_Plan.md) records checkpoint validation
 and remaining audit limitations. Sampled prompt-log persistence is opt-in;
 see the [configuration guide](Simulation_Configuration_Guide.md#7-pausing-and-resuming-a-run).
 
 ## 5. Archived article: retained context and unresolved work
 
-[RunningLLMsOnAire.md](../archive/RunningLLMsOnAire.md) remains a dated article
+[RunningLLMsOnAire.md](../../archive/RunningLLMsOnAire.md) remains a dated article
 draft credited to John Hodrien, Jo Kershaw, and Andy Turner, not current CAG
 setup instructions. Its distinct research/service topics remain useful:
 

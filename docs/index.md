@@ -27,6 +27,7 @@ Code_Tour.md
 Local_LLM_Setup_Guide.md
 Prompts_and_Personas_Guide_v2.md
 Run_Output_Guide.md
+Sample_Output_Snapshots.md
 AIRE_Quickstart.md
 AIRE_HPC_repo_primer.md
 SECURITY.md
@@ -58,6 +59,7 @@ supplementary_docs/old_Code_Tour.md
 supplementary_docs/RunningLLMsOnAire.md
 supplementary_docs/github_issues.md
 supplementary_docs/github_issues_v2.md
+USER_GUIDE_pre_1_0_archive.md
 ```
 
 ---

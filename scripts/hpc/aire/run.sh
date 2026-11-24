@@ -19,7 +19,7 @@
 # and passed through as "$@". Slurm headers (--time, --mem, --gpus-per-task,
 # --job-name) are also overridable at sbatch time. To add a new experiment
 # you should NOT have to edit this script — see the canonical examples in
-# the header block below, or scripts/aire/sweeps/*.txt for batch submissions.
+# the header block below, or scripts/hpc/aire/sweeps/*.txt for batch submissions.
 #
 # HOW TO RUN IT — canonical examples (from the repo root on an AIRE login node):
 #
@@ -32,29 +32,29 @@
 #
 #   # 3. Canonical Run-14 baseline on AIRE (uses preset for the bulk, then
 #   #    pins the only fork that the preset deliberately leaves out):
-#   sbatch scripts/aire/run.sh \
+#   sbatch scripts/hpc/aire/run.sh \
 #       --preset r14_canonical \
 #       --exposure-targets split50
 #
 #   # 4. Sensitivity sweep — same preset, different exposure (no script edit):
-#   sbatch --job-name=LLM-cag-neither scripts/aire/run.sh \
+#   sbatch --job-name=LLM-cag-neither scripts/hpc/aire/run.sh \
 #       --preset r14_canonical --exposure-targets neither
 #
 #   # 5. Reach-asymmetry experiment (checkpoints default-on; --no-checkpoint-every-day to opt out):
-#   sbatch --time=06:00:00 scripts/aire/run.sh \
+#   sbatch --time=06:00:00 scripts/hpc/aire/run.sh \
 #       --preset r14_canonical \
 #       --exposure-targets split50 --reach-a 0.5 --reach-b 1.0
 #
 #   # 6. Resume a killed run (same model + config, same OUTDIR):
 #   RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> \
-#       sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+#       sbatch scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50
 #
 # ONE-TIME PREP
 # -------------
 #   - Set HF_TOKEN: either export it in your shell profile, or put it at
 #     $HOME/.cache/huggingface/token (this script reads both).
 #   - conda env create -f environment.yaml   (creates the `cag` env)
-#   - module add apptainer && apptainer pull docker://vllm/vllm-openai
+#   - module add apptainer && apptainer pull "${VLLM_SIF}" "docker://vllm/vllm-openai:v${VLLM_VERSION}"
 #   - Pre-download model weights on the login node (compute nodes have no internet):
 #       module load miniforge && conda activate cag
 #       HF_HOME=$SCRATCH/HF_cache huggingface-cli download Qwen/Qwen3-14B
@@ -63,7 +63,7 @@
 
 # ---- Default Slurm resource request -----------------------------------------
 # Each #SBATCH directive can be overridden on the command line, e.g.
-#   sbatch --time=06:00:00 --mem=120G scripts/aire/run.sh ...
+#   sbatch --time=06:00:00 --mem=120G scripts/hpc/aire/run.sh ...
 # The "LLM-" job-name prefix is REQUIRED by AIRE for LLM jobs (RSE policy).
 #SBATCH --job-name=LLM-cag-run
 #SBATCH --partition=gpu
@@ -78,9 +78,14 @@
 
 set -euo pipefail
 
+# Shared vLLM defaults
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/variables.sh"
+
 # ---- Server plumbing (rarely changes) ---------------------------------------
 HF_MODEL="${HF_MODEL:-Qwen/Qwen3-14B}"                    # change via:  HF_MODEL=swiss-ai/Apertus-8B-2509 sbatch ...
-SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai-v0.8.5.sif}"
+SIF_IMAGE="${SIF_IMAGE:-$HOME/${VLLM_SIF}}"
 # Per-job unique vLLM port so two jobs sharing a GPU node don't collide on a
 # single fixed port (8000), which crashed node-shared sweep jobs. Derived from
 # the Slurm job id; falls back to 8000 outside Slurm. Override with PORT=... .
@@ -117,7 +122,7 @@ cd "$REPO_DIR"
 
 if [[ ! -d "$REPO_DIR/src/cag" ]]; then
     echo "ERROR: src/cag not found under REPO_DIR=$REPO_DIR" >&2
-    echo "       Submit from the repo root:  cd <repo> && sbatch scripts/aire/run.sh ..." >&2
+    echo "       Submit from the repo root:  cd <repo> && sbatch scripts/hpc/aire/run.sh ..." >&2
     exit 1
 fi
 
@@ -133,7 +138,7 @@ if [[ -n "${RESUME_FROM:-}" ]]; then
     echo "[sim] Resuming from ${RESUME_FROM}/checkpoints"
 else
     # Optional descriptive suffix so runs are easy to find in $SCRATCH:
-    #   RUN_LABEL=split50_freq3v1 sbatch scripts/aire/run.sh ...
+    #   RUN_LABEL=split50_freq3v1 sbatch scripts/hpc/aire/run.sh ...
     # -> run_<jobid>_split50_freq3v1.  Empty/unset RUN_LABEL = no suffix.
     SUFFIX="${RUN_LABEL:+_${RUN_LABEL}}"
     OUTDIR="$SCRATCH/cag/runs/run_${SLURM_JOB_ID}${SUFFIX}"
@@ -159,7 +164,7 @@ echo "=================================================================="
 
 if [[ ! -f "$SIF_IMAGE" ]]; then
     echo "ERROR: vLLM container not found at: $SIF_IMAGE" >&2
-    echo "       Build it once: module add apptainer && apptainer pull docker://vllm/vllm-openai" >&2
+    echo "       Build it once: module add apptainer && apptainer pull \"${VLLM_SIF}\" \"docker://vllm/vllm-openai:v${VLLM_VERSION}\"" >&2
     exit 1
 fi
 

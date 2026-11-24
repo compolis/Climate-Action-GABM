@@ -1,6 +1,6 @@
 > **Historical Aire article draft (2026-05-27), not current CAG deployment guidance.**
-> Use the maintained [Aire quickstart](../guides/AIRE_Quickstart.md) and
-> [reference](../guides/AIRE_HPC_repo_primer.md) for this repository.
+> Use the maintained [Aire quickstart](../guides/hpc/AIRE_Quickstart.md) and
+> [reference](../guides/hpc/AIRE_HPC_repo_primer.md) for this repository.
 > The original text is retained below with its authorship and publication intent.
 > Its multi-node example refers to a missing `wrapper`, an external-cluster
 > tunnel hostname, and literal token substitution; do not run it as a CAG recipe

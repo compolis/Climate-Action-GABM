@@ -1,8 +1,8 @@
 # =============================================================================
 # Tier-P persona-null pilot — algorithmic-fidelity manipulation check.
 # 3 arms (real / shuffled / neutral) x 3 seeds (42/43/44) = 9 Day-0-only runs.
-# Each line is forwarded verbatim to `scripts/aire/run.sh "$@"`.
-# Submit:  bash scripts/aire/sweep.sh scripts/aire/sweeps/tierP.txt
+# Each line is forwarded verbatim to `scripts/hpc/aire/run.sh "$@"`.
+# Submit:  bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/tierP.txt
 # Model:   Qwen3-14B (HF_MODEL default; no --model pin). Each run is N=100,
 #          Day-0 only (tierP preset: package mode, day0_anchor=llm_survey,
 #          memory=persona_only), so each Day-0 opinion is a pure function of

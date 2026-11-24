@@ -23,12 +23,12 @@
 #      sha256sum run1/*.out
 # 
 # On login node
-# bash scripts/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42 > 1.out
-# bash scripts/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42 > 2.out
+# bash scripts/hpc/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42 > 1.out
+# bash scripts/hpc/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42 > 2.out
 # diff 1.out 2.out
 # Via slurm
-# sbatch scripts/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42
-# sbatch scripts/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42
+# sbatch scripts/hpc/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42
+# sbatch scripts/hpc/calder/run_client.sh --node calder-h200-05 --port 15882 --working-dir /scratch-calder/calder-uat/geoagdt/gabm --conda-env test-cag --prompt "What is gravity?" --model Qwen3-14B --n 2 --seed 42
 #     
 # --node 	The node on which the server is running 
 # --port	The port over which the server communicates

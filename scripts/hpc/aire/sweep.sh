@@ -3,7 +3,7 @@
 # Submit a sweep of Climate-Action-GABM runs from a plain-text file.
 # =============================================================================
 # Each non-blank, non-comment line in the sweep file is forwarded verbatim as
-# extra arguments to `scripts/aire/run.sh`. One Slurm job is submitted per
+# extra arguments to `scripts/hpc/aire/run.sh`. One Slurm job is submitted per
 # line. Lines starting with `#` are comments.
 #
 # Per-line run label (optional): if a line begins with a `LABEL=<token>`
@@ -14,10 +14,10 @@
 #   LABEL=tier1_baseline_s42 --preset tier1 --reach-a 1.0 --reach-b 1.0 --seed 42
 #
 # USAGE (from the repo root):
-#   bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt
+#   bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt
 #
 #   # Forward extra sbatch flags to every job in the sweep (e.g. longer time):
-#   bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt --time=06:00:00
+#   bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt --time=06:00:00
 #
 # The sweep file path is relative to the repo root (or absolute). All
 # submitted job ids are echoed and appended to <sweep_file>.log.
@@ -40,7 +40,7 @@ if [[ ! -r "$SWEEP_FILE" ]]; then
 fi
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-RUN_SH="$REPO_DIR/scripts/aire/run.sh"
+RUN_SH="$REPO_DIR/scripts/hpc/aire/run.sh"
 LOG="${SWEEP_FILE}.log"
 echo "# sweep started $(date -Iseconds)" >> "$LOG"
 

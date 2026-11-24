@@ -39,9 +39,9 @@ cd ~ && module add apptainer && apptainer pull docker://vllm/vllm-openai:v0.8.5 
 cd ~/Climate-Action-GABM
 mkdir -p "$SCRATCH/cag/slurm"
 sbatch --output="$SCRATCH/cag/slurm/%x_%j.out" --error="$SCRATCH/cag/slurm/%x_%j.err" \
-    scripts/aire/run.sh --preset smoke                              # §5 — cheap canary
+    scripts/hpc/aire/run.sh --preset smoke                              # §5 — cheap canary
 sbatch --output="$SCRATCH/cag/slurm/%x_%j.out" --error="$SCRATCH/cag/slurm/%x_%j.err" \
-    scripts/aire/run.sh --preset r14_canonical --exposure-targets split50   # §6
+    scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50   # §6
 squeue --me                                                                    # §9 — watch it
 # then, on your LAPTOP:
 rsync -avP aire:/mnt/scratch/<user>/cag/runs/ ~/src/aire-runs/                  # §8 — pull results
@@ -228,7 +228,7 @@ cd Climate-Action-GABM
 <details>
 <summary>Details — org repo vs. your fork, and using a non-default SSH key</summary>
 
-**Org repo vs. your fork.** This clones the canonical **org** repo `compolis/Climate-Action-GABM` — the right choice for *running* canonical experiments on Aire, since you want the merged source of truth. If instead you are *developing code* and following the fork-based contributor flow ([DEV_QUICKSTART](../../DEV_QUICKSTART.md)), clone your own fork — `git@github.com:<your-github-username>/Climate-Action-GABM.git` — and add the org repo as `upstream` (`git remote add upstream git@github.com:compolis/Climate-Action-GABM.git`). Either way the SSH-key setup is identical, and `scripts/aire/run.sh` doesn't care which remote you cloned from.
+**Org repo vs. your fork.** This clones the canonical **org** repo `compolis/Climate-Action-GABM` — the right choice for *running* canonical experiments on Aire, since you want the merged source of truth. If instead you are *developing code* and following the fork-based contributor flow ([DEV_QUICKSTART](../../../DEV_QUICKSTART.md)), clone your own fork — `git@github.com:<your-github-username>/Climate-Action-GABM.git` — and add the org repo as `upstream` (`git remote add upstream git@github.com:compolis/Climate-Action-GABM.git`). Either way the SSH-key setup is identical, and `scripts/hpc/aire/run.sh` doesn't care which remote you cloned from.
 
 **If your Aire key isn't the default `~/.ssh/id_ed25519`** (e.g. you keep a dedicated `~/.ssh/aire_repo`), the bare `git clone git@...` form won't pick it up. Use:
 
@@ -256,7 +256,7 @@ update with `conda env update -f environment.yaml --prune` from the repo.
 
 ### 3.5 Hugging Face token
 
-`scripts/aire/run.sh` uses `HF_TOKEN` first, otherwise
+`scripts/hpc/aire/run.sh` uses `HF_TOKEN` first, otherwise
 `${HF_HOME:-$HOME/.cache/huggingface}/token`. The default file survives logins.
 Use a **read** token from <https://huggingface.co/settings/tokens>. Check the
 chosen model's licence and access requirements; accept any gating agreement
@@ -292,18 +292,18 @@ finished. Do not save it in a tracked file or a literal shell-history command.
 
 ### 3.6 Pull the vLLM container
 
-`scripts/aire/run.sh` defaults to `$HOME/vllm-openai-v0.8.5.sif` — pulled once,
-then reused for compatible deployments. Pinned at `v0.8.5` for reproducibility.
+`scripts/hpc/aire/run.sh` defaults to `$HOME/vllm-openai_v0.11.0.sif` — pulled once,
+then reused for compatible deployments. Pinned at `v0.11.0` for reproducibility.
 
 ```bash
 cd ~
 module add apptainer
-apptainer pull docker://vllm/vllm-openai:v0.8.5
+apptainer pull vllm-openai_v0.11.0.sif docker://vllm/vllm-openai:v0.11.0
 ```
 
-You'll get `vllm-openai-v0.8.5.sif` (~6 GB) in `$HOME`. The script finds it there by default; override with `SIF_IMAGE=/path/to/other.sif sbatch ...` if you put it elsewhere.
+You'll get `vllm-openai_v0.11.0.sif` (~6 GB) in `$HOME`. The script finds it there by default; override with `SIF_IMAGE=/path/to/other.sif sbatch ...` if you put it elsewhere.
 
-This is the launcher's pinned image, not a statement that v0.8.5 supports every
+This is the launcher's pinned image, not a statement that v0.11.0 supports every
 model or future cluster driver. Check compatibility and record the image digest
 or checksum for research runs. Newer model architectures may require a different
 validated image; changing `HF_MODEL` alone does not ensure compatibility.
@@ -324,7 +324,7 @@ launcher (no GPU inference is performed by this command):
 ```bash
 module add apptainer
 HF_MODEL="${HF_MODEL:-Qwen/Qwen3-14B}"
-SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai-v0.8.5.sif}"
+SIF_IMAGE="${SIF_IMAGE:-$HOME/vllm-openai_v0.11.0.sif}"
 LOCAL_HF_CACHE="${LOCAL_HF_CACHE:-$SCRATCH/HF_cache}"
 mkdir -p "$LOCAL_HF_CACHE"
 HF_TOKEN="$(<"${HF_HOME:-$HOME/.cache/huggingface}/token")"
@@ -394,7 +394,7 @@ as a small canary before a real run.
 
 ```bash
 cd ~/Climate-Action-GABM
-sbatch scripts/aire/run.sh --preset smoke
+sbatch scripts/hpc/aire/run.sh --preset smoke
 # -> Submitted batch job 12345
 ```
 
@@ -404,11 +404,11 @@ Pre-cache the model (§3.7); scheduled smoke validation is still required.
 <details>
 <summary>Which model it uses, and what <code>run.sh</code> actually does</summary>
 
-**Which model does the smoke run use?** The `smoke` preset does **not** pin a model — it's a pure run-shape bundle. On Aire, `scripts/aire/run.sh` hardcodes `--model "$HF_MODEL"`, and `HF_MODEL` defaults to `Qwen/Qwen3-14B` (served by vLLM inside the SIF). To test a different model, prefix the sbatch line: `HF_MODEL=other/model sbatch scripts/aire/run.sh --preset smoke`.
+**Which model does the smoke run use?** The `smoke` preset does **not** pin a model — it's a pure run-shape bundle. On Aire, `scripts/hpc/aire/run.sh` hardcodes `--model "$HF_MODEL"`, and `HF_MODEL` defaults to `Qwen/Qwen3-14B` (served by vLLM inside the SIF). To test a different model, prefix the sbatch line: `HF_MODEL=other/model sbatch scripts/hpc/aire/run.sh --preset smoke`.
 
 **What the command does:**
 
-- `scripts/aire/run.sh` starts vLLM on a job-derived port (or `PORT` override),
+- `scripts/hpc/aire/run.sh` starts vLLM on a job-derived port (or `PORT` override),
   waits for a successful chat completion for `HF_MODEL`, then runs
   `python -m cag` using that model/endpoint. `MAX_WAIT_SECONDS` defaults to 1500.
   Caller research flags are forwarded. Do not override the injected
@@ -428,12 +428,12 @@ Pre-cache the model (§3.7); scheduled smoke validation is still required.
 Once the smoke succeeds, submit the canonical research run. Same `run.sh`, different flags.
 
 ```bash
-sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+sbatch scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50
 ```
 
 | Token | What it does |
 | --- | --- |
-| `sbatch scripts/aire/run.sh` | Queue the Aire launcher script (vLLM bring-up + `python -m cag` + cleanup) |
+| `sbatch scripts/hpc/aire/run.sh` | Queue the Aire launcher script (vLLM bring-up + `python -m cag` + cleanup) |
 | `--preset r14_canonical` | Apply the Run-14 baseline bundle (50 agents, 5 days, `k_peers_per_day=0`, `day0_anchor=ground_truth_with_rationale`, `thinking=False`, default `memory` preset; the Condition-B two-step survey is always on) |
 | `--exposure-targets split50` | Pin the political-exposure mix to a `{A-only: 0.5, B-only: 0.5}` split (everyone gets exactly one side's broadcasts). The canonical persuasion test condition |
 
@@ -447,7 +447,7 @@ and model setup. Validate timings on your current cluster/model combination.
 > and simulation, subject to current partition limits.
 
 ```bash
-MAX_WAIT_SECONDS=3000 sbatch --time=06:00:00 scripts/aire/run.sh \
+MAX_WAIT_SECONDS=3000 sbatch --time=06:00:00 scripts/hpc/aire/run.sh \
     --preset r14_canonical --exposure-targets split50
 ```
 
@@ -637,12 +637,12 @@ guaranteed**: checkpoints restore offline message cursors and Python's
 process-wide random state, but prompt history is restored only if opt-in
 persistence was enabled from the original run, and live-model variability
 remains a limitation. Older checkpoints lacking random state cannot
-continue with days remaining. See the [refactor plan](../planning/GABM_Refactor_Plan.md)
+continue with days remaining. See the [refactor plan](../../planning/GABM_Refactor_Plan.md)
 and do not treat a resumed run as scientifically equivalent without an
 appropriate equivalence check.
 
 ```bash
-RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> sbatch scripts/aire/run.sh \
+RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> sbatch scripts/hpc/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50
 ```
@@ -659,7 +659,7 @@ before accepting that risk.
 Checked at startup, fails loudly on mismatch:
 
 The authoritative hard/soft key lists and resolved network-parameter comparison
-are in [checkpoint.py](../../src/cag/io/checkpoint.py). Hard keys include
+are in [checkpoint.py](../../../src/cag/io/checkpoint.py). Hard keys include
 persona mode, reach-targeting modes, and memory configuration as well as
 population/exposure/message settings; mismatches abort. Tolerated transport
 changes can still alter research results even when only a warning is emitted.
@@ -675,7 +675,7 @@ If you need to change a hard key, start a fresh run instead of resuming.
 
 For ≥3 related jobs (different exposure targets, different reach values, etc.), use the sweep wrapper: one text file lists the per-job flag suffix on each line, the wrapper submits one `sbatch` per line.
 
-The shipped example, [scripts/aire/sweeps/r14_v2.txt](../../scripts/aire/sweeps/r14_v2.txt):
+The shipped example, [scripts/hpc/aire/sweeps/r14_v2.txt](../../../scripts/hpc/aire/sweeps/r14_v2.txt):
 
 ```text
 --preset r14_canonical --exposure-targets split50
@@ -686,13 +686,13 @@ The shipped example, [scripts/aire/sweeps/r14_v2.txt](../../scripts/aire/sweeps/
 Submit all three:
 
 ```bash
-bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt
+bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt
 ```
 
-Each line becomes one `sbatch scripts/aire/run.sh <that line>`. The wrapper prints every submitted job ID and appends them to `<sweep_file>.log` for later cross-reference. Pass extra `sbatch` flags applied to **every** job after the file name:
+Each line becomes one `sbatch scripts/hpc/aire/run.sh <that line>`. The wrapper prints every submitted job ID and appends them to `<sweep_file>.log` for later cross-reference. Pass extra `sbatch` flags applied to **every** job after the file name:
 
 ```bash
-bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt --time=06:00:00 --mem=120G
+bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt --time=06:00:00 --mem=120G
 ```
 
 Use the golden-path scratch-log `--output` and `--error` overrides here too.
@@ -711,7 +711,7 @@ LABEL=split50_s42 --preset r14_canonical --seed 42 --exposure-targets {"A-only":
 - **Sweep is better:** ≥3 related jobs; you want a single artefact (the `.log`) recording the whole experiment grid; you want identical Slurm settings.
 - **Plain sbatch is better:** one-off, or each job needs different Slurm settings.
 
-To author a new sweep, drop a new `.txt` file under [scripts/aire/sweeps/](../../scripts/aire/sweeps/) — one line per job, `#` for comments. No code change.
+To author a new sweep, drop a new `.txt` file under [scripts/hpc/aire/sweeps/](../../../scripts/hpc/aire/sweeps/) — one line per job, `#` for comments. No code change.
 </details>
 
 **Next:** errors? §12.
@@ -723,7 +723,7 @@ To author a new sweep, drop a new `.txt` file under [scripts/aire/sweeps/](../..
 | Symptom (in `LLM-cag-run_<jobid>.err` or `.out`) | Cause | Fix |
 | --- | --- | --- |
 | `ERROR: HF_TOKEN is not set` | Token missing on this account or custom `HF_HOME` changed the lookup | Use the protected file or silently supplied environment variable (§3.5); do not print the token |
-| `ERROR: vLLM container not found at: $HOME/vllm-openai-v0.8.5.sif` | Image not pulled, or in wrong place | Re-do §3.6, or `SIF_IMAGE=/your/path.sif sbatch ...` |
+| `ERROR: vLLM container not found at: $HOME/vllm-openai_v0.11.0.sif` | Image not pulled, or in wrong place | Re-do §3.6, or `SIF_IMAGE=/your/path.sif sbatch ...` |
 | `[wait] ERROR: server not ready after 1500s` | Missing weights, slow initialisation, or incompatible model/container | Inspect `vllm_server.log`, pre-cache weights (§3.7), validate compatibility; increase `MAX_WAIT_SECONDS` only if justified. `--time` alone does not fix this |
 | `ERROR: src/cag not found under REPO_DIR=...` | You submitted `sbatch` from outside the repo | `cd ~/Climate-Action-GABM && sbatch ...` |
 | `Cannot resume: config key 'X' changed` | You changed a hard key while passing `--resume` | Either revert the key, or start a fresh run (drop `--resume` and `RESUME_FROM`) |
@@ -751,7 +751,7 @@ module load miniforge
 conda env update -f environment.yaml --prune
 ```
 
-If `scripts/aire/run.sh` mentions a newer vLLM image version, repeat §3.6 with that version. The previous SIF can be deleted (or kept side-by-side and selected with `SIF_IMAGE=...`). The conda env, the model weights cache (`$SCRATCH/HF_cache`), and the SIF live outside the repo tree — none of those need touching on a `git pull`.
+If `scripts/hpc/aire/run.sh` mentions a newer vLLM image version, repeat §3.6 with that version. The previous SIF can be deleted (or kept side-by-side and selected with `SIF_IMAGE=...`). The conda env, the model weights cache (`$SCRATCH/HF_cache`), and the SIF live outside the repo tree — none of those need touching on a `git pull`.
 
 ---
 
@@ -834,32 +834,32 @@ For ports, image/cache choices, readiness timeouts, labels, and resume, see the
 
 ```bash
 # Reach-asymmetry sweep with a longer wall-clock (checkpoints default-on):
-sbatch --time=06:00:00 scripts/aire/run.sh \
+sbatch --time=06:00:00 scripts/hpc/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50 \
     --reach-a 0.5 --reach-b 1.0
 
 # Bypass the offline message pool and have the LLM generate political text:
-sbatch scripts/aire/run.sh \
+sbatch scripts/hpc/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50 \
     --message-source llm
 
 # Inline JSON for a one-off exposure mix (no preset name needed):
-sbatch scripts/aire/run.sh \
+sbatch scripts/hpc/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets '{"A-only":0.4,"B-only":0.4,"both":0.1,"neither":0.1}'
 
 # Memory ablation — drop the Day-0 anchor to test how much it pins opinions
 # (compare against the same run with --memory default):
-sbatch scripts/aire/run.sh \
+sbatch scripts/hpc/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50 \
     --memory no_anchor
 
 # Hand-tuned memory — widen the verbatim window and hide the anchor at survey
 # time only (inline JSON):
-sbatch scripts/aire/run.sh \
+sbatch scripts/hpc/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50 \
     --memory '{"verbatim_window_days":3,"stages":{"survey":{"day0_anchor":{"enabled":false}}}}'
@@ -867,7 +867,7 @@ sbatch scripts/aire/run.sh \
 # Peer fan-out — let well-connected citizens relay wider ("influentials"). The
 # default additive budget grows total peer talk as connectivity rises (realistic
 # posting-network model); --peer-fanout-kmax caps how far even the biggest hub goes:
-sbatch scripts/aire/run.sh \
+sbatch scripts/hpc/aire/run.sh \
     --preset r14_canonical \
     --exposure-targets split50 \
     --k-peers 2 --peer-fanout-mode degree --peer-fanout-budget additive --peer-fanout-kmax 10
@@ -885,22 +885,22 @@ PYTHONPATH=src python -m cag --list-presets
 PYTHONPATH=src python -m cag --preset smoke --dry-run
 
 # Smoke job (cheap full-stack canary):
-sbatch scripts/aire/run.sh --preset smoke
+sbatch scripts/hpc/aire/run.sh --preset smoke
 
 # Canonical split50 Run-14:
-sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+sbatch scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50
 
 # Same run, longer wall-clock + per-day checkpointing:
-sbatch --time=06:00:00 scripts/aire/run.sh --preset r14_canonical --exposure-targets split50 --checkpoint-every-day
+sbatch --time=06:00:00 scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50 --checkpoint-every-day
 
 # Historical 2026-07-02 submission examples (not the current canonical preset)
-sbatch --time=06:00:00 scripts/aire/run.sh \
+sbatch --time=06:00:00 scripts/hpc/aire/run.sh \
     --n-citizens 50 --days 5 --k-peers 2 --seed 42 \
     --exposure-targets '{"A-only":0.05,"B-only":0.05,"both":0.60,"neither":0.30}' \
     --reach-a 1.0 --reach-b 1.0 \
     --memory '{"persona":{"enabled":true},"day0_anchor":{"enabled":true,"ttl_days":1},"daily_summaries":{"enabled":true},"recent_reflections":{"enabled":true},"own_reasoning":{"enabled":true},"today_so_far":{"enabled":true},"opinion_trajectory":{"enabled":false},"verbatim_window_days":2,"stages":{"peer_message":{},"reflection":{},"survey":{}}}'
 
-sbatch --time=06:00:00 scripts/aire/run.sh \
+sbatch --time=06:00:00 scripts/hpc/aire/run.sh \
     --n-citizens 50 --days 5 --k-peers 2 --seed 42 \
     --exposure-targets '{"A-only":0.05,"B-only":0.05,"both":0.60,"neither":0.30}' \
     --reach-a 1.0 --reach-b 1.0 \
@@ -909,10 +909,10 @@ sbatch --time=06:00:00 scripts/aire/run.sh \
     --memory '{"persona":{"enabled":true},"day0_anchor":{"enabled":true,"ttl_days":1},"daily_summaries":{"enabled":true},"recent_reflections":{"enabled":true},"own_reasoning":{"enabled":true},"today_so_far":{"enabled":true},"opinion_trajectory":{"enabled":false},"verbatim_window_days":2,"stages":{"peer_message":{},"reflection":{},"survey":{}}}'
 
 # Resume a killed run (same OUTDIR, same hard keys):
-RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> sbatch scripts/aire/run.sh --preset r14_canonical --exposure-targets split50
+RESUME_FROM=$SCRATCH/cag/runs/run_<old_jobid> sbatch scripts/hpc/aire/run.sh --preset r14_canonical --exposure-targets split50
 
 # Multi-job sweep from a one-line-per-job text file:
-bash scripts/aire/sweep.sh scripts/aire/sweeps/r14_v2.txt
+bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/r14_v2.txt
 
 # Monitoring:
 squeue --me

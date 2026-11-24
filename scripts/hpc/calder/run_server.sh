@@ -1,46 +1,34 @@
-#!/bin/bash -l
-#
+#!/bin/bash
 # =============================================================================
-# Climate-Action-GABM — generic Calder (Leeds HPC) launcher
+# Climate-Action-GABM — server Calder (Leeds HPC) launcher
 # =============================================================================
 #
 # WHAT THIS DOES:
 #   1. Loads the necessary modules for activating a conda enviornment.
 #   2. Starts a vLLM server on a H200 GPU node within an apptainer container. The vLLM server is loaded with the model specified.
-#   3. Activates the Climate-Action-GABM conda enviornment.
-#   4. Runs the cag Python process passing in command line arguments.
-#   5. Saves results.
-#   6. Shuts the server down.
-#
-# If there is insufficient time to complete the simulation but some days have completed, then to process further a new run has to be started to resume the simulation.
 #
 # HOW TO RUN IT:
 #   1. Download the LLM model you want to use.
 #   2. Download a vLLM apptainer sif file to use.
-#   3. Download Climate-Action-GABM and set up a virtual environment as per the User Guide
-# 
-# Here is an example command:
-# sbatch scripts/calder/run.sh --model Qwen3-14B --working-dir /scratch-calder/calder-uat/geoagdt/gabm --sif vllm-openai_latest.sif --conda-env test-cag --preset tier1 --exposure-targets committed_minority_15 --days 52 --broadcasts-a 1 --broadcasts-b 2 --peer-fanout-mode degree --peer-fanout-budget additive --network-type barabasi_albert --network-params '{"m":2}' --reach-a 0.25 --reach-b 1.0 --seed 42
 #
-# --model if not specified is the Qwen3-14B model
+# Here is an example command:
+# sbatch scripts/hpc/calder/run_server.sh --model Qwen3-14B --working-dir /scratch-calder/calder-uat/geoagdt/gabm --sif "${VLLM_SIF}"
+#
+# --model is the name of the LLM model to run
 # --working-dir is a directory location where the sif file is located and where results will be written in a cag_runs folder
 # --sif is the name of the sif file to use
-# --conda-env is the name of the conda enviornment to activate
-# Other parameters are passed in the cag run command.
-#
-# To restart a run the user must pass --resume and detail the --outdir for example:
-# sbatch scripts/calder/run.sh --model Qwen3-14B --working-dir /scratch-calder/calder-uat/geoagdt/gabm --sif vllm-openai_latest.sif --conda-env test-cag --preset tier1 --exposure-targets committed_minority_15 --days 52 --broadcasts-a 1 --broadcasts-b 2 --peer-fanout-mode degree --peer-fanout-budget additive --network-type barabasi_albert --network-params '{"m":2}' --reach-a 0.25 --reach-b 1.0 --seed 42 --resume --outdir /scratch-calder/calder-uat/geoagdt/gabm/cag_runs/run_4751
+# --seed is the seed to use to initilise the LLM
 #
 # The following are Slurm parameters to request resources and direct output
 # "LLM-" job-name prefix is wanted for LLM jobs (Research Computing policy).
-#SBATCH --job-name=LLM-cag-run
-#SBATCH --partition=gpu_hopper
+#SBATCH --job-name=LLM-cag-server
 #SBATCH --nodes=1
+#SBATCH --partition=gpu_hopper
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=256G
-#SBATCH --time=48:00:00
+#SBATCH --time=01:00:00            
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 
@@ -48,6 +36,10 @@ set -euo pipefail
 
 # set -x causes every command to be echoed into the Slurm output file as it's executed.
 set -x
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/variables.sh"
 
 # Default MODEL_NAME, SIF_FILE, WORKING_DIR, SEED
 MODEL_NAME="Apertus-v1.5-70B"
@@ -61,14 +53,13 @@ MODEL_NAME="Apertus-v1.5-70B"
 
 # Obtain sif file:
 # apptainer pull apertus15.sif docker://ghcr.io/swiss-ai/vllm_apertus_1.5_release:latest-amd64
-# apptainer pull docker://vllm/vllm-openai
-SIF_FILE="apertus15.sif"
-#SIF_FILE="vllm-openai_latest.sif"
-WORKING_DIR="/scratch-calder/calder-uat/geoagdt/gabm"
-#WORKING_DIR="/users/geoagdt/gabm"
+# apptainer pull "${VLLM_SIF}" "docker://vllm/vllm-openai:v${VLLM_VERSION}"
+SIF_FILE="${VLLM_SIF}"
+#SIF_FILE="apertus15.sif"
+WORKING_DIR="/scratch-calder/calder-uat/${USER}/gabm"
+#WORKING_DIR="/users/${USER}/gabm"
 SEED="42"
-#CONDA_ENV="test-cag"
-CONDA_ENV="cag"
+
 
 # Check Arguments
 CLI_ARGS=()
@@ -90,9 +81,9 @@ while [[ $# -gt 0 ]]; do
       WORKING_DIR="$2"
       shift 2
       ;;
-    --conda-env)
-      [[ -z "$2" ]] && { echo "Missing value for --conda-env"; exit 1; }
-      CONDA_ENV="$2"
+    --seed)
+      [[ -z "$2" ]] && { echo "Missing value for --seed"; exit 1; }
+      SEED="$2"
       shift 2
       ;;
     *)
@@ -110,7 +101,6 @@ echo ${MODEL_NAME}
 module load calder/hopper
 module load cuda/13.3.0
 module load nccl/2.29.7-1
-module load miniforge3
 
 echo "=== WORKING_DIR ==="
 echo ${WORKING_DIR}
@@ -134,33 +124,9 @@ cd "${REPO_DIR}"
 echo "=== REPO_DIR ==="
 echo ${REPO_DIR}
 
-# Default
 OUTDIR="${WORKING_DIR}/cag_runs/run_${SLURM_JOB_ID}"
-OUTDIR_PASSED=false
-# Look for --outdir argument without mutating positional parameters.
-for ((i=0; i<${#CLI_ARGS[@]}; i++)); do
-  if [[ "${CLI_ARGS[$i]}" == "--outdir" ]] && [[ $((i + 1)) -lt ${#CLI_ARGS[@]} ]]; then
-    OUTDIR="${CLI_ARGS[$((i + 1))]}"
-    OUTDIR_PASSED=true
-  fi
-done
+mkdir -p "${OUTDIR}"
 echo "Using OUTDIR=$OUTDIR"
-if ! $OUTDIR_PASSED; then
-  mkdir -p "${OUTDIR}"
-  echo "Created OUTDIR"
-elif [[ -d "$OUTDIR" ]]; then
-  echo "Restarting from existing directory: $OUTDIR"
-else
-  echo "Error: directory does not exist: $OUTDIR"
-  exit 1
-fi
-
-# Look for --seed argument without mutating positional parameters.
-for ((i=0; i<${#CLI_ARGS[@]}; i++)); do
-  if [[ "${CLI_ARGS[$i]}" == "--seed" ]] && [[ $((i + 1)) -lt ${#CLI_ARGS[@]} ]]; then
-    SEED="${CLI_ARGS[$((i + 1))]}"
-  fi
-done
 echo "Using SEED=$SEED"
 
 export PYTHONUNBUFFERED=1
@@ -221,9 +187,9 @@ apptainer exec \
   --chat-template-content-format string \
   --gpu-memory-utilization 0.9 \
   --port "${PORT}" \
-  > "${SERVER_LOG}" 2>&1 &
+  > "${SERVER_LOG}" 2>&1 
 
-SERVER_PID=$!
+SERVER_PID=$?
 
 # Shutdown
 cleanup() {
@@ -235,41 +201,9 @@ trap cleanup EXIT
 # Capture exit code of apptainer vllm serve process
 EXIT_CODE=$?
 
-END=$(date +%s)
-
-echo "Elapsed: $((END-START)) seconds"
 
 echo "=== End Apptainer ==="
 echo "Apptainer exited with code: ${EXIT_CODE}"
 
 echo "=== End memory logging ==="
 kill $MONITOR_PID
-
-
-# Activate conda environment
-eval "$(conda shell.bash hook)"
-conda activate ${CONDA_ENV}
-
-# Readiness loop
-until curl -sf "${BASE_URL}/chat/completions" \
-  -H 'Content-Type: application/json' \
-  -d "$(python3 -c "
-import json
-print(json.dumps({
-    'model': '${MODEL_NAME}',
-    'messages': [{'role': 'user', 'content': 'ping'}],
-    'max_tokens': 1
-}))
-")" >/dev/null 2>&1
-do
-  sleep 10
-done
-
-# Run cag
-PYTHONPATH=src python -m cag \
-  --provider local \
-  --model ${MODEL_NAME} \
-  --base-url "${BASE_URL}" \
-  --outdir "${OUTDIR}" \
-  "${CLI_ARGS[@]}"
-
