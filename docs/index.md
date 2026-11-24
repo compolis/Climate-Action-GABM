@@ -28,6 +28,7 @@ Local_LLM_Setup_Guide.md
 Prompts_and_Personas_Guide_v2.md
 Run_Output_Guide.md
 Sample_Output_Snapshots.md
+Running_On_HPC_Systems.md
 AIRE_Quickstart.md
 AIRE_HPC_repo_primer.md
 SECURITY.md

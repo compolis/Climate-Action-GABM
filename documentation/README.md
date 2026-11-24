@@ -26,6 +26,7 @@ Pick the doc that matches what you want to do:
 | Find my way around the source code | [Code_Tour.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Code_Tour.md) |
 | Refactor CAG to reuse and extend the GABM framework | [GABM_Refactor_Plan.md](planning/GABM_Refactor_Plan.md) |
 | Run a fully local LLM backend | [Local_LLM_Setup_Guide.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Local_LLM_Setup_Guide.md) |
+| Choose an HPC path and script set | [Running_On_HPC_Systems.md](guides/hpc/Running_On_HPC_Systems.md) |
 | Run on the Aire HPC cluster | [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md) |
 | See representative completed run artefacts | [sample_outputs/README.md](examples/sample_outputs/README.md) |
 | Check what past experiments found | [result_report.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/research/result_report.md) |
@@ -83,6 +84,7 @@ the repository layout, use this sequence:
 
 | File | Role | Use it when… |
 |---|---|---|
+| [Running_On_HPC_Systems.md](guides/hpc/Running_On_HPC_Systems.md) | HPC entrypoint for route selection and script locations (AIRE primary, Calder secondary). | You want to decide which cluster guide/scripts to use before submitting jobs. |
 | [AIRE_HPC_repo_primer.md](guides/hpc/AIRE_HPC_repo_primer.md) | CAG launcher reference, cited Leeds guidance, storage/data constraints, and verification limits. | You need to distinguish repository conventions from service policy and unresolved deployment work. |
 | [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md) | Maintained setup/submission/transfer recipe; links to canonical configuration and output references instead of duplicating them. | You want to prepare and validate a CAG job on Aire. |
 | [RunningLLMsOnAire.md](archive/RunningLLMsOnAire.md) | Historical article draft with preserved authorship and distinct multi-node/socket/cache/energy ideas; not a runnable CAG recipe. | You need provenance or context for a future deployment design. |

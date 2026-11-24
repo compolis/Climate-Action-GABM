@@ -59,6 +59,7 @@
 ##SBATCH --output=/users/geoagdt/slurm/%x_%j.out
 ##SBATCH --error=/users/geoagdt/slurm/%x_%j.err
 
+set -euo pipefail
 set -x
 
 #ls ~/scratch-calder
@@ -81,6 +82,11 @@ NODE="calder-h200-05"
 PORT="15882"
 #MODEL="Apertus-v1.5-70B"
 MODEL="Qwen3-14B"
+WORKING_DIR="/scratch-calder/calder-uat/${USER}/gabm"
+CONDA_ENV="cag"
+PROMPT="What is gravity?"
+N="2"
+SEED="42"
 
 # Check Arguments
 CLI_ARGS=()
@@ -135,7 +141,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-OUTDIR="${WORKING_DIR}/cag_runs/run_${SLURM_JOB_ID}"
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  RUN_ID="${SLURM_JOB_ID}"
+else
+  RUN_ID="$(date +%Y%m%d_%H%M%S)"
+fi
+OUTDIR="${WORKING_DIR}/cag_runs/run_${RUN_ID}"
 mkdir -p "${OUTDIR}"
 echo "Using OUTDIR ${OUTDIR}"
 
@@ -191,4 +202,3 @@ pprint.pp(resp["choices"][0].get("logprobs"))
 ' > "$outfile"
 
 done
-
