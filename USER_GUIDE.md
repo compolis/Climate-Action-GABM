@@ -1,19 +1,12 @@
 # User Guide
 
 ## Table of Contents
-- [Overview](#overview)
 - [Getting Started](#getting-started)
 - [Run the Main Program](#run-the-main-program)
 - [Advanced Guides](#advanced-guides)
 - [Running on HPC / AIRE](#running-on-hpc--aire)
 - [Troubleshooting](#troubleshooting)
 - [Additional Resources](#additional-resources)
-
-
-## Overview
-This guide is the current, practical runbook for Climate-Action-GABM users.
-It focuses on setup, smoke validation, canonical baseline runs, and where to go
-next for configuration and output interpretation.
 
 
 ## Getting Started
@@ -28,8 +21,10 @@ python3 --version
 
 ### Initial set up
 
+There are two main ways: Using Conda, and using Python (venv + pip):
+
 #### Using Conda
-If you use [Conda](https://conda.org/) which is distributed with [Anaconda](https://www.anaconda.com/), [Miniconda](https://docs.conda.io/en/latest/miniconda.html), or [Miniforge](https://github.com/conda-forge/miniforge), you can set up Climate-Action-GABM in a new environment as follows:
+[Conda](https://conda.org/) is distributed with [Anaconda](https://www.anaconda.com/), [Miniconda](https://docs.conda.io/en/latest/miniconda.html), or [Miniforge](https://github.com/conda-forge/miniforge). Once Conda is installed, you can set up Climate-Action-GABM in a new environment called cag as follows:
 
 ```bash
 conda create -n cag -y
@@ -47,7 +42,9 @@ conda list -e > requirements.txt
 ```
 
 
-### Initial setup (venv)
+#### Using Python (venv + pip)
+
+As an alternative to using Conda, you can create a new Python environment called cag-venv and install from the source files as follows:
 
 ```bash
 python3 -m venv cag-venv
@@ -65,68 +62,27 @@ pip freeze > requirements.txt
 ```
 
 
-#### Optional: Local LLM Server Setup
+#### Optional: LLM Server Setup
 
 The default runtime path uses `provider=local`, which expects an
 OpenAI-compatible local server at `http://localhost:8080/v1`.
+If using Ollama, pass `--base-url http://127.0.0.1:11434/v1`.
 
-If you plan to run non-dry-run simulations locally, set up and start a local
-server first. See
+To run simulations locally, start an OpenAI-compatible local LLM
+server. To set one up, see
 [Local_LLM_Setup_Guide.md](documentation/guides/Local_LLM_Setup_Guide.md).
 
 Recommended default by environment:
+- **Local laptop/workstation (single user):** **Ollama**
+  (<https://github.com/ollama/ollama>)
+- **HPC/shared GPU (multi-user throughput):** **vLLM**
+  (<https://github.com/vllm-project/vllm>)
 
-- **Local laptop/workstation (single user):** use **Ollama**.
-- **HPC/shared GPU (multi-user throughput):** use **vLLM** (as in the AIRE scripts).
+Both work with `provider=local` and a matching `--base-url`.
 
-Both expose OpenAI-compatible APIs and work with `provider=local`.
-Official projects:
-- Ollama: <https://github.com/ollama/ollama>
-- vLLM: <https://github.com/vllm-project/vllm>
-
-If `ollama` is not found on your machine, install it using the official
-instructions from the Ollama project page above (for example, Linux users may
-use Snap where available).
-
-Quick start example (Ollama, local workstation):
-
-```bash
-ollama serve
-```
-
-In another terminal:
-
-```bash
-ollama pull qwen3:8b
-curl http://localhost:11434/v1/models
-```
-
-Then run Climate-Action-GABM with:
-
-```bash
-PYTHONPATH=src python3 -m cag \
-  --preset r14_canonical \
-  --provider local \
-  --model qwen3:8b \
-  --base-url http://localhost:11434/v1 \
-  --outdir "data/output/experiments/$(date +%Y%m%d_%H%M%S)_r14_local"
-```
-
-Quick start example (vLLM):
-
-```bash
-vllm serve Qwen/Qwen3-8B --port 8000
-curl http://localhost:8000/v1/models
-```
-
-Then point CAG to it with `--base-url http://localhost:8000/v1`.
-
-Quick profile examples:
-
-- Local profile:
-  - `--provider local --model qwen3:8b --base-url http://localhost:11434/v1`
-- HPC profile:
-  - `--provider local --base-url http://localhost:8000/v1`
+Typical profiles:
+- Local: `--provider local --model qwen3:8b --base-url http://127.0.0.1:11434/v1`
+- HPC: `--provider local --base-url http://localhost:8000/v1`
 
 
 ### Set up API keys
@@ -154,6 +110,9 @@ Run the canonical baseline:
 PYTHONPATH=src python3 -m cag \
   --preset r14_canonical \
   --exposure-targets split50 \
+  --provider local \
+  --model qwen3:8b \
+  --base-url http://127.0.0.1:11434/v1 \
   --outdir "data/output/experiments/$(date +%Y%m%d_%H%M%S)_r14_canonical"
 ```
 
