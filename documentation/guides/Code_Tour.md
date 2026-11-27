@@ -232,7 +232,7 @@ You submit one Slurm job from the login node: `sbatch aire/run.sh --preset r14_c
 
 Two rules the cluster enforces: **all output goes to `$SCRATCH`** (never `$HOME` or the repo tree), and **modules/conda don't carry over** from the login node, so the job script re-loads them itself. The config still composes three ways — `SIM_CONFIG` defaults ← `--preset` ← individual `--flags` — so `aire/run.sh` stays thin and never hardcodes an experiment.
 
-Pre-flight, once: an HF token file, `conda env create -f environment.yaml`, and `apptainer pull` the vLLM image. After that, every experiment is a new `sbatch` line. The full clone-to-results recipe is in [AIRE_Quickstart.md](AIRE_Quickstart.md); the cluster's own rules are in [AIRE_HPC_repo_primer.md](AIRE_HPC_repo_primer.md).
+Pre-flight, once: an HF token file, `conda env create -f environment.yaml`, and `apptainer pull` the vLLM image. After that, every experiment is a new `sbatch` line. The full clone-to-results recipe is in [Aire_Quickstart.md](Aire_Quickstart.md); the cluster's own rules are in [Aire_HPC_repo_primer.md](Aire_HPC_repo_primer.md).
 
 ---
 

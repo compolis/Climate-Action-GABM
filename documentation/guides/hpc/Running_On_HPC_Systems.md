@@ -6,9 +6,9 @@ assumptions.
 
 ## Recommended path
 
-1. Start with [AIRE_Quickstart.md](AIRE_Quickstart.md) for a copy-paste path
+1. Start with [Aire_Quickstart.md](Aire_Quickstart.md) for a copy-paste path
    from first login to completed smoke and canonical runs.
-2. Use [AIRE_HPC_repo_primer.md](AIRE_HPC_repo_primer.md) for policy,
+2. Use [Aire_HPC_repo_primer.md](Aire_HPC_repo_primer.md) for policy,
    storage/data constraints, launcher contract, and verification limits.
 
 ## Script locations

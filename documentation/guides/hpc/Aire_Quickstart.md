@@ -3,12 +3,12 @@
 A repo-specific, copy-pasteable recipe for running Climate-Action-GABM on Leeds's [Aire](https://arc.leeds.ac.uk/aire/) HPC: from a fresh account to a completed **smoke** job and a canonical **split50 Run-14**, then results back on your laptop.
 
 For cited Leeds guidance, storage/data constraints, and the CAG launcher
-contract, see [AIRE_HPC_repo_primer.md](AIRE_HPC_repo_primer.md).
+contract, see [Aire_HPC_repo_primer.md](Aire_HPC_repo_primer.md).
 This quickstart is the recipe; the primer is the reference.
 
 **Review scope (2026-11-08).** Commands were checked against the repository
 launcher and local CLI, not executed on Aire. Read the primer's
-[sources and verification limits](AIRE_HPC_repo_primer.md#1-scope-sources-and-verification)
+[sources and verification limits](Aire_HPC_repo_primer.md#1-scope-sources-and-verification)
 before using this recipe: Leeds is transitioning its HPC documentation during
 an Aire upgrade. Confirm account access, data suitability, current resources,
 and container/model compatibility with Research IT. Live timing estimates below
@@ -108,7 +108,7 @@ On a Mac, start `mlx_lm.server --port 8080` with `mlx-community/Qwen3-8B-4bit`, 
 
 | You need | Why | How |
 | --- | --- | --- |
-| An Aire account | To `ssh` and run jobs | Request via the Leeds RSE / ARC team (see [primer §1](AIRE_HPC_repo_primer.md)) |
+| An Aire account | To `ssh` and run jobs | Request via the Leeds RSE / ARC team (see [primer §1](Aire_HPC_repo_primer.md)) |
 | GitHub access to the repo | To `git clone` | Account with read access to `compolis/Climate-Action-GABM` |
 | A Hugging Face account | To download the model weights | Free at <https://huggingface.co>; create a **read** token at *Settings → Access Tokens* |
 | An SSH client locally | To reach Aire | macOS/Linux: built-in `ssh`. Windows: WSL or PuTTY. First-time login help in §2 |
@@ -309,7 +309,7 @@ or checksum for research runs. Newer model architectures may require a different
 validated image; changing `HF_MODEL` alone does not ensure compatibility.
 
 For Apertus/Calder serving context, see the primer's
-[related GABM guidance](AIRE_HPC_repo_primer.md#6-related-gabm-guidance-and-calder-portability).
+[related GABM guidance](Aire_HPC_repo_primer.md#6-related-gabm-guidance-and-calder-portability).
 Those historical multi-GPU settings are not a drop-in replacement for this
 one-GPU Aire recipe.
 
@@ -622,7 +622,7 @@ srun --jobid=<jobid> --pty nvidia-smi
 ```
 </details>
 
-For resource guidance, see [primer §4](AIRE_HPC_repo_primer.md#4-resource-requests-sweeps-and-reproducibility)
+For resource guidance, see [primer §4](Aire_HPC_repo_primer.md#4-resource-requests-sweeps-and-reproducibility)
 and its official Slurm links. With bare submissions, monitor logs in the
 submission directory instead.
 
@@ -828,7 +828,7 @@ The launcher serves one model: set `HF_MODEL` to select it. Do not pass
 `--model`, `--provider`, `--base-url`, or `--outdir` as caller overrides through
 `sbatch`. A different `--survey-model` is not automatically hosted by this server.
 For ports, image/cache choices, readiness timeouts, labels, and resume, see the
-[launcher contract](AIRE_HPC_repo_primer.md#3-current-launcher-contract) and §10.
+[launcher contract](Aire_HPC_repo_primer.md#3-current-launcher-contract) and §10.
 
 ### Worked examples
 

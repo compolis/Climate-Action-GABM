@@ -27,7 +27,7 @@ Pick the doc that matches what you want to do:
 | Refactor CAG to reuse and extend the GABM framework | [GABM_Refactor_Plan.md](planning/GABM_Refactor_Plan.md) |
 | Run a fully local LLM backend | [Local_LLM_Setup_Guide.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Local_LLM_Setup_Guide.md) |
 | Choose an HPC path and script set | [Running_On_HPC_Systems.md](guides/hpc/Running_On_HPC_Systems.md) |
-| Run on the Aire HPC cluster | [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md) |
+| Run on the Aire HPC cluster | [Aire_Quickstart.md](guides/hpc/Aire_Quickstart.md) |
 | See representative completed run artefacts | [sample_outputs/README.md](examples/sample_outputs/README.md) |
 | Check what past experiments found | [result_report.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/research/result_report.md) |
 | Read the paper draft (manuscript + SI) | [`paper/`](paper/) |
@@ -43,8 +43,8 @@ the repository layout, use this sequence:
 4. [Simulation_Configuration_Guide.md](https://github.com/compolis/Climate-Action-GABM/blob/main/documentation/guides/Simulation_Configuration_Guide.md) — canonical run knobs.
 5. [sample_outputs/README.md](examples/sample_outputs/README.md) — representative
    smoke-run artefacts (OpenAI and Ollama) for quick orientation.
-6. HPC only: [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md), then
-   [AIRE_HPC_repo_primer.md](guides/hpc/AIRE_HPC_repo_primer.md) for policy/constraints.
+6. HPC only: [Aire_Quickstart.md](guides/hpc/Aire_Quickstart.md), then
+   [Aire_HPC_repo_primer.md](guides/hpc/Aire_HPC_repo_primer.md) for policy/constraints.
 
 ---
 
@@ -85,14 +85,14 @@ the repository layout, use this sequence:
 | File | Role | Use it when… |
 |---|---|---|
 | [Running_On_HPC_Systems.md](guides/hpc/Running_On_HPC_Systems.md) | HPC entrypoint for route selection and script locations (AIRE primary, Calder secondary). | You want to decide which cluster guide/scripts to use before submitting jobs. |
-| [AIRE_HPC_repo_primer.md](guides/hpc/AIRE_HPC_repo_primer.md) | CAG launcher reference, cited Leeds guidance, storage/data constraints, and verification limits. | You need to distinguish repository conventions from service policy and unresolved deployment work. |
-| [AIRE_Quickstart.md](guides/hpc/AIRE_Quickstart.md) | Maintained setup/submission/transfer recipe; links to canonical configuration and output references instead of duplicating them. | You want to prepare and validate a CAG job on Aire. |
+| [Aire_HPC_repo_primer.md](guides/hpc/Aire_HPC_repo_primer.md) | CAG launcher reference, cited Leeds guidance, storage/data constraints, and verification limits. | You need to distinguish repository conventions from service policy and unresolved deployment work. |
+| [Aire_Quickstart.md](guides/hpc/Aire_Quickstart.md) | Maintained setup/submission/transfer recipe; links to canonical configuration and output references instead of duplicating them. | You want to prepare and validate a CAG job on Aire. |
 | [RunningLLMsOnAire.md](archive/RunningLLMsOnAire.md) | Historical article draft with preserved authorship and distinct multi-node/socket/cache/energy ideas; not a runnable CAG recipe. | You need provenance or context for a future deployment design. |
 
 For framework-level HPC/model-serving patterns and historical Calder/Apertus
 context, see GABM's
 [Running On HPC Systems](https://github.com/compolis/gabm/blob/main/Running_On_HPC_Systems.md)
-and the [CAG portability notes](guides/hpc/AIRE_HPC_repo_primer.md#6-related-gabm-guidance-and-calder-portability).
+and the [CAG portability notes](guides/hpc/Aire_HPC_repo_primer.md#6-related-gabm-guidance-and-calder-portability).
 
 ## Results
 

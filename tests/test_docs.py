@@ -18,7 +18,7 @@ from docs_assets import DOC_FILES, GITHUB_DOC_FILES, STAGED_NAMES, GENERATED_DOC
     ("README.md#overview", "project_readme.md#overview"),
     ("./documentation/planning/GABM_Refactor_Plan.md", "GABM_Refactor_Plan.md"),
     ("documentation/guides/Code_Tour.md", "Code_Tour.md"),
-    ("documentation/guides/hpc/AIRE_Quickstart.md", "AIRE_Quickstart.md"),
+    ("documentation/guides/hpc/Aire_Quickstart.md", "Aire_Quickstart.md"),
     ("src/cag/abm/attributes/politics.py", docs.REPOSITORY_URL + "src/cag/abm/attributes/politics.py"),
     ("tests/test_gabm_compatibility.py", docs.REPOSITORY_URL + "tests/test_gabm_compatibility.py"),
     ("requirements-dev.txt", "requirements-dev.txt"),
@@ -54,7 +54,7 @@ def test_copy_and_cleanup_preserve_authored_sources(tmp_path, monkeypatch):
     assert index.read_text() == "Authored documentation index\n"
     assert (staged / STAGED_NAMES["README.md"]).exists()
     assert (staged / "DEV_GUIDE.md").exists()
-    assert "[project](project_readme.md)" in (staged / "AIRE_Quickstart.md").read_text()
+    assert "[project](project_readme.md)" in (staged / "Aire_Quickstart.md").read_text()
     assert "[project](project_readme.md)" in (staged / "GABM_Refactor_Plan.md").read_text()
     for name in ("requirements.txt", "requirements-dev.txt"):
         mirror = (staged / name.replace(".txt", ".md")).read_text()
@@ -85,7 +85,7 @@ def test_copy_and_cleanup_preserve_authored_sources(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("target,expected", [
-    ("AIRE_HPC_repo_primer.md", "AIRE_HPC_repo_primer.md"),
+    ("Aire_HPC_repo_primer.md", "Aire_HPC_repo_primer.md"),
     ("../../DEV_QUICKSTART.md#setup", "DEV_QUICKSTART.md#setup"),
     ("../../scripts/hpc/aire/run.sh", docs.REPOSITORY_URL + "scripts/hpc/aire/run.sh"),
     ("Code_Tour.md", "Code_Tour.md"),
@@ -95,7 +95,7 @@ def test_copy_and_cleanup_preserve_authored_sources(tmp_path, monkeypatch):
 ])
 def test_nested_authored_links(target, expected):
     assert docs.update_links(
-        f"[link]({target})", "documentation/guides/hpc/AIRE_Quickstart.md",
+        f"[link]({target})", "documentation/guides/hpc/Aire_Quickstart.md",
     ) == f"[link]({expected})"
 
 
@@ -135,7 +135,7 @@ def test_nested_staged_archive_links(target, expected):
 def _aire_submission_examples():
     root = Path(__file__).resolve().parents[1]
     examples = []
-    for filename in ("AIRE_Quickstart.md", "AIRE_HPC_repo_primer.md"):
+    for filename in ("Aire_Quickstart.md", "Aire_HPC_repo_primer.md"):
         text = (root / "documentation/guides/hpc" / filename).read_text()
         for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL):
             for line in block.replace("\\\n", " ").splitlines():

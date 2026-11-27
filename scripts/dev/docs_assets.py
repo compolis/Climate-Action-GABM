@@ -3,7 +3,7 @@ Shared list of documentation asset files for Climate-Action-GABM docs scripts.
 """
 # Metadata
 __author__ = ["Andy Turner <agdturner@gmail.com>"]
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 __copyright__ = "Copyright (c) 2026 Climate-Action-GABM contributors, University of Leeds"
 
 DOC_FILES = [
@@ -33,8 +33,8 @@ DOC_FILES = [
     "documentation/examples/sample_outputs/smoke_ollama_20261118/opinion_trajectories.csv",
     "documentation/examples/sample_outputs/smoke_ollama_20261118/package_index_trajectories.csv",
     "documentation/examples/sample_outputs/smoke_ollama_20261118/network_diagnostics.json",
-    "documentation/guides/hpc/AIRE_HPC_repo_primer.md",
-    "documentation/guides/hpc/AIRE_Quickstart.md",
+    "documentation/guides/hpc/Aire_HPC_repo_primer.md",
+    "documentation/guides/hpc/Aire_Quickstart.md",
     "documentation/guides/hpc/Running_On_HPC_Systems.md",
     "documentation/guides/Code_Tour.md",
     "documentation/guides/Local_LLM_Setup_Guide.md",
@@ -73,8 +73,8 @@ STAGED_NAMES = {
     "documentation/examples/sample_outputs/smoke_ollama_20261118/opinion_trajectories.csv": "sample_outputs/smoke_ollama_20261118/opinion_trajectories.csv",
     "documentation/examples/sample_outputs/smoke_ollama_20261118/package_index_trajectories.csv": "sample_outputs/smoke_ollama_20261118/package_index_trajectories.csv",
     "documentation/examples/sample_outputs/smoke_ollama_20261118/network_diagnostics.json": "sample_outputs/smoke_ollama_20261118/network_diagnostics.json",
-    "documentation/guides/hpc/AIRE_HPC_repo_primer.md": "AIRE_HPC_repo_primer.md",
-    "documentation/guides/hpc/AIRE_Quickstart.md": "AIRE_Quickstart.md",
+    "documentation/guides/hpc/Aire_HPC_repo_primer.md": "Aire_HPC_repo_primer.md",
+    "documentation/guides/hpc/Aire_Quickstart.md": "Aire_Quickstart.md",
     "documentation/guides/hpc/Running_On_HPC_Systems.md": "Running_On_HPC_Systems.md",
     "documentation/guides/Code_Tour.md": "Code_Tour.md",
     "documentation/guides/Local_LLM_Setup_Guide.md": "Local_LLM_Setup_Guide.md",
