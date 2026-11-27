@@ -54,7 +54,7 @@ help:
 # Run all tests (requires pytest)
 test:
 	@echo "Running tests with pytest..."
-	PYTHONPATH=src:scripts/dev pytest
+	PYTHONPATH=src:scripts:scripts/dev pytest
 	@echo "...done running tests with pytest."
 
 

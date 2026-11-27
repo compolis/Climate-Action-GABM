@@ -74,7 +74,9 @@ def test_copy_and_cleanup_preserve_authored_sources(tmp_path, monkeypatch):
 
     script = Path(docs.__file__).with_name("docs-clean.py").read_text()
     script = script.replace(
-        'ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))',
+        "ROOT = os.path.dirname(\n"
+        "    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))\n"
+        ")",
         f"ROOT = {str(root)!r}",
     )
     subprocess.run([sys.executable, "-c", script], check=True)
@@ -86,11 +88,11 @@ def test_copy_and_cleanup_preserve_authored_sources(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("target,expected", [
     ("Aire_HPC_repo_primer.md", "Aire_HPC_repo_primer.md"),
-    ("../../DEV_QUICKSTART.md#setup", "DEV_QUICKSTART.md#setup"),
-    ("../../scripts/hpc/aire/run.sh", docs.REPOSITORY_URL + "scripts/hpc/aire/run.sh"),
+    ("../../../DEV_QUICKSTART.md#setup", "DEV_QUICKSTART.md#setup"),
+    ("../../../scripts/hpc/aire/run.sh", docs.REPOSITORY_URL + "scripts/hpc/aire/run.sh"),
     ("Code_Tour.md", "Code_Tour.md"),
     ("Simulation_Configuration_Guide.md#layer-2", "Simulation_Configuration_Guide.md#layer-2"),
-    ("../research/Model_Design.md", "Model_Design.md"),
+    ("../../research/Model_Design.md", "Model_Design.md"),
     ("../../../outside.md", "../../../outside.md"),
 ])
 def test_nested_authored_links(target, expected):
