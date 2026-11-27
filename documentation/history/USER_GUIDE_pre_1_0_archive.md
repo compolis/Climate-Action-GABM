@@ -31,4 +31,4 @@ Use [USER_GUIDE.md](../../USER_GUIDE.md) for setup and run commands, plus:
 
 - [Simulation_Configuration_Guide.md](../guides/Simulation_Configuration_Guide.md)
 - [Run_Output_Guide.md](../guides/Run_Output_Guide.md)
-- [AIRE_Quickstart.md](../guides/hpc/AIRE_Quickstart.md)
+- [Aire_Quickstart.md](../guides/hpc/Aire_Quickstart.md)

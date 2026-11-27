@@ -128,8 +128,8 @@ When validating behaviour changes, prefer fast, bounded evidence first:
 
 HPC references:
 - [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
-- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
-- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
+- [Aire quickstart](documentation/guides/hpc/Aire_Quickstart.md)
+- [Aire HPC repo primer](documentation/guides/hpc/Aire_HPC_repo_primer.md)
 
 Do not treat long local-LLM runs as the default contributor validation loop.
 Use them intentionally when diagnosing local runtime behaviour or privacy-bound

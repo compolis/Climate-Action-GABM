@@ -83,7 +83,7 @@ Prefer notebooks? Open [notebooks/01_agent_profiles.ipynb](notebooks/01_agent_pr
 
 - **Users** — full setup (Conda or pip), configuration paths, and run recipes: [User Guide](USER_GUIDE.md).
 - **Contributors** — fork / clone / test setup: [Developer Quickstart](DEV_QUICKSTART.md) and [Developer Guide](DEV_GUIDE.md).
-- **HPC (Leeds AIRE)** — clone-to-`sbatch` walkthrough: [AIRE Quickstart](documentation/guides/hpc/AIRE_Quickstart.md).
+- **HPC (Leeds AIRE)** — clone-to-`sbatch` walkthrough: [AIRE Quickstart](documentation/guides/hpc/Aire_Quickstart.md).
 
 ### New collaborator quick path
 
@@ -92,7 +92,7 @@ For a practical first day in the repository:
 2. Read [Developer Quickstart](DEV_QUICKSTART.md) and run `make test` + `make docs`.
 3. Use [Code Tour](documentation/guides/Code_Tour.md) to map `src/cag/`.
 4. Use [Simulation Configuration Guide](documentation/guides/Simulation_Configuration_Guide.md) to understand run knobs.
-5. If running on Leeds HPC, follow [AIRE Quickstart](documentation/guides/hpc/AIRE_Quickstart.md) and keep [Aire HPC Primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md) open for constraints and policy context.
+5. If running on Leeds HPC, follow [AIRE Quickstart](documentation/guides/hpc/Aire_Quickstart.md) and keep [Aire HPC Primer](documentation/guides/hpc/Aire_HPC_repo_primer.md) open for constraints and policy context.
 
 
 ## Current Status
@@ -113,7 +113,7 @@ See [docs/Model_Design.md](documentation/research/Model_Design.md) for the desig
 See [docs/Code_Tour.md](documentation/guides/Code_Tour.md) for a newcomer-friendly walkthrough of `src/cag/`.
 See [docs/result_report.md](documentation/research/result_report.md) for experiment results and analysis.
 See [docs/Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md) for canonical configuration options (supervisor brief + developer matrix).
-See [documentation/guides/hpc/AIRE_Quickstart.md](documentation/guides/hpc/AIRE_Quickstart.md) for the v0.7 HPC walkthrough.
+See [documentation/guides/hpc/Aire_Quickstart.md](documentation/guides/hpc/Aire_Quickstart.md) for the v0.7 HPC walkthrough.
 See [documentation/paper/](documentation/paper/) for the manuscript in preparation (`sn-article.tex` and supplementary `sn-si.tex`).
 
 
@@ -215,7 +215,7 @@ For security or conduct concerns, you can also use the `Contact maintainers` lin
 ## User Guide
 Please use the [User Guide](USER_GUIDE.md).
 
-Running on Leeds's AIRE HPC? Start with the [AIRE Quickstart](documentation/guides/hpc/AIRE_Quickstart.md) — clone-to-`sbatch` walkthrough with worked smoke + split50 examples.
+Running on Leeds's AIRE HPC? Start with the [AIRE Quickstart](documentation/guides/hpc/Aire_Quickstart.md) — clone-to-`sbatch` walkthrough with worked smoke + split50 examples.
 
 
 ## Developer Guide

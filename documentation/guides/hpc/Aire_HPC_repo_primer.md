@@ -1,7 +1,7 @@
 # Aire HPC reference for Climate-Action-GABM
 
 This reference explains the cluster assumptions and the current CAG launcher
-contract. For setup and submission commands, use [AIRE_Quickstart.md](AIRE_Quickstart.md).
+contract. For setup and submission commands, use [Aire_Quickstart.md](Aire_Quickstart.md).
 It replaces the generic assistant-facing template; it is not a request to
 generate alternative launchers or change the simulation.
 

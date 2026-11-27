@@ -72,4 +72,4 @@ curl http://127.0.0.1:11434/v1/models
 ```
 
 On AIRE the launcher wires this up for you with vLLM — see
-[AIRE_Quickstart.md](AIRE_Quickstart.md).
+[Aire_Quickstart.md](Aire_Quickstart.md).

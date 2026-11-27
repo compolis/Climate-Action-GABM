@@ -143,8 +143,8 @@ For reproducible evidence and fast iteration, use this order:
 
 HPC entrypoints:
 - [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
-- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
-- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
+- [Aire quickstart](documentation/guides/hpc/Aire_Quickstart.md)
+- [Aire HPC repo primer](documentation/guides/hpc/Aire_HPC_repo_primer.md)
 
 
 ## Troubleshooting

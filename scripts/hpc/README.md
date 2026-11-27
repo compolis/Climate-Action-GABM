@@ -11,8 +11,8 @@ This folder contains cluster launcher scripts for Climate-Action-GABM.
 For policy, data, and setup guidance, use:
 
 - `documentation/guides/hpc/Running_On_HPC_Systems.md`
-- `documentation/guides/hpc/AIRE_Quickstart.md`
-- `documentation/guides/hpc/AIRE_HPC_repo_primer.md`
+- `documentation/guides/hpc/Aire_Quickstart.md`
+- `documentation/guides/hpc/Aire_HPC_repo_primer.md`
 
 ## Script map
 

@@ -103,7 +103,7 @@ Use this sequence to get evidence quickly and avoid expensive failed local runs.
 
 Start HPC work with:
 - [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
-- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
+- [Aire quickstart](documentation/guides/hpc/Aire_Quickstart.md)
 
 Treat local long-duration local-LLM runs as optional diagnostics, not the
 default path for producing research results.
@@ -227,8 +227,8 @@ run `r14_canonical` once configuration is stable.
 
 - [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md)
 - [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md)
-- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
-- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
+- [Aire quickstart](documentation/guides/hpc/Aire_Quickstart.md)
+- [Aire HPC repo primer](documentation/guides/hpc/Aire_HPC_repo_primer.md)
 
 
 ## Running on HPC / Aire
@@ -237,8 +237,8 @@ Start with [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_S
 to choose the right cluster path and script set.
 
 For University of Leeds Aire usage, use:
-- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md) for zero-to-run setup
-- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md) for policies, constraints, and troubleshooting
+- [Aire quickstart](documentation/guides/hpc/Aire_Quickstart.md) for zero-to-run setup
+- [Aire HPC repo primer](documentation/guides/hpc/Aire_HPC_repo_primer.md) for policies, constraints, and troubleshooting
 
 Minimal pattern:
 1. Clone onto Aire storage and install dependencies in a venv.
