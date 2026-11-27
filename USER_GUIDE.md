@@ -2,9 +2,10 @@
 
 ## Table of Contents
 - [Getting Started](#getting-started)
+- [Operator run ladder](#operator-run-ladder)
 - [Run the Main Program](#run-the-main-program)
 - [Advanced Guides](#advanced-guides)
-- [Running on HPC / AIRE](#running-on-hpc--aire)
+- [Running on HPC / Aire](#running-on-hpc--aire)
 - [Troubleshooting](#troubleshooting)
 - [Additional Resources](#additional-resources)
 
@@ -88,6 +89,24 @@ Typical profiles:
 ### Set up API keys
 
 Create `data/api_key.csv` with your API keys. For all supported LLM providers (including PublicAI/Apertus), see [API_KEYS.md](API_KEYS.md) for up-to-date details and instructions.
+
+## Operator run ladder
+
+Use this sequence to get evidence quickly and avoid expensive failed local runs.
+
+1. **Config canary (local, no provider calls):**
+   - `PYTHONPATH=src python3 -m cag --preset smoke --dry-run`
+2. **Short smoke run (local hosted-provider path preferred):**
+   - use `--preset smoke` and verify output bundle/structure.
+3. **Substantive experiments (HPC):**
+   - run longer presets and sweeps on Aire first, then Calder as needed.
+
+Start HPC work with:
+- [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
+- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
+
+Treat local long-duration local-LLM runs as optional diagnostics, not the
+default path for producing research results.
 
 
 ## Run the Main Program
@@ -208,21 +227,21 @@ run `r14_canonical` once configuration is stable.
 
 - [Simulation_Configuration_Guide.md](documentation/guides/Simulation_Configuration_Guide.md)
 - [Run_Output_Guide.md](documentation/guides/Run_Output_Guide.md)
-- [AIRE_Quickstart.md](documentation/guides/hpc/AIRE_Quickstart.md)
-- [AIRE_HPC_repo_primer.md](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
+- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
+- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
 
 
-## Running on HPC / AIRE
+## Running on HPC / Aire
 
 Start with [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
 to choose the right cluster path and script set.
 
-For University of Leeds AIRE usage, use:
-- [AIRE_Quickstart.md](documentation/guides/hpc/AIRE_Quickstart.md) for zero-to-run setup
-- [AIRE_HPC_repo_primer.md](documentation/guides/hpc/AIRE_HPC_repo_primer.md) for policies, constraints, and troubleshooting
+For University of Leeds Aire usage, use:
+- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md) for zero-to-run setup
+- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md) for policies, constraints, and troubleshooting
 
 Minimal pattern:
-1. Clone onto AIRE storage and install dependencies in a venv.
+1. Clone onto Aire storage and install dependencies in a venv.
 2. Submit one run via `sbatch scripts/hpc/aire/run.sh`.
 3. Submit sweeps via `bash scripts/hpc/aire/sweep.sh scripts/hpc/aire/sweeps/<file>.txt`.
 
@@ -231,7 +250,7 @@ Minimal pattern:
 - Re-run the dry-run check:
   - `PYTHONPATH=src python3 -m cag --preset smoke --dry-run`
 - Confirm Python and dependencies match this guide.
-- For HPC failures, use the AIRE guides above first.
+- For HPC failures, use the Aire guides above first.
 - Check [reported issues](https://github.com/compolis/Climate-Action-GABM/issues)
   and [open a new issue](https://github.com/compolis/Climate-Action-GABM/issues/new/choose)
   if needed.

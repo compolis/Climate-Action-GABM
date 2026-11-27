@@ -6,6 +6,7 @@
 - [Contributing and Communicating](#contributing-and-communicating)
 - [Project Directories](#project-directories)
 - [Testing](#testing)
+- [Operator Run Ladder](#operator-run-ladder)
 - [Cross-Repository Refactoring](#cross-repository-refactoring)
 - [Python Package Entry Point](#python-package-entry-point)
 - [Makefile Targets](#makefile-targets)
@@ -113,6 +114,26 @@ Please add or update tests when modifying or adding features. Aim for high test 
 
 - PRs should pass the test workflow before being merged.
 - See `.github/workflows/test.yml` for Continuous Integration (CI) details.
+
+## Operator Run Ladder
+
+When validating behaviour changes, prefer fast, bounded evidence first:
+
+1. **Config canary (local, no provider calls)**  
+   `PYTHONPATH=src python3 -m cag --preset smoke --dry-run`
+2. **Short smoke run**  
+   Validate run output shape and logs before scaling duration/population.
+3. **Substantive runs on HPC**  
+   Use Aire as the primary path; use Calder where needed for portability checks.
+
+HPC references:
+- [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
+- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
+- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
+
+Do not treat long local-LLM runs as the default contributor validation loop.
+Use them intentionally when diagnosing local runtime behaviour or privacy-bound
+execution paths.
 
 
 ## Cross-Repository Refactoring

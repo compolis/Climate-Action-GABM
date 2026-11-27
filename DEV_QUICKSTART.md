@@ -8,6 +8,7 @@
 - [2. Install Dependencies](#2-install-dependencies)
 - [3. Set Up LLM API Keys](#3-set-up-llm-api-keys)
 - [4. Run Tests and Build Documentation](#4-run-tests-and-build-documentation)
+- [5. Operator Run Ladder](#5-operator-run-ladder)
 - [Troubleshooting](#troubleshooting)
 - [Additional Resources](#additional-resources)
 
@@ -129,6 +130,21 @@ make docs
 
 - View docs in your browser: open `docs/_build/html/index.html`
 
+## 5. Operator Run Ladder
+
+For reproducible evidence and fast iteration, use this order:
+
+1. **Config canary (local):**  
+   `PYTHONPATH=src python3 -m cag --preset smoke --dry-run`
+2. **Short smoke run (local):**  
+   Prefer hosted-provider smoke runs for quick turnaround when available.
+3. **Long/canonical runs (HPC):**  
+   Use Aire first, then Calder as needed.
+
+HPC entrypoints:
+- [Running_On_HPC_Systems.md](documentation/guides/hpc/Running_On_HPC_Systems.md)
+- [Aire quickstart](documentation/guides/hpc/AIRE_Quickstart.md)
+- [Aire HPC repo primer](documentation/guides/hpc/AIRE_HPC_repo_primer.md)
 
 
 ## Troubleshooting
